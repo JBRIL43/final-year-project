@@ -1,5 +1,5 @@
 const express = require('express');
-const { getDebtBalance } = require('../controllers/debtController');
+const { getDebtBalance } = require('./debtController');
 
 const router = express.Router();
 
