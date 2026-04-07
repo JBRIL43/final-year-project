@@ -1,0 +1,192 @@
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import '../services/debt_service.dart';
+
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  Map<String, dynamic>? _debtData;
+  bool _isLoading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDebtBalance();
+  }
+
+  Future<void> _loadDebtBalance() async {
+    setState(() => _isLoading = true);
+    try {
+      final data = await DebtService().getDebtBalance();
+      setState(() => _debtData = data['data']);
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final formatter = NumberFormat.currency(locale: 'en_ET', symbol: 'ETB ');
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('HU Student Debt System'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadDebtBalance,
+          ),
+        ],
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.error_outline, size: 60, color: Colors.red),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Error: $_error',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 16),
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: _loadDebtBalance,
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : _debtData == null
+                  ? const Center(child: Text('No debt data available'))
+                  : Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        children: [
+                          // Debt balance card
+                          Card(
+                            elevation: 4,
+                            child: Container(
+                              decoration: const BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [Colors.blue[700]!, Colors.blue[900]!],
+                                ),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.all(24.0),
+                                child: Column(
+                                  children: [
+                                    Text(
+                                      'CURRENT BALANCE',
+                                      style: TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      formatter.format(_debtData!['currentBalance']),
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 48,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        const Icon(Icons.attach_money, color: Colors.green[300]),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          'Total Paid: ${formatter.format(_debtData!['totalPaid'])}',
+                                          style: const TextStyle(
+                                            color: Colors.green[100],
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          // Payment history
+                          const Text(
+                            'Payment History',
+                            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 12),
+                          Expanded(
+                            child: _debtData!['paymentHistory'].isEmpty
+                                ? const Center(child: Text('No payment history yet'))
+                                : ListView.builder(
+                                    itemCount: _debtData!['paymentHistory'].length,
+                                    itemBuilder: (context, index) {
+                                      final payment = _debtData!['paymentHistory'][index];
+                                      return ListTile(
+                                        leading: CircleAvatar(
+                                          backgroundColor: payment['paymentMethod'] == 'CHAPA'
+                                              ? Colors.blue[100]
+                                              : Colors.orange[100],
+                                          child: Icon(
+                                            payment['paymentMethod'] == 'CHAPA'
+                                                ? Icons.payments
+                                                : Icons.receipt,
+                                            color: payment['paymentMethod'] == 'CHAPA'
+                                                ? Colors.blue[800]
+                                                : Colors.orange[800],
+                                          ),
+                                        ),
+                                        title: Text(
+                                          '${formatter.format(payment['amount'])} via ${payment['paymentMethod']}',
+                                        ),
+                                        subtitle: Text(
+                                          'Ref: ${payment['transactionRef'] ?? 'N/A'} • '
+                                          '${DateTime.parse(payment['paymentDate']).toString().split(' ')[0]}',
+                                        ),
+                                        trailing: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: payment['status'] == 'SUCCESS'
+                                                ? Colors.green[50]
+                                                : Colors.red[50],
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          child: Text(
+                                            payment['status'],
+                                            style: TextStyle(
+                                              color: payment['status'] == 'SUCCESS'
+                                                  ? Colors.green[800]
+                                                  : Colors.red[800],
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                          ),
+                        ],
+                      ),
+                    ),
+    );
+  }
+}
