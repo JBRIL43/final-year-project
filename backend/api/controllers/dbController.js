@@ -49,7 +49,7 @@ exports.getDebtBalance = async (req, res) => {
 
     res.json({
       success: true,
-       {
+       data: {
         studentId: debt.student_number,
         studentName: debt.full_name,
         livingArrangement: debt.living_arrangement,
