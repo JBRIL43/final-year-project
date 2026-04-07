@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 class DebtService {
   // ⚠️ CRITICAL: REPLACE WITH YOUR ARCH LINUX LOCAL IP
   // Find it with: ip addr show | grep "inet 192.168"
-  static const String _baseUrl = 'http://192.168.1.5:3000'; // ← CHANGE THIS
+  static const String _baseUrl = 'http://172.18.37.88:3000'; // ← CHANGE THIS
 
   Future<Map<String, dynamic>> getDebtBalance() async {
     try {
