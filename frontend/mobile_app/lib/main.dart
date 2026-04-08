@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'screens/login_screen.dart';
+import 'screens/finance_login_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -31,7 +32,104 @@ class MyApp extends StatelessWidget {
           bodySmall: TextStyle(fontSize: 12),
         ),
       ),
-      home: const LoginScreen(),
+      home: _LauncherScreen(),
+    );
+  }
+}
+
+class _LauncherScreen extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Center(
+                child: Container(
+                  width: 100,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.blue.withOpacity(0.1),
+                        blurRadius: 16,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: Image.asset(
+                    'assets/images/hu_logo.png',
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 32),
+              const Text(
+                'HU Student Debt System',
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Choose your role to continue',
+                style: TextStyle(fontSize: 16, color: Colors.grey),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 48),
+              SizedBox(
+                height: 56,
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (context) => const LoginScreen()),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue[700],
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text(
+                    'Student Login',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                height: 56,
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (context) => const FinanceLoginScreen()),
+                    );
+                  },
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Colors.blue),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text(
+                    'Finance Officer Login',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blue),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
