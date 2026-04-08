@@ -155,28 +155,53 @@ class _HomeScreenState extends State<HomeScreen> {
                             itemCount: _debtData!['paymentHistory'].length,
                             itemBuilder: (context, index) {
                               final payment =
-                                  _debtData!['paymentHistory'][index];
+                                  _debtData!['paymentHistory'][index]
+                                      as Map<String, dynamic>;
+                              final method =
+                                  payment['paymentMethod'] ??
+                                  payment['payment_method'] ??
+                                  'UNKNOWN';
+                              final transactionRef =
+                                  payment['transactionRef'] ??
+                                  payment['transaction_ref'] ??
+                                  'N/A';
+                              final paymentDateValue =
+                                  payment['paymentDate'] ??
+                                  payment['payment_date'];
+                              final paymentDate = paymentDateValue != null
+                                  ? DateTime.tryParse(
+                                      paymentDateValue.toString(),
+                                    )
+                                  : null;
+                              final amountValue = payment['amount'];
+                              final amount = amountValue is num
+                                  ? amountValue
+                                  : num.tryParse(
+                                          amountValue?.toString() ?? '0',
+                                        ) ??
+                                        0;
+                                final status =
+                                  (payment['status'] ?? 'UNKNOWN').toString();
                               return ListTile(
                                 leading: CircleAvatar(
-                                  backgroundColor:
-                                      payment['paymentMethod'] == 'CHAPA'
+                                  backgroundColor: method == 'CHAPA'
                                       ? Colors.blue[100]
                                       : Colors.orange[100],
                                   child: Icon(
-                                    payment['paymentMethod'] == 'CHAPA'
+                                    method == 'CHAPA'
                                         ? Icons.payments
                                         : Icons.receipt,
-                                    color: payment['paymentMethod'] == 'CHAPA'
+                                    color: method == 'CHAPA'
                                         ? Colors.blue[800]
                                         : Colors.orange[800],
                                   ),
                                 ),
                                 title: Text(
-                                  '${formatter.format(payment['amount'])} via ${payment['paymentMethod']}',
+                                  '${formatter.format(amount)} via $method',
                                 ),
                                 subtitle: Text(
-                                  'Ref: ${payment['transactionRef'] ?? 'N/A'} • '
-                                  '${DateTime.parse(payment['paymentDate']).toString().split(' ')[0]}',
+                                  'Ref: $transactionRef • '
+                                  '${paymentDate != null ? paymentDate.toString().split(' ')[0] : 'N/A'}',
                                 ),
                                 trailing: Container(
                                   padding: const EdgeInsets.symmetric(
@@ -184,15 +209,15 @@ class _HomeScreenState extends State<HomeScreen> {
                                     vertical: 4,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: payment['status'] == 'SUCCESS'
+                                    color: status == 'SUCCESS'
                                         ? Colors.green[50]
                                         : Colors.red[50],
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: Text(
-                                    payment['status'],
+                                    status,
                                     style: TextStyle(
-                                      color: payment['status'] == 'SUCCESS'
+                                      color: status == 'SUCCESS'
                                           ? Colors.green[800]
                                           : Colors.red[800],
                                       fontWeight: FontWeight.w600,
