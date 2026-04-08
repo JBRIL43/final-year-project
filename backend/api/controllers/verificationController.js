@@ -7,7 +7,7 @@ exports.getPendingPayments = async (req, res) => {
       `SELECT 
          ph.payment_id,
          s.student_number,
-         s.full_name,
+         u.full_name,
          ph.amount,
          ph.payment_method,
          ph.transaction_ref,
@@ -17,6 +17,7 @@ exports.getPendingPayments = async (req, res) => {
        FROM payment_history ph
        JOIN debt_records dr ON ph.debt_id = dr.debt_id
        JOIN students s ON dr.student_id = s.student_id
+       JOIN users u ON s.user_id = u.user_id
        WHERE ph.status = 'PENDING'
        ORDER BY ph.payment_date DESC`
     );
