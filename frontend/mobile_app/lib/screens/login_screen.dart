@@ -18,7 +18,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
-    
+
     final email = _emailController.text.trim();
     final password = _passwordController.text;
 
