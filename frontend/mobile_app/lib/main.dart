@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 
 void main() {
@@ -19,8 +20,13 @@ class MyApp extends StatelessWidget {
           brightness: Brightness.light,
         ),
         useMaterial3: true,
+        textTheme: const TextTheme(
+          headlineMedium: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+          bodyMedium: TextStyle(fontSize: 16),
+          bodySmall: TextStyle(fontSize: 12),
+        ),
       ),
-      home: const HomeScreen(),
+      home: const LoginScreen(),
     );
   }
 }
