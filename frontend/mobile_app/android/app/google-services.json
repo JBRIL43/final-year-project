@@ -1,0 +1,118 @@
+{
+  "project_info": {
+    "project_number": "119600048653",
+    "project_id": "hu-student-debt",
+    "storage_bucket": "hu-student-debt.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:119600048653:android:df5d50a270b69085e38344",
+        "android_client_info": {
+          "package_name": "com.example.mobile_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "119600048653-9qpsa2149o2oev23cbsu9lof8udnasme.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCh0P-6P7pzCPIg1KXjK8M8lXwRaGePqJU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "119600048653-9qpsa2149o2oev23cbsu9lof8udnasme.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "119600048653-2fbedepoj9e1epnos78r34dv4cfr0h3t.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.mobileApp"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:119600048653:android:91d1b7dc973c8e1de38344",
+        "android_client_info": {
+          "package_name": "com.example.student_debt_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "119600048653-9qpsa2149o2oev23cbsu9lof8udnasme.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCh0P-6P7pzCPIg1KXjK8M8lXwRaGePqJU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "119600048653-9qpsa2149o2oev23cbsu9lof8udnasme.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "119600048653-2fbedepoj9e1epnos78r34dv4cfr0h3t.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.mobileApp"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:119600048653:android:b90e76f03dcc7adde38344",
+        "android_client_info": {
+          "package_name": "com.hawassa.studentdebt"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "119600048653-9qpsa2149o2oev23cbsu9lof8udnasme.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCh0P-6P7pzCPIg1KXjK8M8lXwRaGePqJU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "119600048653-9qpsa2149o2oev23cbsu9lof8udnasme.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "119600048653-2fbedepoj9e1epnos78r34dv4cfr0h3t.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.mobileApp"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
