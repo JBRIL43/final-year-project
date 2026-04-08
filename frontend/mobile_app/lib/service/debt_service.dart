@@ -9,10 +9,12 @@ class DebtService {
 
   Future<Map<String, dynamic>> getDebtBalance() async {
     try {
-      final response = await http.get(
-        Uri.parse('$_baseUrl/api/debt/balance'),
-        headers: {'Content-Type': 'application/json'},
-      ).timeout(const Duration(seconds: 10));
+      final response = await http
+          .get(
+            Uri.parse('$_baseUrl/api/debt/balance'),
+            headers: {'Content-Type': 'application/json'},
+          )
+          .timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
