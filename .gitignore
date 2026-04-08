@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build / coverage outputs
+dist/
+build/
+coverage/
+.next/
+out/
+.tmp/
+tmp/
+
+# TypeScript
+*.tsbuildinfo
+
+# IDE / OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
