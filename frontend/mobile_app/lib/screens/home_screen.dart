@@ -180,8 +180,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                           amountValue?.toString() ?? '0',
                                         ) ??
                                         0;
-                                final status =
-                                  (payment['status'] ?? 'UNKNOWN').toString();
+                              final status = (payment['status'] ?? 'UNKNOWN')
+                                  .toString();
                               return ListTile(
                                 leading: CircleAvatar(
                                   backgroundColor: method == 'CHAPA'
