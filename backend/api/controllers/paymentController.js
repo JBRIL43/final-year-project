@@ -30,7 +30,7 @@ exports.recordPayment = async (req, res) => {
     const result = await pool.query(
       `INSERT INTO payment_history 
        (debt_id, amount, payment_method, transaction_ref, status, verified_by, notes)
-       VALUES ($1, $2, $3, $4, 'SUCCESS', $5, $6)
+      VALUES ($1, $2, $3, $4, 'PENDING', $5, $6)
        RETURNING *`,
       [debtId, amount, paymentMethod, transactionRef || null, verifiedBy, notes || null]
     );
