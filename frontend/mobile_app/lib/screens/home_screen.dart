@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'payment_screen.dart';
 import '../service/debt_service.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -53,6 +54,16 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: _loadDebtBalance,
           ),
         ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const PaymentScreen()),
+          );
+        },
+        backgroundColor: Colors.green[700],
+        child: const Icon(Icons.add),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
