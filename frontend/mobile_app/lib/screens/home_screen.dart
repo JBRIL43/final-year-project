@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../services/debt_service.dart';
+import '../service/debt_serive.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -82,7 +82,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           Card(
                             elevation: 4,
                             child: Container(
-                              decoration: const BoxDecoration(
+                              decoration: BoxDecoration(
                                 gradient: LinearGradient(
                                   colors: [Colors.blue[700]!, Colors.blue[900]!],
                                 ),
@@ -111,11 +111,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                     Row(
                                       mainAxisAlignment: MainAxisAlignment.center,
                                       children: [
-                                        const Icon(Icons.attach_money, color: Colors.green[300]),
+                                        Icon(Icons.attach_money, color: Colors.green[300]),
                                         const SizedBox(width: 4),
                                         Text(
                                           'Total Paid: ${formatter.format(_debtData!['totalPaid'])}',
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             color: Colors.green[100],
                                             fontSize: 16,
                                           ),
