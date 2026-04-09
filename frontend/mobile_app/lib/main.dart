@@ -88,7 +88,9 @@ class _LauncherScreen extends StatelessWidget {
                   onPressed: () {
                     Navigator.pushReplacement(
                       context,
-                      MaterialPageRoute(builder: (context) => const LoginScreen()),
+                      MaterialPageRoute(
+                        builder: (context) => const LoginScreen(),
+                      ),
                     );
                   },
                   style: ElevatedButton.styleFrom(
@@ -111,7 +113,9 @@ class _LauncherScreen extends StatelessWidget {
                   onPressed: () {
                     Navigator.pushReplacement(
                       context,
-                      MaterialPageRoute(builder: (context) => const FinanceLoginScreen()),
+                      MaterialPageRoute(
+                        builder: (context) => const FinanceLoginScreen(),
+                      ),
                     );
                   },
                   style: OutlinedButton.styleFrom(
@@ -122,7 +126,11 @@ class _LauncherScreen extends StatelessWidget {
                   ),
                   child: const Text(
                     'Finance Officer Login',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blue),
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue,
+                    ),
                   ),
                 ),
               ),
