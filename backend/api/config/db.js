@@ -1,23 +1,45 @@
 const { Pool } = require('pg');
 require('dotenv').config();
 
-const isProduction = process.env.NODE_ENV === 'production';
-const useSsl = process.env.DB_SSL === 'true' || isProduction;
+const connectionString = process.env.DATABASE_URL;
+const shouldUseSsl =
+  process.env.DB_SSL === 'true' ||
+  /render|neon|supabase|railway|cloud|amazonaws|azure/i.test(connectionString || '');
 
 const pool = new Pool({
-  host: process.env.DB_HOST,
-  port: process.env.DB_PORT ? Number(process.env.DB_PORT) : undefined,
-  database: process.env.DB_NAME,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  ssl: useSsl ? { rejectUnauthorized: false } : false,
+  ...(connectionString
+    ? {
+        connectionString: connectionString,
+        ...(shouldUseSsl
+          ? {
+              ssl: {
+                rejectUnauthorized: false,
+              },
+            }
+          : {}),
+      }
+    : {
+        host: process.env.DB_HOST || 'localhost',
+        port: process.env.DB_PORT || 5432,
+        database: process.env.DB_NAME || 'student_debt_system',
+        user: process.env.DB_USER || 'db_user',
+        password: process.env.DB_PASSWORD || 'your_secure_password',
+        ssl:
+          process.env.DB_SSL === 'true'
+            ? {
+                rejectUnauthorized: false,
+              }
+            : false,
+      }),
+  max: 20,
+  idleTimeoutMillis: 30000,
   connectionTimeoutMillis: Number(process.env.DB_CONNECTION_TIMEOUT_MS || 5000),
 });
 
 // Test database connection
 pool.query('SELECT NOW()', (err, res) => {
   if (err) {
-    console.error('Database connection error:', err.stack);
+    console.error('❌ Database connection error:', err.stack);
   } else {
     console.log('✅ Database connected successfully');
   }

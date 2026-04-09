@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import '../services/api_config.dart';
 
 class PaymentScreen extends StatefulWidget {
   const PaymentScreen({super.key});
@@ -23,32 +24,47 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
     setState(() => _isLoading = true);
     try {
-      final response = await http.post(
-        Uri.parse('http://10.42.0.1:3000/api/payment/record'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'amount': double.parse(_amountController.text),
-          'paymentMethod': _selectedMethod,
-          'transactionRef': _transactionRefController.text.isNotEmpty
-              ? _transactionRefController.text
-              : null,
-          'notes': _notesController.text.isNotEmpty ? _notesController.text : null,
-        }),
-      );
+      Exception? lastError;
 
-      if (response.statusCode == 201) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Payment recorded successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-        Navigator.pop(context);
-      } else {
-        final error = jsonDecode(response.body)['error'] ?? 'Unknown error';
-        throw Exception(error);
+      for (final baseUrl in ApiConfig.candidateBaseUrls()) {
+        try {
+          final response = await http
+              .post(
+                Uri.parse('$baseUrl/api/payment/record'),
+                headers: {'Content-Type': 'application/json'},
+                body: jsonEncode({
+                  'amount': double.parse(_amountController.text),
+                  'paymentMethod': _selectedMethod,
+                  'transactionRef': _transactionRefController.text.isNotEmpty
+                      ? _transactionRefController.text
+                      : null,
+                  'notes': _notesController.text.isNotEmpty
+                      ? _notesController.text
+                      : null,
+                }),
+              )
+              .timeout(const Duration(seconds: 5));
+
+          if (response.statusCode == 201) {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Payment recorded successfully!'),
+                backgroundColor: Colors.green,
+              ),
+            );
+            Navigator.pop(context);
+            return;
+          }
+
+          final error = jsonDecode(response.body)['error'] ?? 'Unknown error';
+          lastError = Exception(error);
+        } catch (e) {
+          lastError = Exception('Request failed on $baseUrl: $e');
+        }
       }
+
+      throw lastError ?? Exception('Unable to record payment');
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -88,7 +104,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   }
                   return null;
                 },
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
               ),
               const SizedBox(height: 16),
               InputDecorator(
@@ -106,11 +124,12 @@ class _PaymentScreenState extends State<PaymentScreen> {
                     },
                     items: <String>['CHAPA', 'RECEIPT', 'BANK_TRANSFER']
                         .map<DropdownMenuItem<String>>((String value) {
-                      return DropdownMenuItem<String>(
-                        value: value,
-                        child: Text(value.replaceAll('_', ' ')),
-                      );
-                    }).toList(),
+                          return DropdownMenuItem<String>(
+                            value: value,
+                            child: Text(value.replaceAll('_', ' ')),
+                          );
+                        })
+                        .toList(),
                   ),
                 ),
               ),
