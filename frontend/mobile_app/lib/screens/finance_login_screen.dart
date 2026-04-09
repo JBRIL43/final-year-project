@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../services/auth_service.dart';
 import 'finance_dashboard_screen.dart';
 
 class FinanceLoginScreen extends StatefulWidget {
@@ -19,26 +21,53 @@ class _FinanceLoginScreenState extends State<FinanceLoginScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
+    try {
+      final authService = AuthService();
+      await authService.financeLogin(
+        _emailController.text.trim(),
+        _passwordController.text,
+      );
 
-    // Mock authentication for finance officer
-    final email = _emailController.text.trim();
-    final password = _passwordController.text;
-
-    if (email == 'finance@hu.edu.et' && password == 'finance123') {
-      await Future.delayed(const Duration(milliseconds: 500));
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => const FinanceDashboardScreen()),
       );
-    } else {
+    } on FirebaseAuthException catch (e) {
+      setState(() => _isLoading = false);
+      String message = 'Authentication failed';
+      switch (e.code) {
+        case 'user-not-found':
+          message = 'No finance account found with this email';
+          break;
+        case 'wrong-password':
+          message = 'Incorrect password';
+          break;
+        case 'invalid-email':
+          message = e.message ?? 'Invalid email format';
+          break;
+        case 'user-disabled':
+          message = 'This account has been disabled';
+          break;
+        case 'network-request-failed':
+          message = 'Network error. Check internet connection';
+          break;
+        case 'too-many-requests':
+          message = 'Too many attempts. Try again later';
+          break;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), backgroundColor: Colors.red),
+      );
+    } catch (e) {
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Use email: finance@hu.edu.et, password: finance123'),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
       );
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -57,7 +86,10 @@ class _FinanceLoginScreenState extends State<FinanceLoginScreen> {
                   Navigator.pop(context);
                 },
                 icon: const Icon(Icons.arrow_back, size: 16),
-                label: const Text('Back to Student Login', style: TextStyle(fontSize: 14)),
+                label: const Text(
+                  'Back to Student Login',
+                  style: TextStyle(fontSize: 14),
+                ),
               ),
               const SizedBox(height: 32),
 
@@ -71,7 +103,7 @@ class _FinanceLoginScreenState extends State<FinanceLoginScreen> {
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.blue.withOpacity(0.1),
+                        color: Colors.blue.withValues(alpha: 0.1),
                         blurRadius: 12,
                         offset: const Offset(0, 4),
                       ),
@@ -89,16 +121,16 @@ class _FinanceLoginScreenState extends State<FinanceLoginScreen> {
               Text(
                 'Finance Officer Login',
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black,
-                    ),
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black,
+                ),
               ),
               const SizedBox(height: 8),
               Text(
                 'Verify and manage student payments',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.grey[600],
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
               ),
               const SizedBox(height: 32),
 

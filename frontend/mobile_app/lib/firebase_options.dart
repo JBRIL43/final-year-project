@@ -87,4 +87,5 @@ class DefaultFirebaseOptions {
     storageBucket: 'hu-student-debt.firebasestorage.app',
     measurementId: 'G-Y5YBM9EDWF',
   );
+
 }
