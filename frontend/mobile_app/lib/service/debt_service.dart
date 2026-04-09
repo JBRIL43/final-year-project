@@ -1,19 +1,10 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../services/api_config.dart';
 
 class DebtService {
-  static const String _primaryBaseUrl = String.fromEnvironment(
-    'API_BASE_URL',
-    defaultValue: 'http://10.42.0.1:3000',
-  );
-
-  static const List<String> _fallbackBaseUrls = [
-    'http://10.42.0.1:3000',
-  ];
-
   List<String> _candidateBaseUrls() {
-    final urls = <String>[_primaryBaseUrl, ..._fallbackBaseUrls];
-    return urls.toSet().toList();
+    return ApiConfig.candidateBaseUrls();
   }
 
   Future<Map<String, dynamic>> getDebtBalance() async {

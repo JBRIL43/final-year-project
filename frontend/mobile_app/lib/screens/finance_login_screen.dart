@@ -17,6 +17,35 @@ class _FinanceLoginScreenState extends State<FinanceLoginScreen> {
   bool _isLoading = false;
   bool _obscurePassword = true;
 
+  Widget _buildLogo() {
+    return Container(
+      width: 80,
+      height: 80,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.blue.shade700, Colors.blue.shade400],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.blue.withValues(alpha: 0.16),
+            blurRadius: 14,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: const Center(
+        child: Icon(
+          Icons.admin_panel_settings_rounded,
+          color: Colors.white,
+          size: 36,
+        ),
+      ),
+    );
+  }
+
   Future<void> _signIn() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -94,27 +123,7 @@ class _FinanceLoginScreenState extends State<FinanceLoginScreen> {
               const SizedBox(height: 32),
 
               // Logo
-              Center(
-                child: Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.blue.withValues(alpha: 0.1),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Image.asset(
-                    'assets/images/hu_logo.png',
-                    fit: BoxFit.contain,
-                  ),
-                ),
-              ),
+              Center(child: _buildLogo()),
               const SizedBox(height: 32),
 
               // Title
