@@ -14,10 +14,10 @@ exports.getPendingPayments = async (req, res) => {
          ph.notes,
          ph.payment_date,
          ph.status
-       FROM payment_history ph
-       JOIN debt_records dr ON ph.debt_id = dr.debt_id
-       JOIN students s ON dr.student_id = s.student_id
-       JOIN users u ON s.user_id = u.user_id
+       FROM public.payment_history ph
+       JOIN public.debt_records dr ON ph.debt_id = dr.debt_id
+       JOIN public.students s ON dr.student_id = s.student_id
+       JOIN public.users u ON s.user_id = u.user_id
        WHERE ph.status = 'PENDING'
        ORDER BY ph.payment_date DESC`
     );
@@ -27,7 +27,16 @@ exports.getPendingPayments = async (req, res) => {
       pendingPayments: result.rows
     });
   } catch (error) {
-    console.error('Get pending payments error:', error);
+    console.error('Get pending payments error:', {
+      message: error.message,
+      code: error.code,
+      detail: error.detail,
+      hint: error.hint,
+      table: error.table,
+      column: error.column,
+      constraint: error.constraint,
+      stack: error.stack,
+    });
     res.status(500).json({ error: 'Failed to fetch pending payments' });
   }
 };
@@ -43,7 +52,7 @@ exports.verifyPayment = async (req, res) => {
 
     // Get current payment details
     const paymentResult = await pool.query(
-      'SELECT debt_id, amount, status FROM payment_history WHERE payment_id = $1',
+      'SELECT debt_id, amount, status FROM public.payment_history WHERE payment_id = $1',
       [paymentId]
     );
     
@@ -56,18 +65,18 @@ exports.verifyPayment = async (req, res) => {
       return res.status(400).json({ error: 'Payment is not pending verification' });
     }
 
-    const newStatus = action === 'APPROVE' ? 'SUCCESS' : 'REJECTED';
+    const newStatus = action === 'APPROVE' ? 'SUCCESS' : 'FAILED';
     
     // Update payment status
     await pool.query(
-      'UPDATE payment_history SET status = $1, verified_by = $2 WHERE payment_id = $3',
+      'UPDATE public.payment_history SET status = $1, verified_by = $2 WHERE payment_id = $3',
       [newStatus, verifiedBy, paymentId]
     );
 
     // Only update debt balance if approved
     if (action === 'APPROVE') {
       await pool.query(
-        'UPDATE debt_records SET current_balance = current_balance - $1 WHERE debt_id = $2',
+        'UPDATE public.debt_records SET current_balance = current_balance - $1 WHERE debt_id = $2',
         [payment.amount, payment.debt_id]
       );
     }
@@ -80,7 +89,16 @@ exports.verifyPayment = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Verify payment error:', error);
+    console.error('Verify payment error:', {
+      message: error.message,
+      code: error.code,
+      detail: error.detail,
+      hint: error.hint,
+      table: error.table,
+      column: error.column,
+      constraint: error.constraint,
+      stack: error.stack,
+    });
     res.status(500).json({ error: 'Failed to verify payment' });
   }
 };

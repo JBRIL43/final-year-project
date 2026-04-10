@@ -28,7 +28,7 @@ exports.recordPayment = async (req, res) => {
 
     // Insert payment record
     const result = await pool.query(
-      `INSERT INTO payment_history 
+      `INSERT INTO public.payment_history 
        (debt_id, amount, payment_method, transaction_ref, status, verified_by, notes)
       VALUES ($1, $2, $3, $4, 'PENDING', $5, $6)
        RETURNING *`,
@@ -37,7 +37,7 @@ exports.recordPayment = async (req, res) => {
 
     // Update current balance in debt_records
     await pool.query(
-      `UPDATE debt_records 
+      `UPDATE public.debt_records 
        SET current_balance = current_balance - $1, last_updated = NOW()
        WHERE debt_id = $2`,
       [amount, debtId]
@@ -50,7 +50,16 @@ exports.recordPayment = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Payment recording error:', error);
+    console.error('Payment recording error:', {
+      message: error.message,
+      code: error.code,
+      detail: error.detail,
+      hint: error.hint,
+      table: error.table,
+      column: error.column,
+      constraint: error.constraint,
+      stack: error.stack,
+    });
     res.status(500).json({ 
       error: 'Failed to record payment',
       code: 'SERVER_ERROR'
