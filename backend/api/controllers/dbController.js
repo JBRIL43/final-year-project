@@ -27,12 +27,12 @@ exports.getDebtBalance = async (req, res) => {
               'payment_date', ph.payment_date
             ) ORDER BY ph.payment_date DESC
           )
-          FROM payment_history ph
+          FROM public.payment_history ph
           WHERE ph.debt_id = dr.debt_id
         ) as payment_history
-       FROM debt_records dr
-       JOIN students s ON dr.student_id = s.student_id
-       JOIN users u ON s.user_id = u.user_id
+       FROM public.debt_records dr
+       JOIN public.students s ON dr.student_id = s.student_id
+       JOIN public.users u ON s.user_id = u.user_id
        WHERE s.student_id = $1`,
       [studentId]
     );
@@ -71,7 +71,16 @@ exports.getDebtBalance = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Debt balance error:', error);
+    console.error('Debt balance error:', {
+      message: error.message,
+      code: error.code,
+      detail: error.detail,
+      hint: error.hint,
+      table: error.table,
+      column: error.column,
+      constraint: error.constraint,
+      stack: error.stack,
+    });
     res.status(500).json({ 
       error: 'Failed to fetch debt balance',
       code: 'SERVER_ERROR'
