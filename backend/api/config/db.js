@@ -6,6 +6,10 @@ const shouldUseSsl =
   process.env.DB_SSL === 'true' ||
   /render|neon|supabase|railway|cloud|amazonaws|azure/i.test(connectionString || '');
 
+console.log('🔍 DATABASE_URL:', connectionString ? 'SET' : 'NOT SET');
+console.log('🔍 Should use SSL:', shouldUseSsl);
+console.log('🔍 Connection string preview:', connectionString ? connectionString.substring(0, 50) + '...' : 'N/A');
+
 const pool = new Pool({
   ...(connectionString
     ? {
