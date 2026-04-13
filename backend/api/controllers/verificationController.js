@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { sendPaymentNotification } = require('../utils/notifications');
 
 // UC-04: Get pending payments for verification
 exports.getPendingPayments = async (req, res) => {
@@ -79,6 +80,31 @@ exports.verifyPayment = async (req, res) => {
         'UPDATE public.debt_records SET current_balance = current_balance - $1 WHERE debt_id = $2',
         [payment.amount, payment.debt_id]
       );
+
+      const studentUserResult = await pool.query(
+        `SELECT u.user_id
+         FROM public.debt_records dr
+         JOIN public.students s ON dr.student_id = s.student_id
+         JOIN public.users u ON s.user_id = u.user_id
+         WHERE dr.debt_id = $1
+         LIMIT 1`,
+        [payment.debt_id]
+      );
+
+      if (studentUserResult.rows.length > 0) {
+        const studentUserId = studentUserResult.rows[0].user_id;
+
+        await sendPaymentNotification(
+          studentUserId,
+          'Payment Approved! 💰',
+          'Your payment has been verified and your balance has been updated.',
+          {
+            type: 'PAYMENT_APPROVED',
+            paymentId: String(paymentId),
+            debtId: String(payment.debt_id),
+          }
+        );
+      }
     }
 
     res.json({

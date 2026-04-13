@@ -4,6 +4,8 @@ const cors = require('cors');
 const debtRoutes = require('./routes/debtRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 const verificationRoutes = require('./routes/verificationRoutes');
+const userRoutes = require('./routes/userRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -18,6 +20,8 @@ app.use(express.json());
 app.use('/api/debt', debtRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/verification', verificationRoutes);
+app.use('/api/user', userRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
