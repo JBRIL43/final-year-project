@@ -1,13 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
 import 'screens/login_screen.dart';
 import 'screens/finance_login_screen.dart';
+import 'service/debt_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+    final notification = message.notification;
+    final data = message.data;
+
+    debugPrint(
+      'Push received: ${notification?.title ?? 'Payment Update'} - ${notification?.body ?? 'Your payment status has changed'}',
+    );
+
+    if (data['type'] == 'PAYMENT_APPROVED') {
+      () async {
+        try {
+          await DebtService().getDebtBalance();
+        } catch (_) {}
+      }();
+    }
+  });
 
   runApp(const MyApp());
 }
