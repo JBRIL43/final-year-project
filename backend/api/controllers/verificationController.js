@@ -74,6 +74,18 @@ exports.verifyPayment = async (req, res) => {
       [newStatus, verifiedBy, paymentId]
     );
 
+    const studentUserResult = await pool.query(
+      `SELECT u.user_id
+       FROM public.debt_records dr
+       JOIN public.students s ON dr.student_id = s.student_id
+       JOIN public.users u ON s.user_id = u.user_id
+       WHERE dr.debt_id = $1
+       LIMIT 1`,
+      [payment.debt_id]
+    );
+
+    const studentUserId = studentUserResult.rows[0]?.user_id;
+
     // Only update debt balance if approved
     if (action === 'APPROVE') {
       await pool.query(
@@ -81,19 +93,7 @@ exports.verifyPayment = async (req, res) => {
         [payment.amount, payment.debt_id]
       );
 
-      const studentUserResult = await pool.query(
-        `SELECT u.user_id
-         FROM public.debt_records dr
-         JOIN public.students s ON dr.student_id = s.student_id
-         JOIN public.users u ON s.user_id = u.user_id
-         WHERE dr.debt_id = $1
-         LIMIT 1`,
-        [payment.debt_id]
-      );
-
-      if (studentUserResult.rows.length > 0) {
-        const studentUserId = studentUserResult.rows[0].user_id;
-
+      if (studentUserId) {
         await sendPaymentNotification(
           studentUserId,
           'Payment Approved! 💰',
@@ -105,6 +105,18 @@ exports.verifyPayment = async (req, res) => {
           }
         );
       }
+    } else if (studentUserId) {
+      await sendPaymentNotification(
+        studentUserId,
+        'Payment Rejected',
+        'Your payment was rejected by finance. Please review details and resubmit.',
+        {
+          type: 'PAYMENT_REJECTED',
+          paymentId: String(paymentId),
+          debtId: String(payment.debt_id),
+          status: 'FAILED',
+        }
+      );
     }
 
     res.json({

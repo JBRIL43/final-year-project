@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { sendPaymentNotification } = require('../utils/notifications');
 
 const paymentHistoryHasStudentId = async () => {
   const result = await pool.query(
@@ -70,11 +71,58 @@ exports.recordPayment = async (req, res) => {
         ];
 
     const result = await pool.query(insertQuery, values);
+    const createdPayment = result.rows[0];
+
+    const studentUserResult = await pool.query(
+      `SELECT u.user_id
+       FROM public.debt_records dr
+       JOIN public.students s ON dr.student_id = s.student_id
+       JOIN public.users u ON s.user_id = u.user_id
+       WHERE dr.debt_id = $1
+       LIMIT 1`,
+      [debtId]
+    );
+
+    const financeUsersResult = await pool.query(
+      `SELECT user_id
+       FROM public.users
+       WHERE role = 'FINANCE_OFFICER'`
+    );
+
+    const studentUserId = studentUserResult.rows[0]?.user_id;
+
+    if (studentUserId) {
+      await sendPaymentNotification(
+        studentUserId,
+        'Payment Submitted',
+        `Your payment of ETB ${amount} is pending finance verification.`,
+        {
+          type: 'PAYMENT_SUBMITTED',
+          paymentId: String(createdPayment.payment_id),
+          debtId: String(debtId),
+          status: 'PENDING',
+        }
+      );
+    }
+
+    for (const financeUser of financeUsersResult.rows) {
+      await sendPaymentNotification(
+        financeUser.user_id,
+        'New Payment Needs Review',
+        `A ${paymentMethod} payment of ETB ${amount} was submitted and is pending verification.`,
+        {
+          type: 'PAYMENT_PENDING_VERIFICATION',
+          paymentId: String(createdPayment.payment_id),
+          debtId: String(debtId),
+          status: 'PENDING',
+        }
+      );
+    }
 
     res.status(201).json({
       success: true,
       message: 'Payment recorded successfully',
-      payment: result.rows[0],
+      payment: createdPayment,
     });
   } catch (error) {
     console.error('Payment recording error:', {
