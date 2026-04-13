@@ -2,6 +2,18 @@ const admin = require('../config/firebaseAdmin');
 const pool = require('../config/db');
 
 let notificationsTableReady = false;
+let usersFcmColumnReady = false;
+
+async function ensureUsersFcmTokenColumn() {
+  if (usersFcmColumnReady) return;
+
+  await pool.query(
+    `ALTER TABLE public.users
+     ADD COLUMN IF NOT EXISTS fcm_token TEXT`
+  );
+
+  usersFcmColumnReady = true;
+}
 
 async function ensureNotificationsTable() {
   if (notificationsTableReady) return;
@@ -27,6 +39,7 @@ async function ensureNotificationsTable() {
 
 async function sendPaymentNotification(userId, title, body, data = {}) {
   try {
+    await ensureUsersFcmTokenColumn();
     await ensureNotificationsTable();
 
     const recipient = await getRecipientFromDatabase(userId);
@@ -67,6 +80,8 @@ async function storeNotification(firebaseUid, title, body, data = {}) {
 }
 
 async function getRecipientFromDatabase(userId) {
+  await ensureUsersFcmTokenColumn();
+
   const result = await pool.query(
     'SELECT firebase_uid, fcm_token FROM public.users WHERE user_id = $1 LIMIT 1',
     [userId]
@@ -80,6 +95,7 @@ async function getRecipientFromDatabase(userId) {
 }
 
 module.exports = {
+  ensureUsersFcmTokenColumn,
   ensureNotificationsTable,
   sendPaymentNotification,
   storeNotification,

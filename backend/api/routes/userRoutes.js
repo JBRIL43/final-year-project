@@ -1,10 +1,13 @@
 const express = require('express');
 const pool = require('../config/db');
+const { ensureUsersFcmTokenColumn } = require('../utils/notifications');
 
 const router = express.Router();
 
 router.post('/fcm-token', async (req, res) => {
   try {
+    await ensureUsersFcmTokenColumn();
+
     const { userId, firebaseUid, email, fcmToken } = req.body;
 
     if (!fcmToken || (!userId && !firebaseUid && !email)) {
