@@ -16,22 +16,37 @@ router.post('/fcm-token', async (req, res) => {
       });
     }
 
-    let result;
+    let result = { rows: [] };
 
     if (userId) {
       result = await pool.query(
-        'UPDATE public.users SET fcm_token = $1 WHERE user_id = $2 RETURNING user_id, email',
-        [fcmToken, userId]
+        `UPDATE public.users
+         SET fcm_token = $1,
+             firebase_uid = COALESCE($2, firebase_uid)
+         WHERE user_id = $3
+         RETURNING user_id, email`,
+        [fcmToken, firebaseUid || null, userId]
       );
-    } else if (firebaseUid) {
+    }
+
+    if (result.rows.length === 0 && firebaseUid) {
       result = await pool.query(
-        'UPDATE public.users SET fcm_token = $1 WHERE firebase_uid = $2 RETURNING user_id, email',
+        `UPDATE public.users
+         SET fcm_token = $1
+         WHERE firebase_uid = $2
+         RETURNING user_id, email`,
         [fcmToken, firebaseUid]
       );
-    } else {
+    }
+
+    if (result.rows.length === 0 && email) {
       result = await pool.query(
-        'UPDATE public.users SET fcm_token = $1 WHERE email = $2 RETURNING user_id, email',
-        [fcmToken, email]
+        `UPDATE public.users
+         SET fcm_token = $1,
+             firebase_uid = COALESCE($2, firebase_uid)
+         WHERE LOWER(email) = LOWER($3)
+         RETURNING user_id, email`,
+        [fcmToken, firebaseUid || null, email]
       );
     }
 
