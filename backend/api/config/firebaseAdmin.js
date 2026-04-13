@@ -2,37 +2,82 @@ const admin = require('firebase-admin');
 const fs = require('fs');
 const path = require('path');
 
-if (admin.apps.length === 0) {
+function normalizePrivateKey(rawKey) {
+  if (!rawKey) return null;
+
+  let key = rawKey.trim();
+
+  if (
+    (key.startsWith('"') && key.endsWith('"')) ||
+    (key.startsWith("'") && key.endsWith("'"))
+  ) {
+    key = key.slice(1, -1);
+  }
+
+  key = key
+    .replace(/\r/g, '')
+    .replace(/\\\\n/g, '\n')
+    .replace(/\\n/g, '\n');
+
+  return key;
+}
+
+function initializeFromEnv() {
   const projectId = process.env.FIREBASE_PROJECT_ID;
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+  const privateKey = normalizePrivateKey(process.env.FIREBASE_PRIVATE_KEY);
 
-  if (projectId && clientEmail && privateKey) {
-    admin.initializeApp({
-      credential: admin.credential.cert({
-        projectId,
-        clientEmail,
-        privateKey,
-      }),
-      databaseURL:
-        process.env.FIREBASE_DATABASE_URL || `https://${projectId}.firebaseio.com`,
-    });
-  } else {
-    const localKeyPath = path.resolve(__dirname, '../firebase-adminsdk.json');
+  if (!projectId || !clientEmail || !privateKey) {
+    return false;
+  }
 
-    if (fs.existsSync(localKeyPath)) {
-      const serviceAccount = require(localKeyPath);
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
-        databaseURL:
-          process.env.FIREBASE_DATABASE_URL ||
-          `https://${serviceAccount.project_id}.firebaseio.com`,
-      });
+  admin.initializeApp({
+    credential: admin.credential.cert({
+      projectId,
+      clientEmail,
+      privateKey,
+    }),
+    databaseURL:
+      process.env.FIREBASE_DATABASE_URL || `https://${projectId}.firebaseio.com`,
+  });
+
+  return true;
+}
+
+function initializeFromLocalFile() {
+  const localKeyPath = path.resolve(__dirname, '../firebase-adminsdk.json');
+
+  if (!fs.existsSync(localKeyPath)) {
+    return false;
+  }
+
+  const serviceAccount = require(localKeyPath);
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+    databaseURL:
+      process.env.FIREBASE_DATABASE_URL ||
+      `https://${serviceAccount.project_id}.firebaseio.com`,
+  });
+
+  return true;
+}
+
+if (admin.apps.length === 0) {
+  try {
+    if (initializeFromEnv()) {
+      console.log('Firebase Admin initialized from environment variables.');
+    } else if (initializeFromLocalFile()) {
+      console.log('Firebase Admin initialized from local service account file.');
     } else {
       console.warn(
         'Firebase Admin credentials are not configured. Set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY.'
       );
     }
+  } catch (error) {
+    console.error(
+      'Firebase Admin initialization failed. Notifications will be disabled until credentials are fixed.',
+      error.message
+    );
   }
 }
 
