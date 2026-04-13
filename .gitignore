@@ -6,6 +6,9 @@ node_modules/
 .env.*
 !.env.example
 
+# Firebase service account secrets
+backend/api/firebase-adminsdk.json
+
 # Logs
 *.log
 npm-debug.log*
@@ -30,3 +33,4 @@ tmp/
 .idea/
 .DS_Store
 Thumbs.db
+
