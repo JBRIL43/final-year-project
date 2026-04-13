@@ -8,6 +8,7 @@ node_modules/
 
 # Firebase service account secrets
 backend/api/firebase-adminsdk.json
+firebase-adminsdk.json
 
 # Logs
 *.log
