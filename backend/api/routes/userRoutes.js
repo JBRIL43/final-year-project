@@ -8,7 +8,7 @@ router.post('/fcm-token', async (req, res) => {
   try {
     await ensureUsersFcmTokenColumn();
 
-    const { userId, firebaseUid, email, fcmToken } = req.body;
+    const { userId, firebaseUid, email, displayName, role, fcmToken } = req.body;
 
     if (!fcmToken || (!userId && !firebaseUid && !email)) {
       return res.status(400).json({
@@ -47,6 +47,21 @@ router.post('/fcm-token', async (req, res) => {
          WHERE LOWER(email) = LOWER($3)
          RETURNING user_id, email`,
         [fcmToken, firebaseUid || null, email]
+      );
+    }
+
+    if (result.rows.length === 0 && email && firebaseUid && role) {
+      const fullName = displayName || email.split('@')[0] || email;
+      result = await pool.query(
+        `INSERT INTO public.users (firebase_uid, email, full_name, role, fcm_token)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (email) DO UPDATE
+         SET firebase_uid = EXCLUDED.firebase_uid,
+             full_name = COALESCE(NULLIF(EXCLUDED.full_name, ''), public.users.full_name),
+             role = EXCLUDED.role,
+             fcm_token = EXCLUDED.fcm_token
+         RETURNING user_id, email`,
+        [firebaseUid, email, fullName, role, fcmToken]
       );
     }
 

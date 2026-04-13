@@ -13,7 +13,7 @@ class AuthService {
       email: email,
       password: password,
     );
-    await _sendFcmTokenToBackend(credential.user);
+    await _sendFcmTokenToBackend(credential.user, role: 'STUDENT');
     return credential;
   }
 
@@ -22,11 +22,14 @@ class AuthService {
       email: email,
       password: password,
     );
-    await _sendFcmTokenToBackend(credential.user);
+    await _sendFcmTokenToBackend(credential.user, role: 'FINANCE_OFFICER');
     return credential;
   }
 
-  Future<void> _sendFcmTokenToBackend(User? user) async {
+  Future<void> _sendFcmTokenToBackend(
+    User? user, {
+    required String role,
+  }) async {
     if (user == null) return;
 
     try {
@@ -42,6 +45,8 @@ class AuthService {
             body: jsonEncode({
               'firebaseUid': user.uid,
               'email': user.email,
+              'displayName': user.displayName,
+              'role': role,
               'fcmToken': fcmToken,
             }),
           )
