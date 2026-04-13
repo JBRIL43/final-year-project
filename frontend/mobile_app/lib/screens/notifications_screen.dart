@@ -40,9 +40,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       await _loadNotifications();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 
@@ -52,9 +52,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       await _loadNotifications();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 
@@ -129,14 +129,20 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                               ? Colors.grey[300]
                               : Colors.green[100],
                           child: Icon(
-                            isRead ? Icons.notifications_none : Icons.notifications_active,
-                            color: isRead ? Colors.grey[700] : Colors.green[800],
+                            isRead
+                                ? Icons.notifications_none
+                                : Icons.notifications_active,
+                            color: isRead
+                                ? Colors.grey[700]
+                                : Colors.green[800],
                           ),
                         ),
                         title: Text(
                           title,
                           style: TextStyle(
-                            fontWeight: isRead ? FontWeight.normal : FontWeight.bold,
+                            fontWeight: isRead
+                                ? FontWeight.normal
+                                : FontWeight.bold,
                           ),
                         ),
                         subtitle: Column(
@@ -146,14 +152,23 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                             Text(body),
                             const SizedBox(height: 6),
                             Text(
-                              createdAt != null ? dateFormat.format(createdAt) : '',
-                              style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                              createdAt != null
+                                  ? dateFormat.format(createdAt)
+                                  : '',
+                              style: TextStyle(
+                                color: Colors.grey[600],
+                                fontSize: 12,
+                              ),
                             ),
                           ],
                         ),
                         trailing: isRead
                             ? const Icon(Icons.done, color: Colors.green)
-                            : const Icon(Icons.brightness_1, size: 10, color: Colors.green),
+                            : const Icon(
+                                Icons.brightness_1,
+                                size: 10,
+                                color: Colors.green,
+                              ),
                       ),
                     ),
                   );
