@@ -13,6 +13,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   List<dynamic> _notifications = [];
   bool _isLoading = true;
 
+  int? _parseNotificationId(dynamic value) {
+    if (value is int) return value;
+    if (value is String) return int.tryParse(value);
+    return int.tryParse(value?.toString() ?? '');
+  }
+
   @override
   void initState() {
     super.initState();
@@ -96,9 +102,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               child: ListView.separated(
                 padding: const EdgeInsets.all(16),
                 itemCount: _notifications.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 10),
+                separatorBuilder: (_, _) => const SizedBox(height: 10),
                 itemBuilder: (context, index) {
                   final item = _notifications[index] as Map<String, dynamic>;
+                  final notificationId = _parseNotificationId(
+                    item['notification_id'],
+                  );
                   final isRead = item['is_read'] == true;
                   final createdAt = DateTime.tryParse(
                     item['created_at'].toString(),
@@ -116,14 +125,18 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     ),
                     direction: DismissDirection.endToStart,
                     confirmDismiss: (_) async {
-                      await _delete(item['notification_id'] as int);
+                      if (notificationId != null) {
+                        await _delete(notificationId);
+                      }
                       return false;
                     },
                     child: Card(
                       child: ListTile(
                         onTap: isRead
                             ? null
-                            : () => _markRead(item['notification_id'] as int),
+                            : notificationId == null
+                            ? null
+                            : () => _markRead(notificationId),
                         leading: CircleAvatar(
                           backgroundColor: isRead
                               ? Colors.grey[300]
