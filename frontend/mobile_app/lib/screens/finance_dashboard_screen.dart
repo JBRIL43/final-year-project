@@ -106,19 +106,14 @@ class _FinanceDashboardScreenState extends State<FinanceDashboardScreen> {
                       const SizedBox(height: 8),
                       Text(
                         '${payment['department']} • ETB ${payment['amount']}',
-                        style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: 14,
-                        ),
+                        style: TextStyle(color: Colors.grey[600], fontSize: 14),
                       ),
                       const SizedBox(height: 12),
                       if (payment['transaction_ref'] != null)
                         Text.rich(
                           TextSpan(
                             text: 'Ref: ',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                            ),
+                            style: const TextStyle(fontWeight: FontWeight.bold),
                             children: [
                               TextSpan(
                                 text: payment['transaction_ref'],
@@ -142,10 +137,7 @@ class _FinanceDashboardScreenState extends State<FinanceDashboardScreen> {
                               onPressed: () {
                                 _verifyPayment(payment['payment_id'], 'REJECT');
                               },
-                              icon: const Icon(
-                                Icons.cancel,
-                                color: Colors.red,
-                              ),
+                              icon: const Icon(Icons.cancel, color: Colors.red),
                               label: const Text(
                                 'Reject',
                                 style: TextStyle(color: Colors.red),
@@ -156,7 +148,10 @@ class _FinanceDashboardScreenState extends State<FinanceDashboardScreen> {
                           Expanded(
                             child: ElevatedButton.icon(
                               onPressed: () {
-                                _verifyPayment(payment['payment_id'], 'APPROVE');
+                                _verifyPayment(
+                                  payment['payment_id'],
+                                  'APPROVE',
+                                );
                               },
                               icon: const Icon(
                                 Icons.check,
@@ -228,14 +223,12 @@ class _FinanceDashboardScreenState extends State<FinanceDashboardScreen> {
       ),
       body: IndexedStack(
         index: _selectedIndex,
-        children: [
-          _buildApprovalsTab(),
-          const NotificationsScreen(),
-        ],
+        children: [_buildApprovalsTab(), const NotificationsScreen()],
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
-        onDestinationSelected: (index) => setState(() => _selectedIndex = index),
+        onDestinationSelected: (index) =>
+            setState(() => _selectedIndex = index),
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.task_alt_outlined),

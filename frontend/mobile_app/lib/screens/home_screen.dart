@@ -95,10 +95,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     Text(
                       'CURRENT BALANCE',
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 16,
-                      ),
+                      style: TextStyle(color: Colors.white70, fontSize: 16),
                     ),
                     const SizedBox(height: 8),
                     Text(
@@ -161,7 +158,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       final amount = amountValue is num
                           ? amountValue
                           : num.tryParse(amountValue?.toString() ?? '0') ?? 0;
-                      final status = (payment['status'] ?? 'UNKNOWN').toString();
+                      final status = (payment['status'] ?? 'UNKNOWN')
+                          .toString();
                       return ListTile(
                         leading: CircleAvatar(
                           backgroundColor: method == 'CHAPA'
@@ -214,7 +212,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_selectedIndex == 0 ? 'HU Student Debt System' : 'Notifications'),
+        title: Text(
+          _selectedIndex == 0 ? 'HU Student Debt System' : 'Notifications',
+        ),
         actions: [
           if (_selectedIndex == 0)
             IconButton(
@@ -228,7 +228,9 @@ class _HomeScreenState extends State<HomeScreen> {
             ? () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const PaymentScreen()),
+                  MaterialPageRoute(
+                    builder: (context) => const PaymentScreen(),
+                  ),
                 );
               }
             : null,
