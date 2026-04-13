@@ -36,7 +36,58 @@ function getEnvPrivateKey() {
   return normalizePrivateKey(process.env.FIREBASE_PRIVATE_KEY);
 }
 
+function parseServiceAccountJson() {
+  const rawJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  const base64Json = process.env.FIREBASE_SERVICE_ACCOUNT_JSON_BASE64;
+
+  let jsonText = null;
+
+  if (base64Json) {
+    try {
+      jsonText = Buffer.from(base64Json, 'base64').toString('utf8');
+    } catch (error) {
+      console.warn('FIREBASE_SERVICE_ACCOUNT_JSON_BASE64 could not be decoded.');
+    }
+  } else if (rawJson) {
+    jsonText = rawJson;
+  }
+
+  if (!jsonText) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(jsonText);
+
+    if (parsed.private_key) {
+      parsed.private_key = normalizePrivateKey(parsed.private_key);
+    }
+
+    return parsed;
+  } catch (error) {
+    console.warn('FIREBASE_SERVICE_ACCOUNT_JSON is not valid JSON.');
+    return null;
+  }
+}
+
 function initializeFromEnv() {
+  const serviceAccount = parseServiceAccountJson();
+
+  if (
+    serviceAccount?.project_id &&
+    serviceAccount?.client_email &&
+    serviceAccount?.private_key
+  ) {
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+      databaseURL:
+        process.env.FIREBASE_DATABASE_URL ||
+        `https://${serviceAccount.project_id}.firebaseio.com`,
+    });
+
+    return true;
+  }
+
   const projectId = process.env.FIREBASE_PROJECT_ID;
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
   const privateKey = getEnvPrivateKey();
@@ -84,7 +135,7 @@ if (admin.apps.length === 0) {
       console.log('Firebase Admin initialized from local service account file.');
     } else {
       console.warn(
-        'Firebase Admin credentials are not configured. Set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY.'
+        'Firebase Admin credentials are not configured. Set FIREBASE_SERVICE_ACCOUNT_JSON(_BASE64) or FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY(_BASE64).'
       );
     }
   } catch (error) {
