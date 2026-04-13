@@ -22,10 +22,24 @@ function normalizePrivateKey(rawKey) {
   return key;
 }
 
+function getEnvPrivateKey() {
+  const base64Key = process.env.FIREBASE_PRIVATE_KEY_BASE64;
+  if (base64Key) {
+    try {
+      const decoded = Buffer.from(base64Key, 'base64').toString('utf8');
+      return normalizePrivateKey(decoded);
+    } catch (error) {
+      console.warn('FIREBASE_PRIVATE_KEY_BASE64 could not be decoded.');
+    }
+  }
+
+  return normalizePrivateKey(process.env.FIREBASE_PRIVATE_KEY);
+}
+
 function initializeFromEnv() {
   const projectId = process.env.FIREBASE_PROJECT_ID;
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  const privateKey = normalizePrivateKey(process.env.FIREBASE_PRIVATE_KEY);
+  const privateKey = getEnvPrivateKey();
 
   if (!projectId || !clientEmail || !privateKey) {
     return false;
