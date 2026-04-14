@@ -1,7 +1,15 @@
 import axios from 'axios'
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || 'http://localhost:10000'
+const envApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim()
+const isLocalHost =
+  typeof window !== 'undefined' &&
+  ['localhost', '127.0.0.1'].includes(window.location.hostname)
+
+export const API_BASE_URL =
+  envApiBaseUrl ||
+  (isLocalHost
+    ? 'http://localhost:10000'
+    : 'https://final-year-project-r2h8.onrender.com')
 
 const api = axios.create({
   baseURL: API_BASE_URL,

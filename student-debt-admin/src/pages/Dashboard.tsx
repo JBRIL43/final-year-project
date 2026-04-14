@@ -3,7 +3,7 @@ import { Alert, Box, Button, Container, Paper, Stack, Typography } from '@mui/ma
 import { signOut } from 'firebase/auth'
 import { auth } from '../lib/firebase'
 import { useAuth } from '../contexts/AuthContext'
-import api from '../services/api'
+import api, { API_BASE_URL } from '../services/api'
 
 export default function Dashboard() {
   const { user } = useAuth()
@@ -17,7 +17,7 @@ export default function Dashboard() {
       setHealth(response.data?.status || 'OK')
     } catch (err: any) {
       setHealth('Unavailable')
-      setError(err?.message || 'Failed to reach backend')
+      setError(`${err?.message || 'Failed to reach backend'} (API: ${API_BASE_URL})`)
     }
   }
 
