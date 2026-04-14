@@ -44,6 +44,10 @@ router.put('/students/:id', async (req, res) => {
     const { id } = req.params;
     const { living_arrangement, enrollment_status, department } = req.body;
 
+    if (!living_arrangement || !enrollment_status) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
     const result = await pool.query(
       `UPDATE public.students
        SET
