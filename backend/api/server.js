@@ -4,6 +4,7 @@ const cors = require('cors');
 const debtRoutes = require('./routes/debtRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 const verificationRoutes = require('./routes/verificationRoutes');
+const adminRoutes = require('./routes/adminRoutes');
 const userRoutes = require('./routes/userRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 
@@ -34,6 +35,7 @@ app.use(express.json());
 app.use('/api/debt', debtRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/verification', verificationRoutes);
+app.use('/api/admin', adminRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/notifications', notificationRoutes);
 
