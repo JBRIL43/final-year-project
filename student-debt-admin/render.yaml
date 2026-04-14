@@ -2,8 +2,9 @@ services:
   - type: web
     name: student-debt-admin
     env: static
-    buildCommand: npm run build
-    staticPublishPath: ./build
+    rootDir: student-debt-admin
+    buildCommand: npm install --include=dev && npm run build
+    staticPublishPath: build
     routes:
       - type: rewrite
         source: /*
