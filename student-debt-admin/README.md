@@ -1,6 +1,31 @@
-# React + TypeScript + Vite
+# Student Debt Admin Dashboard
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Admin dashboard for the student debt system, built with React, TypeScript, Vite, MUI, and Firebase Auth.
+
+## Environment variables
+
+Create a local `.env.local` file or set these on Render:
+
+```env
+VITE_API_BASE_URL=https://final-year-project-r2h8.onrender.com
+VITE_FIREBASE_API_KEY=your_firebase_web_api_key
+VITE_FIREBASE_AUTH_DOMAIN=final-year-project.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=final-year-project
+```
+
+## Firebase setup
+
+1. Add a Firebase Web app to the `final-year-project` project if one does not already exist.
+2. Copy the Web API key into `VITE_FIREBASE_API_KEY`.
+3. In Firebase Console → Project settings → Authorized domains, add:
+  - your Render admin dashboard domain
+  - `localhost`
+
+## Build and deploy
+
+- Build command: `npm install && npm run build`
+- Output directory: `build`
+- Render static rewrite: `/* -> /index.html`
 
 Currently, two official plugins are available:
 
