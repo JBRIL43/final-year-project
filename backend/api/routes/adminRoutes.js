@@ -6,20 +6,60 @@ const router = express.Router();
 router.get('/students', async (req, res) => {
   console.log('✅ Admin students route hit');
   try {
+    const columnsResult = await pool.query(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'students'
+         AND column_name = ANY($1::text[])`,
+      [[
+        'full_name',
+        'email',
+        'enrollment_year',
+        'batch_year',
+        'updated_at',
+      ]]
+    );
+
+    const availableColumns = new Set(
+      columnsResult.rows.map((row) => row.column_name)
+    );
+
+    const hasStudentFullName = availableColumns.has('full_name');
+    const hasStudentEmail = availableColumns.has('email');
+    const hasEnrollmentYear = availableColumns.has('enrollment_year');
+    const hasBatchYear = availableColumns.has('batch_year');
+    const hasUpdatedAt = availableColumns.has('updated_at');
+
+    const fullNameExpr = hasStudentFullName
+      ? 's.full_name'
+      : 'u.full_name';
+    const emailExpr = hasStudentEmail ? 's.email' : 'u.email';
+    const yearExpr = hasEnrollmentYear
+      ? 's.enrollment_year'
+      : hasBatchYear
+      ? 's.batch_year'
+      : 'NULL::integer';
+    const updatedAtExpr = hasUpdatedAt
+      ? 's.updated_at'
+      : 'NULL::timestamp';
+    const needsUsersJoin = !hasStudentFullName || !hasStudentEmail;
+
     const result = await pool.query(`
       SELECT
         s.student_id,
         s.user_id,
         s.student_number,
-        s.full_name,
-        s.email,
+        ${fullNameExpr} AS full_name,
+        ${emailExpr} AS email,
         s.department,
-        s.enrollment_year,
+        ${yearExpr} AS enrollment_year,
         s.living_arrangement,
         s.enrollment_status,
         s.created_at,
-        s.updated_at
-      FROM students s
+        ${updatedAtExpr} AS updated_at
+      FROM public.students s
+      ${needsUsersJoin ? 'LEFT JOIN public.users u ON s.user_id = u.user_id' : ''}
       ORDER BY s.student_number
     `);
 
