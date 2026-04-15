@@ -4,39 +4,31 @@ const pool = require('../config/db');
 const router = express.Router();
 
 router.get('/students', async (req, res) => {
+  console.log('✅ Admin students route hit');
   try {
     const result = await pool.query(`
       SELECT
         s.student_id,
         s.user_id,
         s.student_number,
-        u.full_name,
-        u.email,
+        s.full_name,
+        s.email,
         s.department,
-        s.batch_year AS enrollment_year,
+        s.enrollment_year,
         s.living_arrangement,
         s.enrollment_status,
         s.created_at,
-        s.updated_at,
-        NULL::timestamp AS updated_at
-      FROM public.students s
-      LEFT JOIN public.users u ON s.user_id = u.user_id
+        s.updated_at
+      FROM students s
       ORDER BY s.student_number
     `);
 
+    console.log('✅ Fetched', result.rows.length, 'students');
     res.json({ success: true, students: result.rows });
   } catch (error) {
-    console.error('Admin students error:', {
-      message: error.message,
-      code: error.code,
-      detail: error.detail,
-      hint: error.hint,
-      table: error.table,
-      column: error.column,
-      constraint: error.constraint,
-      stack: error.stack,
-    });
-    res.status(500).json({ error: 'Failed to fetch students' });
+    console.error('❌ Admin students route ERROR:', error.message);
+    console.error('❌ Full error:', error);
+    res.status(500).json({ error: 'Failed to fetch students', details: error.message });
   }
 });
 
