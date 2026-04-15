@@ -17,6 +17,7 @@ router.get('/students', async (req, res) => {
         s.living_arrangement,
         s.enrollment_status,
         s.created_at,
+        s.updated_at,
         NULL::timestamp AS updated_at
       FROM public.students s
       LEFT JOIN public.users u ON s.user_id = u.user_id
