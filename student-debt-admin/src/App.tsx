@@ -2,8 +2,11 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { CircularProgress, Box } from '@mui/material'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import ProtectedRoute from './components/ProtectedRoute'
+import AdminLayout from './components/AdminLayout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
+import PaymentReviewQueue from './components/PaymentReviewQueue'
+import StudentManagement from './components/StudentManagement'
 
 function AppRoutes() {
   const { loading } = useAuth()
@@ -27,13 +30,16 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route
-        path="/"
         element={
           <ProtectedRoute>
-            <Dashboard />
+            <AdminLayout />
           </ProtectedRoute>
         }
-      />
+      >
+        <Route index element={<Dashboard />} />
+        <Route path="students" element={<StudentManagement />} />
+        <Route path="payment-review" element={<PaymentReviewQueue />} />
+      </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

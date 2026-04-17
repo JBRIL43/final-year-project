@@ -156,6 +156,36 @@ export default function StudentManagement() {
     setDeleteModal({ open: true, studentId, studentName });
   };
 
+  const normalizeSelectionModel = (selection: unknown): GridRowSelectionModel => {
+    if (Array.isArray(selection)) {
+      return { type: 'include', ids: new Set(selection) };
+    }
+
+    if (
+      selection &&
+      typeof selection === 'object' &&
+      'type' in selection &&
+      'ids' in selection
+    ) {
+      const model = selection as { type?: unknown; ids?: unknown };
+      if (
+        (model.type === 'include' || model.type === 'exclude') &&
+        model.ids instanceof Set
+      ) {
+        return { type: model.type, ids: model.ids };
+      }
+
+      if (Array.isArray(model.ids)) {
+        return {
+          type: model.type === 'exclude' ? 'exclude' : 'include',
+          ids: new Set(model.ids),
+        };
+      }
+    }
+
+    return { type: 'include', ids: new Set() };
+  };
+
   const handleBulkUpdate = async () => {
     if (!bulkAction || !bulkValue || selectedStudents.length === 0) return;
 
@@ -175,6 +205,7 @@ export default function StudentManagement() {
       });
       loadStudents();
       setSelectedStudents([]);
+      setRowSelectionModel({ type: 'include', ids: new Set() });
       setBulkAction('');
       setBulkValue('');
     } catch (err: any) {
@@ -340,8 +371,9 @@ export default function StudentManagement() {
           disableRowSelectionOnClick
           checkboxSelection
           onRowSelectionModelChange={(newSelection) => {
-            setRowSelectionModel(newSelection);
-            setSelectedStudents(Array.from(newSelection.ids).map((id) => Number(id)));
+            const normalizedSelection = normalizeSelectionModel(newSelection);
+            setRowSelectionModel(normalizedSelection);
+            setSelectedStudents(Array.from(normalizedSelection.ids).map((id) => Number(id)));
           }}
           rowSelectionModel={rowSelectionModel}
         />
