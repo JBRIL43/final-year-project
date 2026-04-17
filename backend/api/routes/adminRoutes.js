@@ -21,6 +21,45 @@ function normalizeEnrollmentStatus(value) {
   return 'ACTIVE';
 }
 
+async function getAvailableColumns(tableName, columns) {
+  const result = await pool.query(
+    `SELECT column_name
+     FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name = $1
+       AND column_name = ANY($2::text[])`,
+    [tableName, columns]
+  );
+
+  return new Set(result.rows.map((row) => row.column_name));
+}
+
+function resolveStatusMode(sampleStatus) {
+  const value = String(sampleStatus || '').trim();
+  if (!value) {
+    return {
+      pending: 'pending',
+      approved: 'approved',
+      rejected: 'rejected',
+    };
+  }
+
+  const isUpperCase = value === value.toUpperCase();
+  if (isUpperCase) {
+    return {
+      pending: 'PENDING',
+      approved: 'SUCCESS',
+      rejected: 'FAILED',
+    };
+  }
+
+  return {
+    pending: 'pending',
+    approved: 'approved',
+    rejected: 'rejected',
+  };
+}
+
 router.get('/students', async (req, res) => {
   console.log('✅ Admin students route hit');
   try {
@@ -303,11 +342,11 @@ router.post('/students/batch-update', async (req, res) => {
 // GET /api/admin/analytics/debt-overview — debt & collection summary
 router.get('/analytics/debt-overview', async (req, res) => {
   try {
-    // Total collections (approved payments)
+    // Total collections (approved/success payments across schema variants)
     const collectionsResult = await pool.query(`
       SELECT COALESCE(SUM(amount), 0) AS total_collections
       FROM payment_history
-      WHERE status = 'approved'
+      WHERE UPPER(COALESCE(status, '')) IN ('APPROVED', 'SUCCESS')
     `);
 
     // Total outstanding debt (unpaid balances)
@@ -333,22 +372,90 @@ router.get('/analytics/debt-overview', async (req, res) => {
 // GET /api/admin/payments/pending — fetch all pending payments
 router.get('/payments/pending', async (req, res) => {
   try {
+    const paymentCols = await getAvailableColumns('payment_history', [
+      'student_id',
+      'debt_id',
+      'proof_url',
+      'transaction_ref',
+      'submitted_at',
+      'payment_date',
+      'notes',
+    ]);
+    const studentCols = await getAvailableColumns('students', ['full_name', 'email', 'user_id']);
+    const userCols = await getAvailableColumns('users', ['full_name', 'email']);
+    const debtCols = await getAvailableColumns('debt_records', ['student_id']);
+
+    const hasPhStudentId = paymentCols.has('student_id');
+    const hasPhDebtId = paymentCols.has('debt_id');
+    const hasProofUrl = paymentCols.has('proof_url');
+    const hasTransactionRef = paymentCols.has('transaction_ref');
+    const hasSubmittedAt = paymentCols.has('submitted_at');
+    const hasPaymentDate = paymentCols.has('payment_date');
+    const hasNotes = paymentCols.has('notes');
+
+    const hasStudentFullName = studentCols.has('full_name');
+    const hasStudentEmail = studentCols.has('email');
+    const hasStudentUserId = studentCols.has('user_id');
+    const hasUserFullName = userCols.has('full_name');
+    const hasUserEmail = userCols.has('email');
+    const hasDebtStudentId = debtCols.has('student_id');
+
+    const joinDebt = !hasPhStudentId && hasPhDebtId;
+    const joinStudents = hasPhStudentId || (joinDebt && hasDebtStudentId);
+    const joinUsers = joinStudents && hasStudentUserId && (!hasStudentFullName || !hasStudentEmail);
+
+    const studentIdExpr = hasPhStudentId
+      ? 'ph.student_id'
+      : joinDebt && hasDebtStudentId
+      ? 'dr.student_id'
+      : 'NULL::integer';
+
+    const fullNameExpr = joinStudents
+      ? hasStudentFullName
+        ? 's.full_name'
+        : joinUsers && hasUserFullName
+        ? 'u.full_name'
+        : "''::text"
+      : "''::text";
+
+    const emailExpr = joinStudents
+      ? hasStudentEmail
+        ? 's.email'
+        : joinUsers && hasUserEmail
+        ? 'u.email'
+        : "''::text"
+      : "''::text";
+
+    const proofExpr = hasProofUrl
+      ? 'ph.proof_url'
+      : hasTransactionRef
+      ? 'ph.transaction_ref'
+      : 'NULL::text';
+
+    const submittedExpr = hasSubmittedAt
+      ? 'ph.submitted_at'
+      : hasPaymentDate
+      ? 'ph.payment_date'
+      : 'NOW()';
+
     const result = await pool.query(`
       SELECT
         ph.payment_id,
-        ph.student_id,
-        s.full_name,
-        s.student_number,
-        s.email,
+        ${studentIdExpr} AS student_id,
+        ${fullNameExpr} AS full_name,
+        ${joinStudents ? 's.student_number' : 'NULL::text'} AS student_number,
+        ${emailExpr} AS email,
         ph.amount,
-        ph.proof_url,
-        ph.submitted_at,
+        ${proofExpr} AS proof_url,
+        ${submittedExpr} AS submitted_at,
         ph.status,
-        ph.notes
+        ${hasNotes ? 'ph.notes' : 'NULL::text'} AS notes
       FROM public.payment_history ph
-      JOIN public.students s ON ph.student_id = s.student_id
-      WHERE ph.status = 'pending'
-      ORDER BY ph.submitted_at DESC
+      ${joinDebt ? 'LEFT JOIN public.debt_records dr ON ph.debt_id = dr.debt_id' : ''}
+      ${joinStudents ? `LEFT JOIN public.students s ON ${hasPhStudentId ? 'ph.student_id' : 'dr.student_id'} = s.student_id` : ''}
+      ${joinUsers ? 'LEFT JOIN public.users u ON s.user_id = u.user_id' : ''}
+      WHERE UPPER(COALESCE(ph.status, '')) = 'PENDING'
+      ORDER BY submitted_at DESC
     `);
     res.json({ success: true, payments: result.rows });
   } catch (error) {
@@ -365,35 +472,97 @@ router.post('/payments/:id/approve', async (req, res) => {
     const { id } = req.params;
     const { notes = '' } = req.body;
 
+    const paymentCols = await getAvailableColumns('payment_history', [
+      'student_id',
+      'debt_id',
+      'reviewed_at',
+      'notes',
+    ]);
+    const debtCols = await getAvailableColumns('debt_records', [
+      'student_id',
+      'updated_at',
+      'last_updated',
+    ]);
+
+    const hasPhStudentId = paymentCols.has('student_id');
+    const hasPhDebtId = paymentCols.has('debt_id');
+    const hasReviewedAt = paymentCols.has('reviewed_at');
+    const hasNotes = paymentCols.has('notes');
+    const hasDebtStudentId = debtCols.has('student_id');
+    const hasDebtUpdatedAt = debtCols.has('updated_at');
+    const hasDebtLastUpdated = debtCols.has('last_updated');
+
     // Start transaction on a single client connection
     await client.query('BEGIN');
 
     // Get payment and student info
     const paymentRes = await client.query(
-      'SELECT student_id, amount FROM payment_history WHERE payment_id = $1 AND status = $2',
-      [id, 'pending']
+      `SELECT
+         amount,
+         status,
+         ${hasPhStudentId ? 'student_id' : 'NULL::integer AS student_id'},
+         ${hasPhDebtId ? 'debt_id' : 'NULL::integer AS debt_id'}
+       FROM payment_history
+       WHERE payment_id = $1
+         AND UPPER(COALESCE(status, '')) = 'PENDING'`,
+      [id]
     );
     if (paymentRes.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Pending payment not found' });
     }
 
-    const { student_id, amount } = paymentRes.rows[0];
+    const { student_id, debt_id, amount, status } = paymentRes.rows[0];
+    const statusMode = resolveStatusMode(status);
 
     // Update payment status
+    const paymentSetClauses = [`status = $1`];
+    const paymentValues = [statusMode.approved];
+    let paymentParamIndex = 2;
+
+    if (hasReviewedAt) {
+      paymentSetClauses.push('reviewed_at = NOW()');
+    }
+    if (hasNotes) {
+      paymentSetClauses.push(`notes = $${paymentParamIndex}`);
+      paymentValues.push(notes);
+      paymentParamIndex += 1;
+    }
+    paymentValues.push(id);
+
     await client.query(
       `UPDATE payment_history
-       SET status = 'approved', reviewed_at = NOW(), notes = $1
-       WHERE payment_id = $2`,
-      [notes, id]
+       SET ${paymentSetClauses.join(', ')}
+       WHERE payment_id = $${paymentParamIndex}`,
+      paymentValues
     );
 
     // Reduce student's current debt balance
+    const debtSetClauses = ['current_balance = GREATEST(0, current_balance - $1)'];
+    if (hasDebtUpdatedAt) {
+      debtSetClauses.push('updated_at = NOW()');
+    } else if (hasDebtLastUpdated) {
+      debtSetClauses.push('last_updated = NOW()');
+    }
+
+    let debtWhereClause = '';
+    let debtWhereValue;
+    if (hasPhDebtId && debt_id != null) {
+      debtWhereClause = 'debt_id = $2';
+      debtWhereValue = debt_id;
+    } else if (hasDebtStudentId && student_id != null) {
+      debtWhereClause = 'student_id = $2';
+      debtWhereValue = student_id;
+    } else {
+      await client.query('ROLLBACK');
+      return res.status(500).json({ error: 'Unable to resolve debt record for this payment' });
+    }
+
     await client.query(
       `UPDATE debt_records
-       SET current_balance = GREATEST(0, current_balance - $1), updated_at = NOW()
-       WHERE student_id = $2`,
-      [amount, student_id]
+       SET ${debtSetClauses.join(', ')}
+       WHERE ${debtWhereClause}`,
+      [amount, debtWhereValue]
     );
 
     await client.query('COMMIT');
@@ -418,11 +587,42 @@ router.post('/payments/:id/reject', async (req, res) => {
     const { id } = req.params;
     const { notes = '' } = req.body;
 
+    const paymentCols = await getAvailableColumns('payment_history', ['reviewed_at', 'notes']);
+    const hasReviewedAt = paymentCols.has('reviewed_at');
+    const hasNotes = paymentCols.has('notes');
+
+    const paymentRes = await pool.query(
+      `SELECT status
+       FROM payment_history
+       WHERE payment_id = $1
+         AND UPPER(COALESCE(status, '')) = 'PENDING'`,
+      [id]
+    );
+
+    if (paymentRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Pending payment not found' });
+    }
+
+    const statusMode = resolveStatusMode(paymentRes.rows[0].status);
+    const setClauses = ['status = $1'];
+    const values = [statusMode.rejected];
+    let paramIndex = 2;
+
+    if (hasReviewedAt) {
+      setClauses.push('reviewed_at = NOW()');
+    }
+    if (hasNotes) {
+      setClauses.push(`notes = $${paramIndex}`);
+      values.push(notes);
+      paramIndex += 1;
+    }
+    values.push(id);
+
     const result = await pool.query(
       `UPDATE payment_history
-       SET status = 'rejected', reviewed_at = NOW(), notes = $1
-       WHERE payment_id = $2 AND status = 'pending'`,
-      [notes, id]
+       SET ${setClauses.join(', ')}
+       WHERE payment_id = $${paramIndex}`,
+      values
     );
 
     if (result.rowCount === 0) {
