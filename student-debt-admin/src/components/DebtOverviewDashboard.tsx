@@ -3,7 +3,6 @@ import {
   Box,
   Paper,
   Typography,
-  Grid,
   Alert,
   Snackbar,
 } from '@mui/material';
@@ -60,39 +59,33 @@ export default function DebtOverviewDashboard() {
       </Typography>
 
       {loading ? (
-        <Grid container spacing={3}>
+        <Box sx={{ display: 'grid', gap: 3, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' } }}>
           {[1, 2].map((i) => (
-            <Grid item xs={12} sm={6} key={i}>
-              <Paper sx={{ p: 3, height: 120, backgroundColor: '#f5f5f5' }} />
-            </Grid>
+            <Paper key={i} sx={{ p: 3, height: 120, backgroundColor: '#f5f5f5' }} />
           ))}
-        </Grid>
+        </Box>
       ) : metrics ? (
-        <Grid container spacing={3}>
+        <Box sx={{ display: 'grid', gap: 3, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' } }}>
           {/* Total Collections */}
-          <Grid item xs={12} sm={6}>
-            <Paper sx={{ p: 3, backgroundColor: '#e8f5e9', borderLeft: '4px solid #4caf50' }}>
-              <Typography variant="body2" color="text.secondary">
-                Total Collections
-              </Typography>
-              <Typography variant="h5" fontWeight="bold" sx={{ mt: 1 }}>
-                {formatETB(metrics.totalCollections)}
-              </Typography>
-            </Paper>
-          </Grid>
+          <Paper sx={{ p: 3, backgroundColor: '#e8f5e9', borderLeft: '4px solid #4caf50' }}>
+            <Typography variant="body2" color="text.secondary">
+              Total Collections
+            </Typography>
+            <Typography variant="h5" sx={{ mt: 1, fontWeight: 'bold' }}>
+              {formatETB(metrics.totalCollections)}
+            </Typography>
+          </Paper>
 
           {/* Outstanding Debt */}
-          <Grid item xs={12} sm={6}>
-            <Paper sx={{ p: 3, backgroundColor: '#ffebee', borderLeft: '4px solid #f44336' }}>
-              <Typography variant="body2" color="text.secondary">
-                Outstanding Debt
-              </Typography>
-              <Typography variant="h5" fontWeight="bold" sx={{ mt: 1 }}>
-                {formatETB(metrics.outstandingDebt)}
-              </Typography>
-            </Paper>
-          </Grid>
-        </Grid>
+          <Paper sx={{ p: 3, backgroundColor: '#ffebee', borderLeft: '4px solid #f44336' }}>
+            <Typography variant="body2" color="text.secondary">
+              Outstanding Debt
+            </Typography>
+            <Typography variant="h5" sx={{ mt: 1, fontWeight: 'bold' }}>
+              {formatETB(metrics.outstandingDebt)}
+            </Typography>
+          </Paper>
+        </Box>
       ) : (
         <Alert severity="error">No data available</Alert>
       )}

@@ -9,7 +9,7 @@ import {
   Alert,
   Snackbar,
 } from '@mui/material';
-import { DataGrid, GridColDef, GridRowId } from '@mui/x-data-grid';
+import { DataGrid, GridColDef, GridRowId, GridRowSelectionModel } from '@mui/x-data-grid';
 import { Download as DownloadIcon, Add as AddIcon } from '@mui/icons-material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import api from '../services/api';
@@ -23,6 +23,10 @@ export default function StudentManagement() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddStudentOpen, setIsAddStudentOpen] = useState(false);
   const [selectedStudents, setSelectedStudents] = useState<number[]>([]);
+  const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>({
+    type: 'include',
+    ids: new Set(),
+  });
   const [bulkAction, setBulkAction] = useState<'status' | 'living' | ''>('');
   const [bulkValue, setBulkValue] = useState('');
   const [deleteModal, setDeleteModal] = useState<{
@@ -184,13 +188,6 @@ export default function StudentManagement() {
   };
 
   const columns: GridColDef[] = [
-    {
-      field: '__check__',
-      type: 'checkbox',
-      width: 40,
-      sortable: false,
-      disableColumnMenu: true,
-    },
     { field: 'student_number', headerName: 'ID', width: 120 },
     { field: 'full_name', headerName: 'Full Name', width: 200 },
     { field: 'email', headerName: 'Email', width: 250 },
@@ -343,9 +340,10 @@ export default function StudentManagement() {
           disableRowSelectionOnClick
           checkboxSelection
           onRowSelectionModelChange={(newSelection) => {
-            setSelectedStudents(newSelection.map((id) => Number(id)));
+            setRowSelectionModel(newSelection);
+            setSelectedStudents(Array.from(newSelection.ids).map((id) => Number(id)));
           }}
-          rowSelectionModel={selectedStudents}
+          rowSelectionModel={rowSelectionModel}
         />
       </Paper>
 
