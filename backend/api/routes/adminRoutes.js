@@ -330,6 +330,112 @@ router.get('/analytics/debt-overview', async (req, res) => {
   }
 });
 
+// GET /api/admin/payments/pending — fetch all pending payments
+router.get('/payments/pending', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        ph.payment_id,
+        ph.student_id,
+        s.full_name,
+        s.student_number,
+        s.email,
+        ph.amount,
+        ph.proof_url,
+        ph.submitted_at,
+        ph.status,
+        ph.notes
+      FROM public.payment_history ph
+      JOIN public.students s ON ph.student_id = s.student_id
+      WHERE ph.status = 'pending'
+      ORDER BY ph.submitted_at DESC
+    `);
+    res.json({ success: true, payments: result.rows });
+  } catch (error) {
+    console.error('Fetch pending payments error:', error);
+    res.status(500).json({ error: 'Failed to fetch pending payments' });
+  }
+});
+
+// POST /api/admin/payments/:id/approve — approve a payment
+router.post('/payments/:id/approve', async (req, res) => {
+  let client;
+  try {
+    client = await pool.connect();
+    const { id } = req.params;
+    const { notes = '' } = req.body;
+
+    // Start transaction on a single client connection
+    await client.query('BEGIN');
+
+    // Get payment and student info
+    const paymentRes = await client.query(
+      'SELECT student_id, amount FROM payment_history WHERE payment_id = $1 AND status = $2',
+      [id, 'pending']
+    );
+    if (paymentRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Pending payment not found' });
+    }
+
+    const { student_id, amount } = paymentRes.rows[0];
+
+    // Update payment status
+    await client.query(
+      `UPDATE payment_history
+       SET status = 'approved', reviewed_at = NOW(), notes = $1
+       WHERE payment_id = $2`,
+      [notes, id]
+    );
+
+    // Reduce student's current debt balance
+    await client.query(
+      `UPDATE debt_records
+       SET current_balance = GREATEST(0, current_balance - $1), updated_at = NOW()
+       WHERE student_id = $2`,
+      [amount, student_id]
+    );
+
+    await client.query('COMMIT');
+
+    res.json({ success: true, message: 'Payment approved and debt updated' });
+  } catch (error) {
+    if (client) {
+      await client.query('ROLLBACK');
+    }
+    console.error('Approve payment error:', error);
+    res.status(500).json({ error: 'Failed to approve payment' });
+  } finally {
+    if (client) {
+      client.release();
+    }
+  }
+});
+
+// POST /api/admin/payments/:id/reject — reject a payment
+router.post('/payments/:id/reject', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { notes = '' } = req.body;
+
+    const result = await pool.query(
+      `UPDATE payment_history
+       SET status = 'rejected', reviewed_at = NOW(), notes = $1
+       WHERE payment_id = $2 AND status = 'pending'`,
+      [notes, id]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Pending payment not found' });
+    }
+
+    res.json({ success: true, message: 'Payment rejected' });
+  } catch (error) {
+    console.error('Reject payment error:', error);
+    res.status(500).json({ error: 'Failed to reject payment' });
+  }
+});
+
 // DELETE /api/admin/students/:id — delete student and associated user
 router.delete('/students/:id', async (req, res) => {
   try {
