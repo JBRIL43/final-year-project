@@ -22,6 +22,9 @@ export default function StudentManagement() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddStudentOpen, setIsAddStudentOpen] = useState(false);
+  const [selectedStudents, setSelectedStudents] = useState<number[]>([]);
+  const [bulkAction, setBulkAction] = useState<'status' | 'living' | ''>('');
+  const [bulkValue, setBulkValue] = useState('');
   const [deleteModal, setDeleteModal] = useState<{
     open: boolean;
     studentId: number | null;
@@ -149,7 +152,45 @@ export default function StudentManagement() {
     setDeleteModal({ open: true, studentId, studentName });
   };
 
+  const handleBulkUpdate = async () => {
+    if (!bulkAction || !bulkValue || selectedStudents.length === 0) return;
+
+    const updates: Partial<Student> = {};
+    if (bulkAction === 'status') updates.enrollment_status = bulkValue;
+    if (bulkAction === 'living') updates.living_arrangement = bulkValue;
+
+    try {
+      await api.post('/api/admin/students/batch-update', {
+        studentIds: selectedStudents,
+        updates,
+      });
+      setSnackbar({
+        open: true,
+        message: `✅ Updated ${selectedStudents.length} student(s)`,
+        severity: 'success',
+      });
+      loadStudents();
+      setSelectedStudents([]);
+      setBulkAction('');
+      setBulkValue('');
+    } catch (err: any) {
+      console.error('Bulk update error:', err);
+      setSnackbar({
+        open: true,
+        message: err.response?.data?.error || '❌ Bulk update failed',
+        severity: 'error',
+      });
+    }
+  };
+
   const columns: GridColDef[] = [
+    {
+      field: '__check__',
+      type: 'checkbox',
+      width: 40,
+      sortable: false,
+      disableColumnMenu: true,
+    },
     { field: 'student_number', headerName: 'ID', width: 120 },
     { field: 'full_name', headerName: 'Full Name', width: 200 },
     { field: 'email', headerName: 'Email', width: 250 },
@@ -216,17 +257,74 @@ export default function StudentManagement() {
         Student Management
       </Typography>
 
-      <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
+      <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+        <Button variant="contained" startIcon={<AddIcon />} onClick={() => setIsAddStudentOpen(true)}>
+          Add Student
+        </Button>
+
+        {selectedStudents.length > 0 && (
+          <>
+            <TextField
+              select
+              size="small"
+              label="Bulk Action"
+              value={bulkAction}
+              onChange={(e) => setBulkAction(e.target.value as 'status' | 'living' | '')}
+              sx={{ minWidth: 150 }}
+            >
+              <MenuItem value="status">Update Status</MenuItem>
+              <MenuItem value="living">Update Living</MenuItem>
+            </TextField>
+
+            {bulkAction === 'status' && (
+              <TextField
+                select
+                size="small"
+                label="Status"
+                value={bulkValue}
+                onChange={(e) => setBulkValue(e.target.value)}
+                sx={{ minWidth: 140 }}
+              >
+                <MenuItem value="Active">Active</MenuItem>
+                <MenuItem value="Graduated">Graduated</MenuItem>
+                <MenuItem value="Suspended">Suspended</MenuItem>
+                <MenuItem value="Withdrawn">Withdrawn</MenuItem>
+              </TextField>
+            )}
+
+            {bulkAction === 'living' && (
+              <TextField
+                select
+                size="small"
+                label="Living"
+                value={bulkValue}
+                onChange={(e) => setBulkValue(e.target.value)}
+                sx={{ minWidth: 140 }}
+              >
+                <MenuItem value="On-Campus">On-Campus</MenuItem>
+                <MenuItem value="Off-Campus">Off-Campus</MenuItem>
+                <MenuItem value="With Family">With Family</MenuItem>
+              </TextField>
+            )}
+
+            <Button
+              variant="contained"
+              color="primary"
+              disabled={!bulkAction || !bulkValue}
+              onClick={handleBulkUpdate}
+            >
+              Apply to {selectedStudents.length} Students
+            </Button>
+          </>
+        )}
+
         <TextField
           size="small"
           placeholder="Search students..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          sx={{ minWidth: 250 }}
+          sx={{ minWidth: 250, ml: 'auto' }}
         />
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => setIsAddStudentOpen(true)}>
-          Add Student
-        </Button>
         <Button variant="outlined" startIcon={<DownloadIcon />} onClick={exportToCSV}>
           Export CSV
         </Button>
@@ -243,9 +341,11 @@ export default function StudentManagement() {
             pagination: { paginationModel: { pageSize: 25 } },
           }}
           disableRowSelectionOnClick
-          slotProps={{
-            toolbar: { showQuickFilter: false },
+          checkboxSelection
+          onRowSelectionModelChange={(newSelection) => {
+            setSelectedStudents(newSelection.map((id) => Number(id)));
           }}
+          rowSelectionModel={selectedStudents}
         />
       </Paper>
 

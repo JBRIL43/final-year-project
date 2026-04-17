@@ -224,6 +224,82 @@ router.put('/students/:id', async (req, res) => {
   }
 });
 
+// POST /api/admin/students/batch-update — bulk update selected students
+router.post('/students/batch-update', async (req, res) => {
+  try {
+    const { studentIds, updates } = req.body;
+
+    if (!Array.isArray(studentIds) || studentIds.length === 0) {
+      return res.status(400).json({ error: 'studentIds must be a non-empty array' });
+    }
+
+    if (!updates || Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: 'At least one field to update is required' });
+    }
+
+    const normalizedUpdates = { ...updates };
+    if (Object.prototype.hasOwnProperty.call(normalizedUpdates, 'living_arrangement')) {
+      normalizedUpdates.living_arrangement = normalizeLivingArrangement(
+        normalizedUpdates.living_arrangement
+      );
+    }
+    if (Object.prototype.hasOwnProperty.call(normalizedUpdates, 'enrollment_status')) {
+      normalizedUpdates.enrollment_status = normalizeEnrollmentStatus(
+        normalizedUpdates.enrollment_status
+      );
+    }
+
+    // Build dynamic SET clause
+    const allowedFields = ['living_arrangement', 'enrollment_status', 'department'];
+    const setFields = [];
+    const values = [];
+    let paramIndex = 1;
+
+    for (const field of allowedFields) {
+      if (field in normalizedUpdates) {
+        setFields.push(`${field} = $${paramIndex}`);
+        values.push(normalizedUpdates[field]);
+        paramIndex++;
+      }
+    }
+
+    if (setFields.length === 0) {
+      return res.status(400).json({ error: 'No valid fields to update' });
+    }
+
+    const hasUpdatedAt = (await pool.query(
+      `SELECT 1
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'students'
+         AND column_name = 'updated_at'
+       LIMIT 1`
+    )).rows.length > 0;
+
+    // Add student IDs to values
+    const idPlaceholders = studentIds.map((_, i) => `$${paramIndex + i}`).join(',');
+    const finalValues = [...values, ...studentIds];
+
+    const query = `
+      UPDATE students
+      SET ${setFields.join(', ')}${hasUpdatedAt ? ', updated_at = NOW()' : ''}
+      WHERE student_id IN (${idPlaceholders})
+      RETURNING student_id
+    `;
+
+    const result = await pool.query(query, finalValues);
+
+    res.json({
+      success: true,
+      updatedCount: result.rowCount,
+      message: `Updated ${result.rowCount} student(s)`
+    });
+  } catch (error) {
+    console.error('Batch update error:', error);
+    res.status(500).json({ error: 'Failed to batch update students' });
+  }
+});
+
 // DELETE /api/admin/students/:id — delete student and associated user
 router.delete('/students/:id', async (req, res) => {
   try {
