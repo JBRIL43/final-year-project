@@ -60,6 +60,28 @@ function resolveStatusMode(sampleStatus) {
   };
 }
 
+async function ensureContractsTable(client) {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS public.contracts (
+      contract_id SERIAL PRIMARY KEY,
+      student_id INTEGER NOT NULL REFERENCES public.students(student_id) ON DELETE CASCADE,
+      university_name VARCHAR(100) NOT NULL DEFAULT 'Hawassa University',
+      program VARCHAR(100) NOT NULL,
+      academic_year VARCHAR(9) NOT NULL,
+      tuition_share_percent NUMERIC(5,2) NOT NULL DEFAULT 15.00,
+      boarding_full_cost BOOLEAN NOT NULL DEFAULT true,
+      signed_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      is_active BOOLEAN NOT NULL DEFAULT true,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+
+  await client.query(
+    'CREATE INDEX IF NOT EXISTS idx_contracts_student_id ON public.contracts(student_id)'
+  );
+}
+
 router.get('/students', async (req, res) => {
   console.log('✅ Admin students route hit');
   try {
@@ -129,7 +151,9 @@ router.get('/students', async (req, res) => {
   }
 });
 
+// POST /api/admin/students — create new student + auto-create contract
 router.post('/students', async (req, res) => {
+  let client;
   try {
     const {
       student_number,
@@ -145,16 +169,20 @@ router.post('/students', async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    const existing = await pool.query(
+    client = await pool.connect();
+    await client.query('BEGIN');
+
+    const existing = await client.query(
       'SELECT student_id FROM public.students WHERE student_number = $1 OR email = $2 LIMIT 1',
       [student_number, email]
     );
 
     if (existing.rows.length > 0) {
+      await client.query('ROLLBACK');
       return res.status(409).json({ error: 'Student ID or email already exists' });
     }
 
-    const existingUser = await pool.query(
+    const existingUser = await client.query(
       'SELECT user_id FROM public.users WHERE email = $1 LIMIT 1',
       [email]
     );
@@ -164,7 +192,7 @@ router.post('/students', async (req, res) => {
       userId = existingUser.rows[0].user_id;
     } else {
       const firebaseUid = `local-${student_number}-${Date.now()}`;
-      const userResult = await pool.query(
+      const userResult = await client.query(
         `INSERT INTO public.users (firebase_uid, email, full_name, role, created_at)
          VALUES ($1, $2, $3, 'STUDENT', NOW())
          RETURNING user_id`,
@@ -173,7 +201,7 @@ router.post('/students', async (req, res) => {
       userId = userResult.rows[0].user_id;
     }
 
-    const columnsResult = await pool.query(
+    const columnsResult = await client.query(
       `SELECT column_name
        FROM information_schema.columns
        WHERE table_schema = 'public'
@@ -196,7 +224,7 @@ router.post('/students', async (req, res) => {
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
         RETURNING *`;
 
-    const studentResult = await pool.query(insertSql, [
+    const studentResult = await client.query(insertSql, [
       userId,
       student_number,
       full_name,
@@ -207,9 +235,34 @@ router.post('/students', async (req, res) => {
       normalizeEnrollmentStatus(enrollment_status),
     ]);
 
+    const studentId = studentResult.rows[0].student_id;
+    const currentYear = new Date().getFullYear();
+    const academicYear = `${currentYear}/${currentYear + 1}`;
+
+    await ensureContractsTable(client);
+
+    await client.query(
+      `INSERT INTO public.contracts (
+         student_id,
+         program,
+         academic_year,
+         tuition_share_percent,
+         boarding_full_cost,
+         signed_at,
+         is_active,
+         created_at,
+         updated_at
+       ) VALUES ($1, $2, $3, $4, $5, NOW(), TRUE, NOW(), NOW())`,
+      [studentId, department, academicYear, 15.0, true]
+    );
+
+    await client.query('COMMIT');
     res.status(201).json({ success: true, student: studentResult.rows[0] });
   } catch (error) {
-    console.error('Create student error:', {
+    if (client) {
+      await client.query('ROLLBACK');
+    }
+    console.error('Create student + contract error:', {
       message: error.message,
       code: error.code,
       detail: error.detail,
@@ -219,7 +272,11 @@ router.post('/students', async (req, res) => {
       constraint: error.constraint,
       stack: error.stack,
     });
-    res.status(500).json({ error: 'Failed to create student' });
+    res.status(500).json({ error: 'Failed to create student and contract' });
+  } finally {
+    if (client) {
+      client.release();
+    }
   }
 });
 
