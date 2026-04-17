@@ -224,4 +224,42 @@ router.put('/students/:id', async (req, res) => {
   }
 });
 
+// DELETE /api/admin/students/:id — delete student and associated user
+router.delete('/students/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const studentResult = await pool.query(
+      'SELECT user_id FROM public.students WHERE student_id = $1',
+      [id]
+    );
+
+    if (studentResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    const userId = studentResult.rows[0].user_id;
+
+    await pool.query('DELETE FROM public.students WHERE student_id = $1', [id]);
+
+    if (userId) {
+      await pool.query('DELETE FROM public.users WHERE user_id = $1', [userId]);
+    }
+
+    res.json({ success: true, message: 'Student deleted successfully' });
+  } catch (error) {
+    console.error('Delete student error:', {
+      message: error.message,
+      code: error.code,
+      detail: error.detail,
+      hint: error.hint,
+      table: error.table,
+      column: error.column,
+      constraint: error.constraint,
+      stack: error.stack,
+    });
+    res.status(500).json({ error: 'Failed to delete student' });
+  }
+});
+
 module.exports = router;
