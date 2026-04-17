@@ -10,7 +10,6 @@ import {
   ListItemIcon,
   ListItemText,
   Paper,
-  Stack,
   Typography,
 } from '@mui/material'
 import {
@@ -41,7 +40,7 @@ export default function AdminLayout({ children }: { children?: ReactNode }) {
   const displayName = user?.displayName || email.split('@')[0] || 'Admin'
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: '#f3f6fb' }}>
+    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: '#f1f4f9' }}>
       <Drawer
         variant="permanent"
         sx={{
@@ -50,8 +49,8 @@ export default function AdminLayout({ children }: { children?: ReactNode }) {
           '& .MuiDrawer-paper': {
             width: drawerWidth,
             boxSizing: 'border-box',
-            borderRight: '1px solid #e6ebf2',
-            background: 'linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)',
+            borderRight: '1px solid #e7ebf2',
+            background: '#f7f9fc',
             px: 2,
             py: 2,
           },
@@ -69,13 +68,13 @@ export default function AdminLayout({ children }: { children?: ReactNode }) {
               alignItems: 'center',
               justifyContent: 'center',
               fontWeight: 800,
-              boxShadow: '0 8px 18px rgba(74, 131, 245, 0.25)',
+              boxShadow: '0 8px 18px rgba(74, 131, 245, 0.18)',
             }}
           >
             HU
           </Box>
           <Box>
-            <Typography variant="subtitle1" fontWeight={800} lineHeight={1.1}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 800, lineHeight: 1.1 }}>
               Admin Panel
             </Typography>
             <Typography variant="body2" color="text.secondary">
@@ -84,7 +83,7 @@ export default function AdminLayout({ children }: { children?: ReactNode }) {
           </Box>
         </Box>
 
-        <Typography variant="overline" sx={{ px: 1, color: 'text.secondary', letterSpacing: 1.1 }}>
+        <Typography variant="overline" sx={{ px: 1, color: '#8e98aa', letterSpacing: 1.1, fontWeight: 700 }}>
           Navigation
         </Typography>
 
@@ -100,27 +99,32 @@ export default function AdminLayout({ children }: { children?: ReactNode }) {
                 borderRadius: 3,
                 px: 1.5,
                 py: 1.25,
-                color: '#4b5563',
+                color: '#4d586b',
                 '&.active': {
                   bgcolor: '#dce9ff',
-                  color: '#1d4ed8',
-                  '& .MuiListItemIcon-root': { color: '#1d4ed8' },
+                  color: '#2f67dc',
+                  '& .MuiListItemIcon-root': { color: '#2f67dc' },
                 },
               }}
             >
               <ListItemIcon sx={{ minWidth: 38, color: 'inherit' }}>{item.icon}</ListItemIcon>
               <ListItemText
                 primary={item.label}
-                primaryTypographyProps={{ fontWeight: 700, fontSize: 15 }}
+                sx={{
+                  '& .MuiListItemText-primary': {
+                    fontWeight: 700,
+                    fontSize: 15,
+                  },
+                }}
               />
             </ListItemButton>
           ))}
         </List>
 
-        <Divider sx={{ my: 2 }} />
+        <Divider sx={{ my: 2, borderColor: '#e7ebf2' }} />
 
         <Box sx={{ px: 1 }}>
-          <Typography variant="overline" sx={{ color: 'text.secondary', letterSpacing: 1.1 }}>
+          <Typography variant="overline" sx={{ color: '#8e98aa', letterSpacing: 1.1, fontWeight: 700 }}>
             Account
           </Typography>
           <Paper
@@ -129,28 +133,28 @@ export default function AdminLayout({ children }: { children?: ReactNode }) {
               mt: 1.5,
               p: 1.5,
               borderRadius: 3,
-              border: '1px solid #e6ebf2',
+              border: '1px solid #e7ebf2',
               bgcolor: '#fff',
             }}
           >
-            <Stack direction="row" spacing={1.5} alignItems="center">
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
               <Avatar sx={{ bgcolor: '#e5edff', color: '#1d4ed8', fontWeight: 800 }}>
                 {getInitials(displayName)}
               </Avatar>
               <Box sx={{ minWidth: 0 }}>
-                <Typography variant="body2" fontWeight={800} noWrap>
+                <Typography variant="body2" sx={{ fontWeight: 800 }} noWrap>
                   {email}
                 </Typography>
                 <Typography variant="caption" color="text.secondary" noWrap>
                   System Administrator
                 </Typography>
               </Box>
-            </Stack>
+            </Box>
           </Paper>
         </Box>
       </Drawer>
 
-      <Box component="main" sx={{ flex: 1, p: 3 }}>
+      <Box component="main" sx={{ flex: 1, px: 4, py: 2.5 }}>
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
           <Paper
             elevation={0}
@@ -158,7 +162,7 @@ export default function AdminLayout({ children }: { children?: ReactNode }) {
               px: 2,
               py: 1.25,
               borderRadius: 3,
-              border: '1px solid #e6ebf2',
+              border: '1px solid #e7ebf2',
               display: 'flex',
               alignItems: 'center',
               gap: 1.25,
@@ -171,7 +175,7 @@ export default function AdminLayout({ children }: { children?: ReactNode }) {
               </Avatar>
             </Badge>
             <Box>
-              <Typography variant="body2" fontWeight={800}>
+              <Typography variant="body2" sx={{ fontWeight: 800 }}>
                 {email}
               </Typography>
               <Typography variant="caption" color="text.secondary">
@@ -184,8 +188,8 @@ export default function AdminLayout({ children }: { children?: ReactNode }) {
 
         <Box
           sx={{
-            maxWidth: 1440,
-            mx: 'auto',
+            maxWidth: 1180,
+            mr: 'auto',
           }}
         >
           {children ?? <Outlet />}

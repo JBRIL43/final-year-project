@@ -44,11 +44,14 @@ export default function PaymentReviewQueue() {
     try {
       const res = await api.get<{ success: true; payments: Payment[] }>('/api/admin/payments/pending');
       setPayments(res.data.payments);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load pending payments', err);
+      const status = err?.response?.status;
+      const backendMessage = err?.response?.data?.error;
+      const hint = status === 404 ? ' (backend route not deployed yet)' : '';
       setSnackbar({
         open: true,
-        message: '❌ Failed to load pending payments',
+        message: backendMessage || `❌ Failed to load pending payments${status ? ` [${status}]` : ''}${hint}`,
         severity: 'error',
       });
     } finally {

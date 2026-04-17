@@ -6,6 +6,8 @@ import {
   Alert,
   Snackbar,
 } from '@mui/material';
+import SavingsOutlinedIcon from '@mui/icons-material/SavingsOutlined';
+import ShowChartOutlinedIcon from '@mui/icons-material/ShowChartOutlined';
 import api from '../services/api';
 
 interface DebtMetrics {
@@ -53,37 +55,54 @@ export default function DebtOverviewDashboard() {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Typography variant="h4" gutterBottom>
-        Debt Overview Dashboard
-      </Typography>
+    <Box sx={{ p: 0 }}>
 
       {loading ? (
-        <Box sx={{ display: 'grid', gap: 3, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' } }}>
+        <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' } }}>
           {[1, 2].map((i) => (
-            <Paper key={i} sx={{ p: 3, height: 120, backgroundColor: '#f5f5f5' }} />
+            <Paper key={i} sx={{ p: 3, height: 140, backgroundColor: '#f5f7fb', borderRadius: 3 }} />
           ))}
         </Box>
       ) : metrics ? (
-        <Box sx={{ display: 'grid', gap: 3, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' } }}>
+        <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' } }}>
           {/* Total Collections */}
-          <Paper sx={{ p: 3, backgroundColor: '#e8f5e9', borderLeft: '4px solid #4caf50' }}>
-            <Typography variant="body2" color="text.secondary">
-              Total Collections
-            </Typography>
-            <Typography variant="h5" sx={{ mt: 1, fontWeight: 'bold' }}>
-              {formatETB(metrics.totalCollections)}
-            </Typography>
+          <Paper sx={{ p: 3, borderRadius: 3, border: '1px solid #e6ebf2', bgcolor: '#fff' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
+              <Box>
+                <Typography variant="body1" color="#4f5b70" sx={{ fontWeight: 700 }}>
+                  Total Collections
+                </Typography>
+                <Typography variant="h4" sx={{ mt: 1, fontWeight: 800, color: '#1c2333' }}>
+                  {formatETB(metrics.totalCollections)}
+                </Typography>
+                <Typography variant="body2" sx={{ mt: 1, color: '#8390a5' }}>
+                  All successful student payments
+                </Typography>
+              </Box>
+              <Box sx={{ width: 56, height: 56, borderRadius: 2.5, bgcolor: '#edf2ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <SavingsOutlinedIcon sx={{ color: '#2f67dc' }} />
+              </Box>
+            </Box>
           </Paper>
 
           {/* Outstanding Debt */}
-          <Paper sx={{ p: 3, backgroundColor: '#ffebee', borderLeft: '4px solid #f44336' }}>
-            <Typography variant="body2" color="text.secondary">
-              Outstanding Debt
-            </Typography>
-            <Typography variant="h5" sx={{ mt: 1, fontWeight: 'bold' }}>
-              {formatETB(metrics.outstandingDebt)}
-            </Typography>
+          <Paper sx={{ p: 3, borderRadius: 3, border: '1px solid #e6ebf2', bgcolor: '#fff' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
+              <Box>
+                <Typography variant="body1" color="#4f5b70" sx={{ fontWeight: 700 }}>
+                  Outstanding Debt
+                </Typography>
+                <Typography variant="h4" sx={{ mt: 1, fontWeight: 800, color: '#1c2333' }}>
+                  {formatETB(metrics.outstandingDebt)}
+                </Typography>
+                <Typography variant="body2" sx={{ mt: 1, color: '#8390a5' }}>
+                  Total remaining debt across all students
+                </Typography>
+              </Box>
+              <Box sx={{ width: 56, height: 56, borderRadius: 2.5, bgcolor: '#edf2ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <ShowChartOutlinedIcon sx={{ color: '#2f67dc' }} />
+              </Box>
+            </Box>
           </Paper>
         </Box>
       ) : (
