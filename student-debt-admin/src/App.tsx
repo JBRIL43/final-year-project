@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { CircularProgress, Box } from '@mui/material'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -38,6 +38,11 @@ function AppRoutes() {
       >
         <Route index element={<Dashboard />} />
         <Route path="students" element={<StudentManagement />} />
+        <Route path="manage-users" element={<StudentManagement />} />
+        <Route path="user-list" element={<StudentManagement />} />
+        <Route path="sis-import" element={<StudentManagement />} />
+        <Route path="reports" element={<Dashboard />} />
+        <Route path="settings" element={<Dashboard />} />
         <Route path="payment-review" element={<PaymentReviewQueue />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
@@ -48,9 +53,9 @@ function AppRoutes() {
 function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
+      <HashRouter>
         <AppRoutes />
-      </BrowserRouter>
+      </HashRouter>
     </AuthProvider>
   )
 }
