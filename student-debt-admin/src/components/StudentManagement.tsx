@@ -10,14 +10,16 @@ import {
   Snackbar,
 } from '@mui/material';
 import { DataGrid, GridColDef, GridRowId, GridActionsCellItem } from '@mui/x-data-grid';
-import { Edit as EditIcon, Download as DownloadIcon } from '@mui/icons-material';
+import { Edit as EditIcon, Download as DownloadIcon, Add as AddIcon } from '@mui/icons-material';
 import api from '../services/api';
 import { Student } from '../types/student';
+import AddStudentModal from './AddStudentModal';
 
 export default function StudentManagement() {
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isAddStudentOpen, setIsAddStudentOpen] = useState(false);
   const [snackbar, setSnackbar] = useState<{
     open: boolean;
     message: string;
@@ -206,6 +208,9 @@ export default function StudentManagement() {
           onChange={(e) => setSearchTerm(e.target.value)}
           sx={{ minWidth: 250 }}
         />
+        <Button variant="contained" startIcon={<AddIcon />} onClick={() => setIsAddStudentOpen(true)}>
+          Add Student
+        </Button>
         <Button variant="outlined" startIcon={<DownloadIcon />} onClick={exportToCSV}>
           Export CSV
         </Button>
@@ -242,6 +247,12 @@ export default function StudentManagement() {
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      <AddStudentModal
+        open={isAddStudentOpen}
+        onClose={() => setIsAddStudentOpen(false)}
+        onStudentAdded={loadStudents}
+      />
     </Box>
   );
 }
