@@ -9,17 +9,28 @@ import {
   Alert,
   Snackbar,
 } from '@mui/material';
-import { DataGrid, GridColDef, GridRowId, GridActionsCellItem } from '@mui/x-data-grid';
-import { Edit as EditIcon, Download as DownloadIcon, Add as AddIcon } from '@mui/icons-material';
+import { DataGrid, GridColDef, GridRowId } from '@mui/x-data-grid';
+import { Download as DownloadIcon, Add as AddIcon } from '@mui/icons-material';
+import DeleteIcon from '@mui/icons-material/Delete';
 import api from '../services/api';
 import { Student } from '../types/student';
 import AddStudentModal from './AddStudentModal';
+import DeleteStudentModal from './DeleteStudentModal';
 
 export default function StudentManagement() {
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddStudentOpen, setIsAddStudentOpen] = useState(false);
+  const [deleteModal, setDeleteModal] = useState<{
+    open: boolean;
+    studentId: number | null;
+    studentName: string;
+  }>({
+    open: false,
+    studentId: null,
+    studentName: '',
+  });
   const [snackbar, setSnackbar] = useState<{
     open: boolean;
     message: string;
@@ -134,63 +145,68 @@ export default function StudentManagement() {
     });
   };
 
+  const handleDeleteClick = (studentId: number, studentName: string) => {
+    setDeleteModal({ open: true, studentId, studentName });
+  };
+
   const columns: GridColDef[] = [
-    { field: 'student_number', headerName: 'ID', width: 120, sortable: true },
-    { field: 'full_name', headerName: 'Full Name', width: 200, sortable: true },
-    { field: 'email', headerName: 'Email', width: 250, sortable: true },
+    { field: 'student_number', headerName: 'ID', width: 120 },
+    { field: 'full_name', headerName: 'Full Name', width: 200 },
+    { field: 'email', headerName: 'Email', width: 250 },
     { field: 'department', headerName: 'Dept', width: 140 },
     { field: 'enrollment_year', headerName: 'Year', width: 80 },
     {
       field: 'living_arrangement',
       headerName: 'Living',
-      width: 160,
-      editable: true,
-      type: 'singleSelect',
-      valueOptions: ['CASH_STIPEND', 'ON_CAMPUS'],
+      width: 120,
       renderCell: (params) => (
         <TextField
           size="small"
           select
-          value={params.value}
-          onChange={(e) =>
-            handleEdit(params.row.student_id, 'living_arrangement', e.target.value)
-          }
+          value={params.value || ''}
+          onChange={(e) => handleEdit(params.row.student_id, 'living_arrangement', e.target.value)}
           sx={{ width: '100%' }}
         >
-          <MenuItem value="CASH_STIPEND">CASH_STIPEND</MenuItem>
-          <MenuItem value="ON_CAMPUS">ON_CAMPUS</MenuItem>
+          <MenuItem value="On-Campus">On-Campus</MenuItem>
+          <MenuItem value="Off-Campus">Off-Campus</MenuItem>
+          <MenuItem value="With Family">With Family</MenuItem>
         </TextField>
       ),
     },
     {
       field: 'enrollment_status',
       headerName: 'Status',
-      width: 140,
-      editable: true,
-      type: 'singleSelect',
-      valueOptions: ['ACTIVE', 'GRADUATED', 'WITHDRAWN'],
+      width: 120,
       renderCell: (params) => (
         <TextField
           size="small"
           select
-          value={params.value}
+          value={params.value || ''}
           onChange={(e) => handleEdit(params.row.student_id, 'enrollment_status', e.target.value)}
           sx={{ width: '100%' }}
         >
-          <MenuItem value="ACTIVE">ACTIVE</MenuItem>
-          <MenuItem value="GRADUATED">GRADUATED</MenuItem>
-          <MenuItem value="WITHDRAWN">WITHDRAWN</MenuItem>
+          <MenuItem value="Active">Active</MenuItem>
+          <MenuItem value="Graduated">Graduated</MenuItem>
+          <MenuItem value="Suspended">Suspended</MenuItem>
+          <MenuItem value="Withdrawn">Withdrawn</MenuItem>
         </TextField>
       ),
     },
     {
       field: 'actions',
-      type: 'actions',
       headerName: 'Actions',
-      width: 80,
-      getActions: () => [
-        <GridActionsCellItem icon={<EditIcon />} label="Edit" onClick={() => {}} color="inherit" />,
-      ],
+      width: 100,
+      sortable: false,
+      renderCell: (params) => (
+        <Button
+          color="error"
+          size="small"
+          startIcon={<DeleteIcon />}
+          onClick={() => handleDeleteClick(params.row.student_id, params.row.full_name)}
+        >
+          Delete
+        </Button>
+      ),
     },
   ];
 
@@ -232,6 +248,15 @@ export default function StudentManagement() {
           }}
         />
       </Paper>
+
+      {/* Delete Student Modal */}
+      <DeleteStudentModal
+        open={deleteModal.open}
+        onClose={() => setDeleteModal({ open: false, studentId: null, studentName: '' })}
+        studentId={deleteModal.studentId}
+        studentName={deleteModal.studentName}
+        onStudentDeleted={loadStudents}
+      />
 
       <Snackbar
         open={snackbar.open}
