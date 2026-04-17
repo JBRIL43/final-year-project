@@ -65,6 +65,7 @@ async function ensureContractsTable(client) {
     CREATE TABLE IF NOT EXISTS public.contracts (
       contract_id SERIAL PRIMARY KEY,
       student_id INTEGER NOT NULL REFERENCES public.students(student_id) ON DELETE CASCADE,
+      CONSTRAINT contracts_student_id_key UNIQUE (student_id),
       university_name VARCHAR(100) NOT NULL DEFAULT 'Hawassa University',
       program VARCHAR(100) NOT NULL,
       academic_year VARCHAR(9) NOT NULL,
@@ -79,6 +80,10 @@ async function ensureContractsTable(client) {
 
   await client.query(
     'CREATE INDEX IF NOT EXISTS idx_contracts_student_id ON public.contracts(student_id)'
+  );
+
+  await client.query(
+    'CREATE UNIQUE INDEX IF NOT EXISTS uq_contracts_student_id ON public.contracts(student_id)'
   );
 }
 
