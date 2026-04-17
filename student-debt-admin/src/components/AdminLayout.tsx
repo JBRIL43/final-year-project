@@ -25,7 +25,11 @@ const drawerWidth = 270
 
 const navItems = [
   { label: 'Dashboard', to: '/', icon: <DashboardIcon /> },
-  { label: 'Student Management', to: '/students', icon: <SchoolIcon /> },
+  { label: 'Manage Users', to: '/manage-users', icon: <SchoolIcon /> },
+  { label: 'User List', to: '/user-list', icon: <SchoolIcon /> },
+  { label: 'SIS Import', to: '/sis-import', icon: <ReceiptLongIcon /> },
+  { label: 'Reports', to: '/reports', icon: <ReceiptLongIcon /> },
+  { label: 'Settings', to: '/settings', icon: <ReceiptLongIcon /> },
   { label: 'Payment Review', to: '/payment-review', icon: <ReceiptLongIcon /> },
 ]
 
