@@ -20,52 +20,33 @@ export default function Dashboard() {
         }}
       >
         <Box>
-          <Typography variant="h4" component="h1" fontWeight={800} sx={{ mb: 0.5 }}>
+          <Typography variant="h3" component="h1" fontWeight={800} sx={{ mb: 0.5, fontSize: { xs: 32, md: 46 } }}>
             Welcome, {displayName}.
           </Typography>
-          <Typography color="text.secondary" variant="body1">
+          <Typography color="#6b7588" variant="h6" sx={{ fontWeight: 500, fontSize: { xs: 18, md: 32 } }}>
             Admin dashboard · Track student payments and total remaining cost
           </Typography>
         </Box>
-
-        <Paper
-          elevation={0}
-          sx={{
-            px: 2,
-            py: 1.5,
-            borderRadius: 3,
-            border: '1px solid #e6ebf2',
-            bgcolor: '#fff',
-            minWidth: 240,
-          }}
-        >
-          <Typography variant="caption" color="text.secondary">
-            Logged in as
-          </Typography>
-          <Typography variant="body2" fontWeight={800} noWrap>
-            {user?.email || 'adminstudent@hu.edu.et'}
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            System Administrator
-          </Typography>
-        </Paper>
       </Box>
 
       <DebtOverviewDashboard />
 
-      <Box sx={{ mt: 3 }}>
+      <Box sx={{ mt: 3.5 }}>
         <Typography variant="h5" fontWeight={800} gutterBottom>
           Quick Actions
         </Typography>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-          <Button component={Link} to="/students" variant="contained" size="large">
-            Student Management
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ maxWidth: 1120 }}>
+          <Button component={Link} to="/students" variant="contained" size="large" sx={{ flex: 1, borderRadius: 2, textTransform: 'none', fontWeight: 700, py: 1.25 }}>
+            Generate Reports
           </Button>
-          <Button component={Link} to="/payment-review" variant="contained" size="large">
-            Payment Review
+          <Button component={Link} to="/students" variant="contained" size="large" sx={{ flex: 1, borderRadius: 2, textTransform: 'none', fontWeight: 700, py: 1.25 }}>
+            Add User
           </Button>
-          <Button variant="outlined" size="large" disabled>
-            Reports
+          <Button component={Link} to="/students" variant="contained" size="large" sx={{ flex: 1, borderRadius: 2, textTransform: 'none', fontWeight: 700, py: 1.25 }}>
+            User List
+          </Button>
+          <Button component={Link} to="/payment-review" variant="contained" size="large" sx={{ flex: 1, borderRadius: 2, textTransform: 'none', fontWeight: 700, py: 1.25 }}>
+            SIS Import
           </Button>
         </Stack>
       </Box>
