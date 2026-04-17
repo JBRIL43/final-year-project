@@ -300,6 +300,36 @@ router.post('/students/batch-update', async (req, res) => {
   }
 });
 
+// GET /api/admin/analytics/debt-overview — debt & collection summary
+router.get('/analytics/debt-overview', async (req, res) => {
+  try {
+    // Total collections (approved payments)
+    const collectionsResult = await pool.query(`
+      SELECT COALESCE(SUM(amount), 0) AS total_collections
+      FROM payment_history
+      WHERE status = 'approved'
+    `);
+
+    // Total outstanding debt (unpaid balances)
+    const debtResult = await pool.query(`
+      SELECT COALESCE(SUM(current_balance), 0) AS outstanding_debt
+      FROM debt_records
+      WHERE current_balance > 0
+    `);
+
+    res.json({
+      success: true,
+      data: {
+        totalCollections: parseFloat(collectionsResult.rows[0].total_collections),
+        outstandingDebt: parseFloat(debtResult.rows[0].outstanding_debt),
+      },
+    });
+  } catch (error) {
+    console.error('Debt analytics error:', error);
+    res.status(500).json({ error: 'Failed to fetch debt analytics' });
+  }
+});
+
 // DELETE /api/admin/students/:id — delete student and associated user
 router.delete('/students/:id', async (req, res) => {
   try {
