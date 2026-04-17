@@ -85,6 +85,59 @@ async function ensureContractsTable(client) {
   await client.query(
     'CREATE UNIQUE INDEX IF NOT EXISTS uq_contracts_student_id ON public.contracts(student_id)'
   );
+
+  await client.query(`
+    CREATE OR REPLACE FUNCTION public.create_contract_for_new_student()
+    RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+    DECLARE
+      current_year integer;
+      academic_year_text varchar(9);
+    BEGIN
+      current_year := EXTRACT(YEAR FROM CURRENT_DATE)::integer;
+      academic_year_text := current_year::text || '/' || (current_year + 1)::text;
+
+      INSERT INTO public.contracts (
+        student_id,
+        university_name,
+        program,
+        academic_year,
+        tuition_share_percent,
+        boarding_full_cost,
+        signed_at,
+        is_active,
+        created_at,
+        updated_at
+      ) VALUES (
+        NEW.student_id,
+        'Hawassa University',
+        COALESCE(NEW.department, 'Unknown Program'),
+        academic_year_text,
+        15.00,
+        true,
+        NOW(),
+        true,
+        NOW(),
+        NOW()
+      )
+      ON CONFLICT (student_id) DO NOTHING;
+
+      RETURN NEW;
+    END;
+    $$;
+  `);
+
+  await client.query(
+    'DROP TRIGGER IF EXISTS trg_create_contract_for_new_student ON public.students'
+  );
+
+  await client.query(`
+    CREATE TRIGGER trg_create_contract_for_new_student
+    AFTER INSERT ON public.students
+    FOR EACH ROW
+    EXECUTE FUNCTION public.create_contract_for_new_student();
+  `);
 }
 
 router.get('/students', async (req, res) => {
@@ -177,6 +230,8 @@ router.post('/students', async (req, res) => {
     client = await pool.connect();
     await client.query('BEGIN');
 
+    await ensureContractsTable(client);
+
     const existing = await client.query(
       'SELECT student_id FROM public.students WHERE student_number = $1 OR email = $2 LIMIT 1',
       [student_number, email]
@@ -239,27 +294,6 @@ router.post('/students', async (req, res) => {
       normalizeLivingArrangement(living_arrangement),
       normalizeEnrollmentStatus(enrollment_status),
     ]);
-
-    const studentId = studentResult.rows[0].student_id;
-    const currentYear = new Date().getFullYear();
-    const academicYear = `${currentYear}/${currentYear + 1}`;
-
-    await ensureContractsTable(client);
-
-    await client.query(
-      `INSERT INTO public.contracts (
-         student_id,
-         program,
-         academic_year,
-         tuition_share_percent,
-         boarding_full_cost,
-         signed_at,
-         is_active,
-         created_at,
-         updated_at
-       ) VALUES ($1, $2, $3, $4, $5, NOW(), TRUE, NOW(), NOW())`,
-      [studentId, department, academicYear, 15.0, true]
-    );
 
     await client.query('COMMIT');
     res.status(201).json({ success: true, student: studentResult.rows[0] });
