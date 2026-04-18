@@ -511,6 +511,139 @@ router.delete('/students/:id/contract', async (req, res) => {
   }
 });
 
+// GET /api/admin/students/:id/debt-details — fetch student debt records + payments
+router.get('/students/:id/debt-details', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const debtCols = await getAvailableColumns('debt_records', [
+      'debt_id',
+      'student_id',
+      'initial_amount',
+      'current_balance',
+      'academic_year',
+      'updated_at',
+      'last_updated',
+    ]);
+    const contractCols = await getAvailableColumns('contracts', ['academic_year', 'is_active']);
+    const paymentCols = await getAvailableColumns('payment_history', [
+      'payment_id',
+      'debt_id',
+      'amount',
+      'status',
+      'payment_date',
+      'submitted_at',
+      'payment_method',
+      'transaction_ref',
+      'notes',
+    ]);
+
+    const hasDebtId = debtCols.has('debt_id');
+    const hasDebtStudentId = debtCols.has('student_id');
+    const hasInitialAmount = debtCols.has('initial_amount');
+    const hasCurrentBalance = debtCols.has('current_balance');
+    const hasDebtAcademicYear = debtCols.has('academic_year');
+    const hasDebtUpdatedAt = debtCols.has('updated_at');
+    const hasDebtLastUpdated = debtCols.has('last_updated');
+
+    const hasContractAcademicYear = contractCols.has('academic_year');
+    const hasContractIsActive = contractCols.has('is_active');
+
+    const hasPaymentId = paymentCols.has('payment_id');
+    const hasPaymentDebtId = paymentCols.has('debt_id');
+    const hasPaymentAmount = paymentCols.has('amount');
+    const hasPaymentStatus = paymentCols.has('status');
+    const hasPaymentDate = paymentCols.has('payment_date');
+    const hasSubmittedAt = paymentCols.has('submitted_at');
+    const hasPaymentMethod = paymentCols.has('payment_method');
+    const hasTransactionRef = paymentCols.has('transaction_ref');
+    const hasPaymentNotes = paymentCols.has('notes');
+
+    if (!hasDebtId || !hasDebtStudentId || !hasInitialAmount || !hasCurrentBalance) {
+      return res.status(500).json({ error: 'Debt records schema is missing required columns' });
+    }
+
+    const debtAcademicYearExpr = hasDebtAcademicYear
+      ? 'dr.academic_year::text'
+      : hasContractAcademicYear
+      ? 'c.academic_year::text'
+      : "'N/A'::text";
+
+    const debtUpdatedExpr = hasDebtUpdatedAt
+      ? 'dr.updated_at'
+      : hasDebtLastUpdated
+      ? 'dr.last_updated'
+      : 'NULL::timestamp';
+
+    const joinContracts = hasContractAcademicYear;
+    const contractActiveCondition = hasContractIsActive ? ' AND c.is_active = true' : '';
+
+    const debtsResult = await pool.query(
+      `SELECT
+         dr.debt_id,
+         dr.student_id,
+         dr.initial_amount AS total_debt,
+         dr.current_balance,
+         ${debtAcademicYearExpr} AS academic_year,
+         ${debtUpdatedExpr} AS updated_at
+       FROM public.debt_records dr
+       ${joinContracts ? `LEFT JOIN public.contracts c ON c.student_id = dr.student_id${contractActiveCondition}` : ''}
+       WHERE dr.student_id = $1
+       ORDER BY dr.debt_id DESC`,
+      [id]
+    );
+
+    if (debtsResult.rows.length === 0) {
+      return res.json({
+        success: true,
+        debts: [],
+        payments: [],
+      });
+    }
+
+    if (!hasPaymentDebtId) {
+      return res.json({
+        success: true,
+        debts: debtsResult.rows,
+        payments: [],
+      });
+    }
+
+    const paymentDateExpr = hasSubmittedAt
+      ? 'ph.submitted_at'
+      : hasPaymentDate
+      ? 'ph.payment_date'
+      : 'NULL::timestamp';
+
+    const paymentsResult = await pool.query(
+      `SELECT
+         ${hasPaymentId ? 'ph.payment_id' : 'NULL::integer'} AS payment_id,
+         ph.debt_id,
+         ${hasPaymentAmount ? 'ph.amount' : '0::numeric'} AS amount,
+         ${hasPaymentStatus ? 'ph.status' : "''::text"} AS status,
+         ${paymentDateExpr} AS payment_date,
+         ${hasPaymentMethod ? 'ph.payment_method' : "''::text"} AS payment_method,
+         ${hasTransactionRef ? 'ph.transaction_ref' : 'NULL::text'} AS transaction_ref,
+         ${hasPaymentNotes ? 'ph.notes' : 'NULL::text'} AS notes
+       FROM public.payment_history ph
+       JOIN public.debt_records dr
+         ON dr.debt_id = ph.debt_id
+       WHERE dr.student_id = $1
+       ORDER BY payment_date DESC NULLS LAST, payment_id DESC NULLS LAST`,
+      [id]
+    );
+
+    res.json({
+      success: true,
+      debts: debtsResult.rows,
+      payments: paymentsResult.rows,
+    });
+  } catch (error) {
+    console.error('Fetch student debt details error:', error);
+    res.status(500).json({ error: 'Failed to load student debt details' });
+  }
+});
+
 router.put('/students/:id', async (req, res) => {
   try {
     const { id } = req.params;

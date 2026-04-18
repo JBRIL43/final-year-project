@@ -19,6 +19,7 @@ import {
 import { DataGrid, GridColDef, GridRowId, GridRowSelectionModel } from '@mui/x-data-grid';
 import { Download as DownloadIcon, Add as AddIcon } from '@mui/icons-material';
 import DescriptionIcon from '@mui/icons-material/Description';
+import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import DeleteIcon from '@mui/icons-material/Delete';
 import api from '../services/api';
 import { Student } from '../types/student';
@@ -42,6 +43,26 @@ type ContractForm = {
   tuition_share_percent: string;
   boarding_full_cost: boolean;
   signed_at: string;
+};
+
+type DebtRecord = {
+  debt_id: number;
+  student_id: number;
+  total_debt: number;
+  current_balance: number;
+  academic_year: string;
+  updated_at: string | null;
+};
+
+type DebtPayment = {
+  payment_id: number | null;
+  debt_id: number;
+  amount: number;
+  status: string;
+  payment_date: string | null;
+  payment_method: string;
+  transaction_ref: string | null;
+  notes: string | null;
 };
 
 const currentYear = new Date().getFullYear();
@@ -101,6 +122,21 @@ export default function StudentManagement() {
   });
   const [contractForm, setContractForm] = useState<ContractForm>(emptyContractForm);
   const [contractSaving, setContractSaving] = useState(false);
+  const [debtModal, setDebtModal] = useState<{
+    open: boolean;
+    studentId: number | null;
+    studentName: string;
+    loading: boolean;
+    debts: DebtRecord[];
+    payments: DebtPayment[];
+  }>({
+    open: false,
+    studentId: null,
+    studentName: '',
+    loading: false,
+    debts: [],
+    payments: [],
+  });
   const [snackbar, setSnackbar] = useState<{
     open: boolean;
     message: string;
@@ -440,6 +476,65 @@ export default function StudentManagement() {
     printWindow.print();
   };
 
+  const handleViewDebt = async (student: Student) => {
+    try {
+      setDebtModal({
+        open: true,
+        studentId: student.student_id,
+        studentName: student.full_name,
+        loading: true,
+        debts: [],
+        payments: [],
+      });
+
+      const res = await api.get<{ debts: DebtRecord[]; payments: DebtPayment[] }>(
+        `/api/admin/students/${student.student_id}/debt-details`
+      );
+
+      setDebtModal((prev) => ({
+        ...prev,
+        loading: false,
+        debts: res.data.debts || [],
+        payments: res.data.payments || [],
+      }));
+    } catch (err) {
+      console.error('Failed to load debt details', err);
+      setDebtModal({
+        open: false,
+        studentId: null,
+        studentName: '',
+        loading: false,
+        debts: [],
+        payments: [],
+      });
+      setSnackbar({
+        open: true,
+        message: '❌ Failed to load debt details',
+        severity: 'error',
+      });
+    }
+  };
+
+  const handleCloseDebtModal = () => {
+    setDebtModal({
+      open: false,
+      studentId: null,
+      studentName: '',
+      loading: false,
+      debts: [],
+      payments: [],
+    });
+  };
+
+  const formatETB = (amount: number) => {
+    return new Intl.NumberFormat('en-ET', {
+      style: 'currency',
+      currency: 'ETB',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(Number(amount || 0));
+  };
+
   const normalizeSelectionModel = (selection: unknown): GridRowSelectionModel => {
     if (Array.isArray(selection)) {
       return { type: 'include', ids: new Set(selection) };
@@ -548,7 +643,7 @@ export default function StudentManagement() {
     {
       field: 'actions',
       headerName: 'Actions',
-      width: 180,
+      width: 300,
       sortable: false,
       renderCell: (params) => (
         <>
@@ -559,6 +654,14 @@ export default function StudentManagement() {
             sx={{ mr: 1 }}
           >
             View Contract
+          </Button>
+          <Button
+            size="small"
+            startIcon={<AccountBalanceWalletIcon />}
+            onClick={() => handleViewDebt(params.row as Student)}
+            sx={{ mr: 1 }}
+          >
+            View Debt
           </Button>
           <Button
             color="error"
@@ -779,6 +882,105 @@ export default function StudentManagement() {
           <Button onClick={handleCloseContractModal}>
             Close
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={debtModal.open}
+        onClose={handleCloseDebtModal}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          Debt Details{debtModal.studentName ? ` - ${debtModal.studentName}` : ''}
+        </DialogTitle>
+        <DialogContent dividers>
+          {debtModal.loading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : (
+            <>
+              {debtModal.debts.length === 0 ? (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  No debt records found for this student.
+                </Alert>
+              ) : (
+                <Box sx={{ mb: 3 }}>
+                  <Typography variant="h6" sx={{ mb: 1 }}>
+                    Debt Records
+                  </Typography>
+                  {debtModal.debts.map((debt) => (
+                    <Paper
+                      key={debt.debt_id}
+                      variant="outlined"
+                      sx={{ p: 2, mb: 1.5 }}
+                    >
+                      <Typography variant="body2" color="text.secondary">
+                        Academic Year: {debt.academic_year || 'N/A'}
+                      </Typography>
+                      <Typography>
+                        <strong>Total Debt:</strong> {formatETB(debt.total_debt)}
+                      </Typography>
+                      <Typography>
+                        <strong>Current Balance:</strong> {formatETB(debt.current_balance)}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Updated:{' '}
+                        {debt.updated_at ? new Date(debt.updated_at).toLocaleString('en-ET') : 'N/A'}
+                      </Typography>
+                    </Paper>
+                  ))}
+                </Box>
+              )}
+
+              <Box>
+                <Typography variant="h6" sx={{ mb: 1 }}>
+                  Payment History
+                </Typography>
+                {debtModal.payments.length === 0 ? (
+                  <Alert severity="info">No payment history found for this student.</Alert>
+                ) : (
+                  debtModal.payments.map((payment, index) => (
+                    <Paper
+                      key={`${payment.debt_id}-${payment.payment_id ?? `idx-${index}`}`}
+                      variant="outlined"
+                      sx={{ p: 2, mb: 1.5 }}
+                    >
+                      <Typography>
+                        <strong>Amount:</strong> {formatETB(payment.amount)}
+                      </Typography>
+                      <Typography>
+                        <strong>Status:</strong> {payment.status || 'N/A'}
+                      </Typography>
+                      <Typography>
+                        <strong>Method:</strong> {payment.payment_method || 'N/A'}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Date:{' '}
+                        {payment.payment_date
+                          ? new Date(payment.payment_date).toLocaleString('en-ET')
+                          : 'N/A'}
+                      </Typography>
+                      {payment.transaction_ref && (
+                        <Typography variant="body2" color="text.secondary">
+                          Ref: {payment.transaction_ref}
+                        </Typography>
+                      )}
+                      {payment.notes && (
+                        <Typography variant="body2" color="text.secondary">
+                          Notes: {payment.notes}
+                        </Typography>
+                      )}
+                    </Paper>
+                  ))
+                )}
+              </Box>
+            </>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDebtModal}>Close</Button>
         </DialogActions>
       </Dialog>
 
