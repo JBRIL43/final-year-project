@@ -13,22 +13,20 @@ CREATE TABLE IF NOT EXISTS public.cost_shares (
   boarding_cost_per_year NUMERIC(12,2) NOT NULL,
   food_cost_per_month NUMERIC(10,2) NOT NULL DEFAULT 3000.00,
   created_at TIMESTAMP DEFAULT NOW(),
-  CONSTRAINT uq_cost_shares_program_year_campus UNIQUE (program, academic_year, campus)
+  CONSTRAINT uq_cost_shares_program_year UNIQUE (program, academic_year)
 );
 
 -- Example seed values (replace with official MOE / university values as needed).
 INSERT INTO public.cost_shares (
   program,
   academic_year,
-  campus,
   tuition_cost_per_year,
   boarding_cost_per_year,
   food_cost_per_month
 )
 VALUES
-  ('Computer Science', '2026/2027', 'Main Campus', 10000.00, 8000.00, 3000.00),
-  ('Medicine', '2026/2027', 'Main Campus', 25000.00, 10000.00, 3000.00),
-  ('Education', '2026/2027', 'Main Campus', 7000.00, 6000.00, 3000.00),
-  ('Computer Science', '2026/2027', 'IoT Campus', 12000.00, 9000.00, 3000.00),
-  ('Information System', '2026/2027', 'IoT Campus', 11000.00, 8500.00, 3000.00)
-ON CONFLICT (program, academic_year, campus) DO NOTHING;
+  ('Computer Science', '2026/2027', 10000.00, 8000.00, 3000.00),
+  ('Medicine', '2026/2027', 25000.00, 10000.00, 3000.00),
+  ('Education', '2026/2027', 7000.00, 6000.00, 3000.00),
+  ('Information System', '2026/2027', 9000.00, 7500.00, 3000.00)
+ON CONFLICT (program, academic_year) DO NOTHING;
