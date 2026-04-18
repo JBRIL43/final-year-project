@@ -21,6 +21,11 @@ function normalizeEnrollmentStatus(value) {
   return 'ACTIVE';
 }
 
+function normalizeCampus(value) {
+  const raw = String(value || '').trim();
+  return raw || 'Main Campus';
+}
+
 async function getAvailableColumns(tableName, columns) {
   const result = await pool.query(
     `SELECT column_name
@@ -154,6 +159,7 @@ router.get('/students', async (req, res) => {
         'email',
         'enrollment_year',
         'batch_year',
+        'campus',
         'updated_at',
       ]]
     );
@@ -166,6 +172,7 @@ router.get('/students', async (req, res) => {
     const hasStudentEmail = availableColumns.has('email');
     const hasEnrollmentYear = availableColumns.has('enrollment_year');
     const hasBatchYear = availableColumns.has('batch_year');
+    const hasCampus = availableColumns.has('campus');
     const hasUpdatedAt = availableColumns.has('updated_at');
 
     const fullNameExpr = hasStudentFullName
@@ -177,6 +184,7 @@ router.get('/students', async (req, res) => {
       : hasBatchYear
       ? 's.batch_year'
       : 'NULL::integer';
+    const campusExpr = hasCampus ? 's.campus' : "'Main Campus'::text";
     const updatedAtExpr = hasUpdatedAt
       ? 's.updated_at'
       : 'NULL::timestamp';
@@ -191,6 +199,7 @@ router.get('/students', async (req, res) => {
         ${emailExpr} AS email,
         s.department,
         ${yearExpr} AS enrollment_year,
+        ${campusExpr} AS campus,
         s.living_arrangement,
         s.enrollment_status,
         s.created_at,
@@ -219,6 +228,7 @@ router.post('/students', async (req, res) => {
       email,
       department,
       enrollment_year,
+      campus = 'Main Campus',
       living_arrangement = 'On-Campus',
       enrollment_status = 'Active',
     } = req.body;
@@ -267,16 +277,31 @@ router.post('/students', async (req, res) => {
        WHERE table_schema = 'public'
          AND table_name = 'students'
          AND column_name = ANY($1::text[])`,
-      [['updated_at']]
+      [['updated_at', 'campus']]
     );
 
     const hasUpdatedAt = columnsResult.rows.some((row) => row.column_name === 'updated_at');
+    const hasCampus = columnsResult.rows.some((row) => row.column_name === 'campus');
 
-    const insertSql = hasUpdatedAt
+    const normalizedCampus = normalizeCampus(campus);
+
+    const insertSql = hasUpdatedAt && hasCampus
+      ? `INSERT INTO public.students (
+          user_id, student_number, full_name, email, department,
+          enrollment_year, campus, living_arrangement, enrollment_status, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+        RETURNING *`
+      : hasUpdatedAt
       ? `INSERT INTO public.students (
           user_id, student_number, full_name, email, department,
           enrollment_year, living_arrangement, enrollment_status, created_at, updated_at
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+        RETURNING *`
+      : hasCampus
+      ? `INSERT INTO public.students (
+          user_id, student_number, full_name, email, department,
+          enrollment_year, campus, living_arrangement, enrollment_status, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
         RETURNING *`
       : `INSERT INTO public.students (
           user_id, student_number, full_name, email, department,
@@ -284,16 +309,30 @@ router.post('/students', async (req, res) => {
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
         RETURNING *`;
 
-    const studentResult = await client.query(insertSql, [
-      userId,
-      student_number,
-      full_name,
-      email,
-      department,
-      Number(enrollment_year),
-      normalizeLivingArrangement(living_arrangement),
-      normalizeEnrollmentStatus(enrollment_status),
-    ]);
+    const values = hasCampus
+      ? [
+          userId,
+          student_number,
+          full_name,
+          email,
+          department,
+          Number(enrollment_year),
+          normalizedCampus,
+          normalizeLivingArrangement(living_arrangement),
+          normalizeEnrollmentStatus(enrollment_status),
+        ]
+      : [
+          userId,
+          student_number,
+          full_name,
+          email,
+          department,
+          Number(enrollment_year),
+          normalizeLivingArrangement(living_arrangement),
+          normalizeEnrollmentStatus(enrollment_status),
+        ];
+
+    const studentResult = await client.query(insertSql, values);
 
     await client.query('COMMIT');
     res.status(201).json({ success: true, student: studentResult.rows[0] });
@@ -775,21 +814,41 @@ router.get('/students/:id/debt', async (req, res) => {
 router.put('/students/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { living_arrangement, enrollment_status, department } = req.body;
+    const { living_arrangement, enrollment_status, department, campus } = req.body;
 
     if (!living_arrangement || !enrollment_status) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
+    const hasCampus = (await pool.query(
+      `SELECT 1
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'students'
+         AND column_name = 'campus'
+       LIMIT 1`
+    )).rows.length > 0;
+
+    const setClauses = [
+      'living_arrangement = $1',
+      'enrollment_status = $2',
+      'department = $3',
+    ];
+    const values = [living_arrangement, enrollment_status, department];
+
+    if (hasCampus && campus != null) {
+      setClauses.push(`campus = $${values.length + 1}`);
+      values.push(normalizeCampus(campus));
+    }
+
+    values.push(id);
+
     const result = await pool.query(
       `UPDATE public.students
-       SET
-         living_arrangement = $1,
-         enrollment_status = $2,
-         department = $3
-       WHERE student_id = $4
+       SET ${setClauses.join(', ')}
+       WHERE student_id = $${values.length}
        RETURNING *`,
-      [living_arrangement, enrollment_status, department, id]
+      values
     );
 
     if (result.rows.length === 0) {
@@ -836,9 +895,23 @@ router.post('/students/batch-update', async (req, res) => {
         normalizedUpdates.enrollment_status
       );
     }
+    if (Object.prototype.hasOwnProperty.call(normalizedUpdates, 'campus')) {
+      normalizedUpdates.campus = normalizeCampus(normalizedUpdates.campus);
+    }
 
     // Build dynamic SET clause
-    const allowedFields = ['living_arrangement', 'enrollment_status', 'department'];
+    const hasCampus = (await pool.query(
+      `SELECT 1
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'students'
+         AND column_name = 'campus'
+       LIMIT 1`
+    )).rows.length > 0;
+
+    const allowedFields = hasCampus
+      ? ['living_arrangement', 'enrollment_status', 'department', 'campus']
+      : ['living_arrangement', 'enrollment_status', 'department'];
     const setFields = [];
     const values = [];
     let paramIndex = 1;
@@ -952,6 +1025,11 @@ router.post('/debt/reconcile', async (req, res) => {
     const candidates = await client.query(
       `SELECT
          s.student_id,
+         ${
+           (await getAvailableColumns('students', ['campus'])).has('campus')
+             ? 's.campus'
+             : "'Main Campus'::text"
+         } AS campus,
          c.program,
          c.academic_year,
          c.tuition_share_percent,
@@ -964,6 +1042,11 @@ router.post('/debt/reconcile', async (req, res) => {
        LEFT JOIN public.cost_shares cs
          ON LOWER(TRIM(cs.program)) = LOWER(TRIM(c.program))
         AND cs.academic_year = c.academic_year
+        ${
+          (await getAvailableColumns('cost_shares', ['campus'])).has('campus')
+            ? "AND LOWER(TRIM(COALESCE(cs.campus, 'Main Campus'))) = LOWER(TRIM(COALESCE(s.campus, 'Main Campus')))"
+            : ''
+        }
        WHERE UPPER(COALESCE(s.enrollment_status, '')) = 'ACTIVE'`
     );
 

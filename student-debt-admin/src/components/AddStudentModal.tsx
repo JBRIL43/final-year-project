@@ -24,6 +24,7 @@ export default function AddStudentModal({ open, onClose, onStudentAdded }: AddSt
     email: '',
     department: '',
     enrollment_year: '',
+    campus: 'Main Campus',
     living_arrangement: 'On-Campus',
     enrollment_status: 'Active',
   });
@@ -121,6 +122,18 @@ export default function AddStudentModal({ open, onClose, onStudentAdded }: AddSt
           onChange={(e) => handleChange('enrollment_year', e.target.value)}
           disabled={loading}
         />
+        <TextField
+          select
+          margin="dense"
+          label="Campus"
+          fullWidth
+          value={formData.campus}
+          onChange={(e) => handleChange('campus', e.target.value)}
+          disabled={loading}
+        >
+          <MenuItem value="Main Campus">Main Campus</MenuItem>
+          <MenuItem value="IoT Campus">IoT Campus</MenuItem>
+        </TextField>
         <TextField
           select
           margin="dense"

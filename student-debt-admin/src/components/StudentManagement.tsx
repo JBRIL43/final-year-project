@@ -150,7 +150,8 @@ export default function StudentManagement() {
         s.full_name.toLowerCase().includes(term) ||
         s.student_number.includes(term) ||
         s.email.toLowerCase().includes(term) ||
-        s.department.toLowerCase().includes(term)
+        s.department.toLowerCase().includes(term) ||
+        (s.campus || '').toLowerCase().includes(term)
     );
   }, [students, searchTerm]);
 
@@ -165,6 +166,7 @@ export default function StudentManagement() {
         enrollment_status:
           field === 'enrollment_status' ? String(value) : student.enrollment_status,
         department: field === 'department' ? String(value) : student.department,
+        campus: field === 'campus' ? String(value) : student.campus,
       };
 
       const res = await api.put<{ student: Student }>(`/api/admin/students/${id}`, payload);
@@ -534,6 +536,23 @@ export default function StudentManagement() {
     { field: 'full_name', headerName: 'Full Name', width: 200 },
     { field: 'email', headerName: 'Email', width: 250 },
     { field: 'department', headerName: 'Dept', width: 140 },
+    {
+      field: 'campus',
+      headerName: 'Campus',
+      width: 140,
+      renderCell: (params) => (
+        <TextField
+          size="small"
+          select
+          value={params.value || 'Main Campus'}
+          onChange={(e) => handleEdit(params.row.student_id, 'campus', e.target.value)}
+          sx={{ width: '100%' }}
+        >
+          <MenuItem value="Main Campus">Main Campus</MenuItem>
+          <MenuItem value="IoT Campus">IoT Campus</MenuItem>
+        </TextField>
+      ),
+    },
     { field: 'enrollment_year', headerName: 'Year', width: 80 },
     {
       field: 'living_arrangement',
