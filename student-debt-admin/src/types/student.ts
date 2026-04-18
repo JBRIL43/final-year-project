@@ -6,6 +6,7 @@ export interface Student {
   email: string;
   department: string;
   enrollment_year: number;
+  campus?: string;
   living_arrangement: string;
   enrollment_status: string;
   created_at: string;
