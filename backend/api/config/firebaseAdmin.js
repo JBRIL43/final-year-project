@@ -37,7 +37,7 @@ function getEnvPrivateKey() {
 }
 
 function parseServiceAccountJson() {
-  const rawJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  const rawJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON || process.env.FIREBASE_SERVICE_ACCOUNT;
   const base64Json = process.env.FIREBASE_SERVICE_ACCOUNT_JSON_BASE64;
 
   let jsonText = null;
@@ -65,7 +65,7 @@ function parseServiceAccountJson() {
 
     return parsed;
   } catch (error) {
-    console.warn('FIREBASE_SERVICE_ACCOUNT_JSON is not valid JSON.');
+    console.warn('FIREBASE service account JSON is not valid JSON.');
     return null;
   }
 }
@@ -135,7 +135,7 @@ if (admin.apps.length === 0) {
       console.log('Firebase Admin initialized from local service account file.');
     } else {
       console.warn(
-        'Firebase Admin credentials are not configured. Set FIREBASE_SERVICE_ACCOUNT_JSON(_BASE64) or FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY(_BASE64).'
+        'Firebase Admin credentials are not configured. Set FIREBASE_SERVICE_ACCOUNT_JSON/FIREBASE_SERVICE_ACCOUNT(_BASE64) or FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY(_BASE64).'
       );
     }
   } catch (error) {
