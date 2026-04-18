@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   Box,
+  Button,
   Paper,
   Typography,
   Alert,
@@ -18,6 +19,7 @@ interface DebtMetrics {
 export default function DebtOverviewDashboard() {
   const [metrics, setMetrics] = useState<DebtMetrics | null>(null);
   const [loading, setLoading] = useState(true);
+  const [reconciling, setReconciling] = useState(false);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
     open: false,
     message: '',
@@ -43,6 +45,32 @@ export default function DebtOverviewDashboard() {
   useEffect(() => {
     loadMetrics();
   }, []);
+
+  const handleReconcileDebt = async () => {
+    if (!window.confirm('Recalculate debt for all active students based on current cost shares? This cannot be undone.')) {
+      return;
+    }
+
+    setReconciling(true);
+    try {
+      const res = await api.post<{ message?: string }>('/api/admin/debt/reconcile');
+      setSnackbar({
+        open: true,
+        message: res.data.message || '✅ Debt reconciliation completed',
+        severity: 'success',
+      });
+      loadMetrics();
+    } catch (err: any) {
+      console.error('Debt reconciliation failed', err);
+      setSnackbar({
+        open: true,
+        message: err.response?.data?.error || '❌ Failed to reconcile debt',
+        severity: 'error',
+      });
+    } finally {
+      setReconciling(false);
+    }
+  };
 
   // Format currency as ETB
   const formatETB = (amount: number) => {
@@ -108,6 +136,21 @@ export default function DebtOverviewDashboard() {
       ) : (
         <Alert severity="error">No data available</Alert>
       )}
+
+      <Box sx={{ mt: 4, textAlign: 'center' }}>
+        <Button
+          variant="contained"
+          color="primary"
+          onClick={handleReconcileDebt}
+          disabled={reconciling}
+          sx={{ minWidth: 220 }}
+        >
+          {reconciling ? 'Recalculating...' : 'Recalculate Annual Debt'}
+        </Button>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+          Run at start of each academic year to apply official tuition & boarding costs.
+        </Typography>
+      </Box>
 
       <Snackbar
         open={snackbar.open}
