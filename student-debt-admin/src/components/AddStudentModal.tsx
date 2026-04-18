@@ -10,6 +10,7 @@ import {
   Alert,
 } from '@mui/material';
 import api from '../services/api';
+import { DEPARTMENTS } from '../constants/departments';
 
 interface AddStudentModalProps {
   open: boolean;
@@ -61,6 +62,7 @@ export default function AddStudentModal({ open, onClose, onStudentAdded }: AddSt
       await api.post('/api/admin/students', {
         ...formData,
         enrollment_year: Number(formData.enrollment_year),
+        campus: formData.campus || 'Main Campus',
       });
 
       onStudentAdded();
@@ -106,22 +108,20 @@ export default function AddStudentModal({ open, onClose, onStudentAdded }: AddSt
           disabled={loading}
         />
         <TextField
+          select
           margin="dense"
           label="Department"
           fullWidth
           value={formData.department}
           onChange={(e) => handleChange('department', e.target.value)}
           disabled={loading}
-        />
-        <TextField
-          margin="dense"
-          label="Enrollment Year"
-          type="number"
-          fullWidth
-          value={formData.enrollment_year}
-          onChange={(e) => handleChange('enrollment_year', e.target.value)}
-          disabled={loading}
-        />
+        >
+          {DEPARTMENTS.map((department) => (
+            <MenuItem key={department} value={department}>
+              {department}
+            </MenuItem>
+          ))}
+        </TextField>
         <TextField
           select
           margin="dense"
@@ -134,6 +134,15 @@ export default function AddStudentModal({ open, onClose, onStudentAdded }: AddSt
           <MenuItem value="Main Campus">Main Campus</MenuItem>
           <MenuItem value="IoT Campus">IoT Campus</MenuItem>
         </TextField>
+        <TextField
+          margin="dense"
+          label="Enrollment Year"
+          type="number"
+          fullWidth
+          value={formData.enrollment_year}
+          onChange={(e) => handleChange('enrollment_year', e.target.value)}
+          disabled={loading}
+        />
         <TextField
           select
           margin="dense"

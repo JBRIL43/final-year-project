@@ -961,6 +961,205 @@ router.post('/students/batch-update', async (req, res) => {
   }
 });
 
+// GET /api/admin/cost-shares — list all cost configurations
+router.get('/cost-shares', async (req, res) => {
+  try {
+    const costShareCols = await getAvailableColumns('cost_shares', ['campus', 'food_cost_per_month']);
+    const hasCampus = costShareCols.has('campus');
+    const hasFoodCostPerMonth = costShareCols.has('food_cost_per_month');
+
+    if (!hasCampus || !hasFoodCostPerMonth) {
+      return res.status(400).json({
+        error: 'cost_shares schema is outdated. Run backend/database/add_campus_support.sql first.',
+      });
+    }
+
+    const result = await pool.query(
+      `SELECT
+         cost_share_id,
+         program,
+         campus,
+         academic_year,
+         tuition_cost_per_year,
+         boarding_cost_per_year,
+         food_cost_per_month,
+         created_at
+       FROM public.cost_shares
+       ORDER BY academic_year DESC, campus ASC, program ASC`
+    );
+
+    res.json({ success: true, costs: result.rows });
+  } catch (error) {
+    console.error('Fetch cost shares error:', error);
+    res.status(500).json({ error: 'Failed to load cost configurations' });
+  }
+});
+
+// POST /api/admin/cost-shares — create a new cost configuration
+router.post('/cost-shares', async (req, res) => {
+  try {
+    const FIXED_FOOD_COST_PER_MONTH = 3000;
+
+    const {
+      program,
+      campus,
+      academic_year,
+      tuition_cost_per_year,
+      boarding_cost_per_year,
+    } = req.body;
+
+    if (!program || !campus || !academic_year) {
+      return res.status(400).json({
+        error: 'program, campus, and academic_year are required',
+      });
+    }
+
+    const tuitionCost = Number(tuition_cost_per_year);
+    const boardingCost = Number(boarding_cost_per_year);
+    const foodCost = FIXED_FOOD_COST_PER_MONTH;
+
+    if (Number.isNaN(tuitionCost) || Number.isNaN(boardingCost)) {
+      return res.status(400).json({
+        error: 'tuition_cost_per_year and boarding_cost_per_year must be valid numbers',
+      });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO public.cost_shares (
+         program,
+         campus,
+         academic_year,
+         tuition_cost_per_year,
+         boarding_cost_per_year,
+         food_cost_per_month
+       ) VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING
+         cost_share_id,
+         program,
+         campus,
+         academic_year,
+         tuition_cost_per_year,
+         boarding_cost_per_year,
+         food_cost_per_month,
+         created_at`,
+      [
+        String(program).trim(),
+        String(campus).trim(),
+        String(academic_year).trim(),
+        tuitionCost,
+        boardingCost,
+        foodCost,
+      ]
+    );
+
+    res.status(201).json({ success: true, cost: result.rows[0] });
+  } catch (error) {
+    if (error && error.code === '23505') {
+      return res.status(409).json({
+        error: 'Cost configuration already exists for this program, academic year, and campus',
+      });
+    }
+    console.error('Create cost share error:', error);
+    res.status(500).json({ error: 'Failed to create cost configuration' });
+  }
+});
+
+// PUT /api/admin/cost-shares/:id — update a cost configuration
+router.put('/cost-shares/:id', async (req, res) => {
+  try {
+    const FIXED_FOOD_COST_PER_MONTH = 3000;
+
+    const { id } = req.params;
+    const {
+      program,
+      campus,
+      academic_year,
+      tuition_cost_per_year,
+      boarding_cost_per_year,
+    } = req.body;
+
+    if (!program || !campus || !academic_year) {
+      return res.status(400).json({
+        error: 'program, campus, and academic_year are required',
+      });
+    }
+
+    const tuitionCost = Number(tuition_cost_per_year);
+    const boardingCost = Number(boarding_cost_per_year);
+    const foodCost = FIXED_FOOD_COST_PER_MONTH;
+
+    if (Number.isNaN(tuitionCost) || Number.isNaN(boardingCost)) {
+      return res.status(400).json({
+        error: 'tuition_cost_per_year and boarding_cost_per_year must be valid numbers',
+      });
+    }
+
+    const result = await pool.query(
+      `UPDATE public.cost_shares
+       SET
+         program = $1,
+         campus = $2,
+         academic_year = $3,
+         tuition_cost_per_year = $4,
+         boarding_cost_per_year = $5,
+         food_cost_per_month = $6
+       WHERE cost_share_id = $7
+       RETURNING
+         cost_share_id,
+         program,
+         campus,
+         academic_year,
+         tuition_cost_per_year,
+         boarding_cost_per_year,
+         food_cost_per_month,
+         created_at`,
+      [
+        String(program).trim(),
+        String(campus).trim(),
+        String(academic_year).trim(),
+        tuitionCost,
+        boardingCost,
+        foodCost,
+        id,
+      ]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Cost configuration not found' });
+    }
+
+    res.json({ success: true, cost: result.rows[0] });
+  } catch (error) {
+    if (error && error.code === '23505') {
+      return res.status(409).json({
+        error: 'Cost configuration already exists for this program, academic year, and campus',
+      });
+    }
+    console.error('Update cost share error:', error);
+    res.status(500).json({ error: 'Failed to update cost configuration' });
+  }
+});
+
+// DELETE /api/admin/cost-shares/:id — delete a cost configuration
+router.delete('/cost-shares/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(
+      'DELETE FROM public.cost_shares WHERE cost_share_id = $1 RETURNING cost_share_id',
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Cost configuration not found' });
+    }
+
+    res.json({ success: true, message: 'Cost configuration deleted' });
+  } catch (error) {
+    console.error('Delete cost share error:', error);
+    res.status(500).json({ error: 'Failed to delete cost configuration' });
+  }
+});
+
 // GET /api/admin/analytics/debt-overview — debt & collection summary
 router.get('/analytics/debt-overview', async (req, res) => {
   try {
@@ -995,6 +1194,8 @@ router.get('/analytics/debt-overview', async (req, res) => {
 router.post('/debt/reconcile', async (req, res) => {
   let client;
   try {
+    const FOOD_MONTHS_PER_YEAR = 10;
+
     client = await pool.connect();
     await client.query('BEGIN');
 
@@ -1022,19 +1223,22 @@ router.post('/debt/reconcile', async (req, res) => {
     const hasUpdatedAt = debtColumns.rows.some((row) => row.column_name === 'updated_at');
     const hasLastUpdated = debtColumns.rows.some((row) => row.column_name === 'last_updated');
 
+    const studentCols = await getAvailableColumns('students', ['campus']);
+    const costShareCols = await getAvailableColumns('cost_shares', ['campus', 'food_cost_per_month']);
+    const hasStudentCampus = studentCols.has('campus');
+    const hasCostShareCampus = costShareCols.has('campus');
+    const hasFoodCostPerMonth = costShareCols.has('food_cost_per_month');
+
     const candidates = await client.query(
       `SELECT
          s.student_id,
-         ${
-           (await getAvailableColumns('students', ['campus'])).has('campus')
-             ? 's.campus'
-             : "'Main Campus'::text"
-         } AS campus,
+         ${hasStudentCampus ? 's.campus' : "'Main Campus'::text"} AS campus,
          c.program,
          c.academic_year,
          c.tuition_share_percent,
          cs.tuition_cost_per_year,
-         cs.boarding_cost_per_year
+         cs.boarding_cost_per_year,
+         ${hasFoodCostPerMonth ? 'cs.food_cost_per_month' : '0::numeric'} AS food_cost_per_month
        FROM public.students s
        JOIN public.contracts c
          ON c.student_id = s.student_id
@@ -1042,12 +1246,10 @@ router.post('/debt/reconcile', async (req, res) => {
        LEFT JOIN public.cost_shares cs
          ON LOWER(TRIM(cs.program)) = LOWER(TRIM(c.program))
         AND cs.academic_year = c.academic_year
-        ${
-          (await getAvailableColumns('cost_shares', ['campus'])).has('campus')
-            ? "AND LOWER(TRIM(COALESCE(cs.campus, 'Main Campus'))) = LOWER(TRIM(COALESCE(s.campus, 'Main Campus')))"
-            : ''
-        }
-       WHERE UPPER(COALESCE(s.enrollment_status, '')) = 'ACTIVE'`
+        ${hasCostShareCampus
+          ? "AND LOWER(TRIM(COALESCE(cs.campus, 'Main Campus'))) = LOWER(TRIM(COALESCE(s.campus, 'Main Campus')))"
+          : ''}
+       WHERE UPPER(COALESCE(s.enrollment_status, '')) IN ('ACTIVE', 'GRADUATED')`
     );
 
     if (candidates.rows.length === 0) {
@@ -1081,18 +1283,22 @@ router.post('/debt/reconcile', async (req, res) => {
       const studentId = Number(row.student_id);
       const tuitionCost = Number(row.tuition_cost_per_year);
       const boardingCost = Number(row.boarding_cost_per_year);
+      const foodCostPerMonth = Number(row.food_cost_per_month);
       const tuitionSharePercent = Number(row.tuition_share_percent);
 
       if (
         Number.isNaN(tuitionCost)
         || Number.isNaN(boardingCost)
+        || Number.isNaN(foodCostPerMonth)
         || Number.isNaN(tuitionSharePercent)
       ) {
         skippedCount += 1;
         continue;
       }
 
-      const targetDebt = Number(((tuitionCost * tuitionSharePercent) / 100 + boardingCost).toFixed(2));
+      const tuitionDebt = (tuitionCost * tuitionSharePercent) / 100;
+      const foodDebt = foodCostPerMonth * FOOD_MONTHS_PER_YEAR;
+      const targetDebt = Number((tuitionDebt + boardingCost + foodDebt).toFixed(2));
       const paidTotal = paidByStudentId.get(studentId) || 0;
       const currentBalance = Number(Math.max(0, targetDebt - paidTotal).toFixed(2));
 

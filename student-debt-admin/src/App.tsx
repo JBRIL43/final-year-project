@@ -7,6 +7,7 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import PaymentReviewQueue from './components/PaymentReviewQueue'
 import StudentManagement from './components/StudentManagement'
+import CostManagement from './components/CostManagement'
 
 function AppRoutes() {
   const { loading } = useAuth()
@@ -43,6 +44,7 @@ function AppRoutes() {
         <Route path="sis-import" element={<StudentManagement />} />
         <Route path="reports" element={<Dashboard />} />
         <Route path="settings" element={<Dashboard />} />
+        <Route path="cost-config" element={<CostManagement />} />
         <Route path="payment-review" element={<PaymentReviewQueue />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
