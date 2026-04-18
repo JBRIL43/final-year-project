@@ -657,6 +657,164 @@ router.get('/analytics/debt-overview', async (req, res) => {
   }
 });
 
+// POST /api/admin/debt/reconcile — recalculate debt for active students
+router.post('/debt/reconcile', async (req, res) => {
+  let client;
+  try {
+    client = await pool.connect();
+    await client.query('BEGIN');
+
+    const hasCostShares = (
+      await client.query(
+        `SELECT to_regclass('public.cost_shares') AS table_name`
+      )
+    ).rows[0].table_name;
+
+    if (!hasCostShares) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        error: 'cost_shares table is missing. Run backend/database/add_cost_shares_table.sql first.',
+      });
+    }
+
+    const debtColumns = await client.query(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'debt_records'
+         AND column_name = ANY($1::text[])`,
+      [['updated_at', 'last_updated']]
+    );
+    const hasUpdatedAt = debtColumns.rows.some((row) => row.column_name === 'updated_at');
+    const hasLastUpdated = debtColumns.rows.some((row) => row.column_name === 'last_updated');
+
+    const candidates = await client.query(
+      `SELECT
+         s.student_id,
+         c.program,
+         c.academic_year,
+         c.tuition_share_percent,
+         cs.tuition_cost_per_year,
+         cs.boarding_cost_per_year
+       FROM public.students s
+       JOIN public.contracts c
+         ON c.student_id = s.student_id
+        AND c.is_active = true
+       LEFT JOIN public.cost_shares cs
+         ON LOWER(TRIM(cs.program)) = LOWER(TRIM(c.program))
+        AND cs.academic_year = c.academic_year
+       WHERE UPPER(COALESCE(s.enrollment_status, '')) = 'ACTIVE'`
+    );
+
+    if (candidates.rows.length === 0) {
+      await client.query('COMMIT');
+      return res.json({
+        success: true,
+        message: 'No active students with active contracts found to reconcile.',
+        reconciledCount: 0,
+        skippedCount: 0,
+      });
+    }
+
+    const paidRows = await client.query(
+      `SELECT
+         dr.student_id,
+         COALESCE(SUM(ph.amount), 0) AS paid_total
+       FROM public.debt_records dr
+       JOIN public.payment_history ph
+         ON ph.debt_id = dr.debt_id
+       WHERE UPPER(COALESCE(ph.status, '')) IN ('APPROVED', 'SUCCESS')
+       GROUP BY dr.student_id`
+    );
+    const paidByStudentId = new Map(
+      paidRows.rows.map((row) => [Number(row.student_id), Number(row.paid_total)])
+    );
+
+    let reconciledCount = 0;
+    let skippedCount = 0;
+
+    for (const row of candidates.rows) {
+      const studentId = Number(row.student_id);
+      const tuitionCost = Number(row.tuition_cost_per_year);
+      const boardingCost = Number(row.boarding_cost_per_year);
+      const tuitionSharePercent = Number(row.tuition_share_percent);
+
+      if (
+        Number.isNaN(tuitionCost)
+        || Number.isNaN(boardingCost)
+        || Number.isNaN(tuitionSharePercent)
+      ) {
+        skippedCount += 1;
+        continue;
+      }
+
+      const targetDebt = Number(((tuitionCost * tuitionSharePercent) / 100 + boardingCost).toFixed(2));
+      const paidTotal = paidByStudentId.get(studentId) || 0;
+      const currentBalance = Number(Math.max(0, targetDebt - paidTotal).toFixed(2));
+
+      const latestDebt = await client.query(
+        `SELECT debt_id
+         FROM public.debt_records
+         WHERE student_id = $1
+         ORDER BY debt_id DESC
+         LIMIT 1`,
+        [studentId]
+      );
+
+      if (latestDebt.rows.length > 0) {
+        const setClauses = [
+          'initial_amount = $1',
+          'current_balance = $2',
+        ];
+
+        if (hasUpdatedAt) {
+          setClauses.push('updated_at = NOW()');
+        } else if (hasLastUpdated) {
+          setClauses.push('last_updated = NOW()');
+        }
+
+        await client.query(
+          `UPDATE public.debt_records
+           SET ${setClauses.join(', ')}
+           WHERE debt_id = $3`,
+          [targetDebt, currentBalance, latestDebt.rows[0].debt_id]
+        );
+      } else {
+        await client.query(
+          `INSERT INTO public.debt_records (
+             student_id,
+             initial_amount,
+             current_balance,
+             last_updated
+           ) VALUES ($1, $2, $3, NOW())`,
+          [studentId, targetDebt, currentBalance]
+        );
+      }
+
+      reconciledCount += 1;
+    }
+
+    await client.query('COMMIT');
+
+    res.json({
+      success: true,
+      message: `Debt reconciliation completed. Reconciled ${reconciledCount} student(s), skipped ${skippedCount}.`,
+      reconciledCount,
+      skippedCount,
+    });
+  } catch (error) {
+    if (client) {
+      await client.query('ROLLBACK');
+    }
+    console.error('Debt reconcile error:', error);
+    res.status(500).json({ error: 'Failed to reconcile debt' });
+  } finally {
+    if (client) {
+      client.release();
+    }
+  }
+});
+
 // GET /api/admin/payments/pending — fetch all pending payments
 router.get('/payments/pending', async (req, res) => {
   try {
