@@ -28,7 +28,6 @@ const FIXED_FOOD_COST_PER_MONTH = 3000;
 interface CostShare {
   cost_share_id: number;
   program: string;
-  campus: string;
   academic_year: string;
   tuition_cost_per_year: number;
   boarding_cost_per_year: number;
@@ -52,7 +51,6 @@ export default function CostManagement() {
   const [editingCost, setEditingCost] = useState<CostShare | null>(null);
   const [formData, setFormData] = useState({
     program: '',
-    campus: 'Main Campus',
     academic_year: `${new Date().getFullYear()}/${new Date().getFullYear() + 1}`,
     tuition_cost_per_year: '',
     boarding_cost_per_year: '',
@@ -85,7 +83,6 @@ export default function CostManagement() {
       setEditingCost(cost);
       setFormData({
         program: cost.program,
-        campus: cost.campus,
         academic_year: cost.academic_year,
         tuition_cost_per_year: String(cost.tuition_cost_per_year),
         boarding_cost_per_year: String(cost.boarding_cost_per_year),
@@ -94,7 +91,6 @@ export default function CostManagement() {
       setEditingCost(null);
       setFormData({
         program: '',
-        campus: 'Main Campus',
         academic_year: `${new Date().getFullYear()}/${new Date().getFullYear() + 1}`,
         tuition_cost_per_year: '',
         boarding_cost_per_year: '',
@@ -175,7 +171,6 @@ export default function CostManagement() {
               <TableHead>
                 <TableRow>
                   <TableCell>Program</TableCell>
-                  <TableCell>Campus</TableCell>
                   <TableCell>Academic Year</TableCell>
                   <TableCell>Tuition (15%)</TableCell>
                   <TableCell>Boarding</TableCell>
@@ -197,7 +192,6 @@ export default function CostManagement() {
                   return (
                     <TableRow key={cost.cost_share_id}>
                       <TableCell>{cost.program}</TableCell>
-                      <TableCell>{cost.campus}</TableCell>
                       <TableCell>{cost.academic_year}</TableCell>
                       <TableCell>{formatETB(tuitionShare)}</TableCell>
                       <TableCell>{formatETB(boardingCostPerYear)}</TableCell>
@@ -216,7 +210,7 @@ export default function CostManagement() {
                 })}
                 {costs.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={8}>
+                    <TableCell colSpan={7}>
                       <Alert severity="info">No cost configurations found.</Alert>
                     </TableCell>
                   </TableRow>
@@ -243,17 +237,6 @@ export default function CostManagement() {
                 {department}
               </MenuItem>
             ))}
-          </TextField>
-          <TextField
-            select
-            margin="dense"
-            label="Campus"
-            fullWidth
-            value={formData.campus}
-            onChange={(e) => setFormData((prev) => ({ ...prev, campus: e.target.value }))}
-          >
-            <MenuItem value="Main Campus">Main Campus</MenuItem>
-            <MenuItem value="IoT Campus">IoT Campus</MenuItem>
           </TextField>
           <TextField
             margin="dense"

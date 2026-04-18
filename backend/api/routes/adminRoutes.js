@@ -964,11 +964,10 @@ router.post('/students/batch-update', async (req, res) => {
 // GET /api/admin/cost-shares — list all cost configurations
 router.get('/cost-shares', async (req, res) => {
   try {
-    const costShareCols = await getAvailableColumns('cost_shares', ['campus', 'food_cost_per_month']);
-    const hasCampus = costShareCols.has('campus');
+    const costShareCols = await getAvailableColumns('cost_shares', ['food_cost_per_month']);
     const hasFoodCostPerMonth = costShareCols.has('food_cost_per_month');
 
-    if (!hasCampus || !hasFoodCostPerMonth) {
+    if (!hasFoodCostPerMonth) {
       return res.status(400).json({
         error: 'cost_shares schema is outdated. Run backend/database/add_campus_support.sql first.',
       });
@@ -985,7 +984,7 @@ router.get('/cost-shares', async (req, res) => {
          food_cost_per_month,
          created_at
        FROM public.cost_shares
-       ORDER BY academic_year DESC, campus ASC, program ASC`
+       ORDER BY academic_year DESC, program ASC`
     );
 
     res.json({ success: true, costs: result.rows });
@@ -1002,15 +1001,14 @@ router.post('/cost-shares', async (req, res) => {
 
     const {
       program,
-      campus,
       academic_year,
       tuition_cost_per_year,
       boarding_cost_per_year,
     } = req.body;
 
-    if (!program || !campus || !academic_year) {
+    if (!program || !academic_year) {
       return res.status(400).json({
-        error: 'program, campus, and academic_year are required',
+        error: 'program and academic_year are required',
       });
     }
 
@@ -1044,7 +1042,7 @@ router.post('/cost-shares', async (req, res) => {
          created_at`,
       [
         String(program).trim(),
-        String(campus).trim(),
+        'Main Campus',
         String(academic_year).trim(),
         tuitionCost,
         boardingCost,
@@ -1056,7 +1054,7 @@ router.post('/cost-shares', async (req, res) => {
   } catch (error) {
     if (error && error.code === '23505') {
       return res.status(409).json({
-        error: 'Cost configuration already exists for this program, academic year, and campus',
+        error: 'Cost configuration already exists for this program and academic year',
       });
     }
     console.error('Create cost share error:', error);
@@ -1072,15 +1070,14 @@ router.put('/cost-shares/:id', async (req, res) => {
     const { id } = req.params;
     const {
       program,
-      campus,
       academic_year,
       tuition_cost_per_year,
       boarding_cost_per_year,
     } = req.body;
 
-    if (!program || !campus || !academic_year) {
+    if (!program || !academic_year) {
       return res.status(400).json({
-        error: 'program, campus, and academic_year are required',
+        error: 'program and academic_year are required',
       });
     }
 
@@ -1115,7 +1112,7 @@ router.put('/cost-shares/:id', async (req, res) => {
          created_at`,
       [
         String(program).trim(),
-        String(campus).trim(),
+        'Main Campus',
         String(academic_year).trim(),
         tuitionCost,
         boardingCost,
@@ -1132,7 +1129,7 @@ router.put('/cost-shares/:id', async (req, res) => {
   } catch (error) {
     if (error && error.code === '23505') {
       return res.status(409).json({
-        error: 'Cost configuration already exists for this program, academic year, and campus',
+        error: 'Cost configuration already exists for this program and academic year',
       });
     }
     console.error('Update cost share error:', error);
@@ -1223,16 +1220,12 @@ router.post('/debt/reconcile', async (req, res) => {
     const hasUpdatedAt = debtColumns.rows.some((row) => row.column_name === 'updated_at');
     const hasLastUpdated = debtColumns.rows.some((row) => row.column_name === 'last_updated');
 
-    const studentCols = await getAvailableColumns('students', ['campus']);
-    const costShareCols = await getAvailableColumns('cost_shares', ['campus', 'food_cost_per_month']);
-    const hasStudentCampus = studentCols.has('campus');
-    const hasCostShareCampus = costShareCols.has('campus');
+    const costShareCols = await getAvailableColumns('cost_shares', ['food_cost_per_month']);
     const hasFoodCostPerMonth = costShareCols.has('food_cost_per_month');
 
     const candidates = await client.query(
       `SELECT
          s.student_id,
-         ${hasStudentCampus ? 's.campus' : "'Main Campus'::text"} AS campus,
          c.program,
          c.academic_year,
          c.tuition_share_percent,
@@ -1246,9 +1239,6 @@ router.post('/debt/reconcile', async (req, res) => {
        LEFT JOIN public.cost_shares cs
          ON LOWER(TRIM(cs.program)) = LOWER(TRIM(c.program))
         AND cs.academic_year = c.academic_year
-        ${hasCostShareCampus
-          ? "AND LOWER(TRIM(COALESCE(cs.campus, 'Main Campus'))) = LOWER(TRIM(COALESCE(s.campus, 'Main Campus')))"
-          : ''}
        WHERE UPPER(COALESCE(s.enrollment_status, '')) IN ('ACTIVE', 'GRADUATED')`
     );
 
