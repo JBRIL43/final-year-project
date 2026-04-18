@@ -1,6 +1,4 @@
 const admin = require('firebase-admin');
-const fs = require('fs');
-const path = require('path');
 
 function normalizePrivateKey(rawKey) {
   if (!rawKey) return null;
@@ -109,30 +107,10 @@ function initializeFromEnv() {
   return true;
 }
 
-function initializeFromLocalFile() {
-  const localKeyPath = path.resolve(__dirname, '../firebase-adminsdk.json');
-
-  if (!fs.existsSync(localKeyPath)) {
-    return false;
-  }
-
-  const serviceAccount = require(localKeyPath);
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-    databaseURL:
-      process.env.FIREBASE_DATABASE_URL ||
-      `https://${serviceAccount.project_id}.firebaseio.com`,
-  });
-
-  return true;
-}
-
 if (admin.apps.length === 0) {
   try {
     if (initializeFromEnv()) {
       console.log('Firebase Admin initialized from environment variables.');
-    } else if (initializeFromLocalFile()) {
-      console.log('Firebase Admin initialized from local service account file.');
     } else {
       console.warn(
         'Firebase Admin credentials are not configured. Set FIREBASE_SERVICE_ACCOUNT_JSON/FIREBASE_SERVICE_ACCOUNT(_BASE64) or FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY(_BASE64).'
