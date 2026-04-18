@@ -319,6 +319,198 @@ router.post('/students', async (req, res) => {
   }
 });
 
+// GET /api/admin/students/:id/contract — fetch student's active contract
+router.get('/students/:id/contract', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await pool.query(
+      `SELECT
+        program,
+        academic_year,
+        tuition_share_percent,
+        boarding_full_cost,
+        signed_at
+       FROM public.contracts
+       WHERE student_id = $1 AND is_active = true
+       ORDER BY signed_at DESC
+       LIMIT 1`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'No active contract found' });
+    }
+
+    res.json({ success: true, contract: result.rows[0] });
+  } catch (error) {
+    console.error('Fetch contract error:', error);
+    res.status(500).json({ error: 'Failed to load contract' });
+  }
+});
+
+// POST /api/admin/students/:id/contract — create or reactivate student's contract
+router.post('/students/:id/contract', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      program,
+      academic_year,
+      tuition_share_percent = 15,
+      boarding_full_cost = true,
+      signed_at,
+    } = req.body;
+
+    if (!program || !academic_year) {
+      return res.status(400).json({ error: 'program and academic_year are required' });
+    }
+
+    const tuitionShare = Number(tuition_share_percent);
+    if (Number.isNaN(tuitionShare)) {
+      return res.status(400).json({ error: 'tuition_share_percent must be a valid number' });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO public.contracts (
+        student_id,
+        university_name,
+        program,
+        academic_year,
+        tuition_share_percent,
+        boarding_full_cost,
+        signed_at,
+        is_active,
+        created_at,
+        updated_at
+      ) VALUES (
+        $1,
+        'Hawassa University',
+        $2,
+        $3,
+        $4,
+        $5,
+        COALESCE($6::timestamp, NOW()),
+        true,
+        NOW(),
+        NOW()
+      )
+      ON CONFLICT (student_id)
+      DO UPDATE SET
+        program = EXCLUDED.program,
+        academic_year = EXCLUDED.academic_year,
+        tuition_share_percent = EXCLUDED.tuition_share_percent,
+        boarding_full_cost = EXCLUDED.boarding_full_cost,
+        signed_at = EXCLUDED.signed_at,
+        is_active = true,
+        updated_at = NOW()
+      RETURNING
+        contract_id,
+        student_id,
+        program,
+        academic_year,
+        tuition_share_percent,
+        boarding_full_cost,
+        signed_at,
+        is_active`,
+      [id, program, academic_year, tuitionShare, Boolean(boarding_full_cost), signed_at || null]
+    );
+
+    res.status(201).json({ success: true, contract: result.rows[0] });
+  } catch (error) {
+    console.error('Create contract error:', error);
+    res.status(500).json({ error: 'Failed to create contract' });
+  }
+});
+
+// PUT /api/admin/students/:id/contract — update student's active contract
+router.put('/students/:id/contract', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      program,
+      academic_year,
+      tuition_share_percent,
+      boarding_full_cost,
+      signed_at,
+    } = req.body;
+
+    if (!program || !academic_year || tuition_share_percent == null || signed_at == null) {
+      return res.status(400).json({
+        error: 'program, academic_year, tuition_share_percent, and signed_at are required',
+      });
+    }
+
+    const tuitionShare = Number(tuition_share_percent);
+    if (Number.isNaN(tuitionShare)) {
+      return res.status(400).json({ error: 'tuition_share_percent must be a valid number' });
+    }
+
+    const result = await pool.query(
+      `UPDATE public.contracts
+       SET
+         program = $1,
+         academic_year = $2,
+         tuition_share_percent = $3,
+         boarding_full_cost = $4,
+         signed_at = $5,
+         is_active = true,
+         updated_at = NOW()
+       WHERE student_id = $6 AND is_active = true
+       RETURNING
+         contract_id,
+         student_id,
+         program,
+         academic_year,
+         tuition_share_percent,
+         boarding_full_cost,
+         signed_at,
+         is_active`,
+      [
+        program,
+        academic_year,
+        tuitionShare,
+        Boolean(boarding_full_cost),
+        signed_at,
+        id,
+      ]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'No active contract found' });
+    }
+
+    res.json({ success: true, contract: result.rows[0] });
+  } catch (error) {
+    console.error('Update contract error:', error);
+    res.status(500).json({ error: 'Failed to update contract' });
+  }
+});
+
+// DELETE /api/admin/students/:id/contract — deactivate student's active contract
+router.delete('/students/:id/contract', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await pool.query(
+      `UPDATE public.contracts
+       SET is_active = false,
+           updated_at = NOW()
+       WHERE student_id = $1 AND is_active = true
+       RETURNING contract_id`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'No active contract found' });
+    }
+
+    res.json({ success: true, message: 'Contract deactivated' });
+  } catch (error) {
+    console.error('Delete contract error:', error);
+    res.status(500).json({ error: 'Failed to delete contract' });
+  }
+});
+
 router.put('/students/:id', async (req, res) => {
   try {
     const { id } = req.params;
