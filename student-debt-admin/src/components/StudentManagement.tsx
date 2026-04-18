@@ -1,9 +1,16 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   Box,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Paper,
   Typography,
   Button,
+  FormControlLabel,
+  Switch,
   TextField,
   MenuItem,
   Alert,
@@ -11,11 +18,50 @@ import {
 } from '@mui/material';
 import { DataGrid, GridColDef, GridRowId, GridRowSelectionModel } from '@mui/x-data-grid';
 import { Download as DownloadIcon, Add as AddIcon } from '@mui/icons-material';
+import DescriptionIcon from '@mui/icons-material/Description';
 import DeleteIcon from '@mui/icons-material/Delete';
 import api from '../services/api';
 import { Student } from '../types/student';
 import AddStudentModal from './AddStudentModal';
 import DeleteStudentModal from './DeleteStudentModal';
+
+type ContractRecord = {
+  contract_id?: number;
+  student_id?: number;
+  program: string;
+  academic_year: string;
+  tuition_share_percent: number;
+  boarding_full_cost: boolean;
+  signed_at: string;
+  is_active?: boolean;
+};
+
+type ContractForm = {
+  program: string;
+  academic_year: string;
+  tuition_share_percent: string;
+  boarding_full_cost: boolean;
+  signed_at: string;
+};
+
+const currentYear = new Date().getFullYear();
+const defaultAcademicYear = `${currentYear}/${currentYear + 1}`;
+
+const emptyContractForm: ContractForm = {
+  program: '',
+  academic_year: defaultAcademicYear,
+  tuition_share_percent: '15',
+  boarding_full_cost: true,
+  signed_at: new Date().toISOString().slice(0, 16),
+};
+
+function toInputDateTime(value?: string) {
+  if (!value) return new Date().toISOString().slice(0, 16);
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return new Date().toISOString().slice(0, 16);
+  const tzOffsetMs = parsed.getTimezoneOffset() * 60 * 1000;
+  return new Date(parsed.getTime() - tzOffsetMs).toISOString().slice(0, 16);
+}
 
 export default function StudentManagement() {
   const [students, setStudents] = useState<Student[]>([]);
@@ -38,6 +84,23 @@ export default function StudentManagement() {
     studentId: null,
     studentName: '',
   });
+  const [contractModal, setContractModal] = useState<{
+    open: boolean;
+    contract: ContractRecord | null;
+    studentId: number | null;
+    studentName: string;
+    loading: boolean;
+    isNew: boolean;
+  }>({
+    open: false,
+    contract: null,
+    studentId: null,
+    studentName: '',
+    loading: false,
+    isNew: false,
+  });
+  const [contractForm, setContractForm] = useState<ContractForm>(emptyContractForm);
+  const [contractSaving, setContractSaving] = useState(false);
   const [snackbar, setSnackbar] = useState<{
     open: boolean;
     message: string;
@@ -156,6 +219,227 @@ export default function StudentManagement() {
     setDeleteModal({ open: true, studentId, studentName });
   };
 
+  const handleViewContract = async (student: Student) => {
+    try {
+      setContractModal({
+        open: true,
+        contract: null,
+        studentId: student.student_id,
+        studentName: student.full_name,
+        loading: true,
+        isNew: false,
+      });
+      const res = await api.get<{ contract: ContractRecord }>(
+        `/api/admin/students/${student.student_id}/contract`
+      );
+      const { contract } = res.data;
+      setContractForm({
+        program: contract.program || student.department,
+        academic_year: contract.academic_year || defaultAcademicYear,
+        tuition_share_percent: String(contract.tuition_share_percent ?? 15),
+        boarding_full_cost: Boolean(contract.boarding_full_cost),
+        signed_at: toInputDateTime(contract.signed_at),
+      });
+      setContractModal((prev) => ({
+        ...prev,
+        contract,
+        loading: false,
+        isNew: false,
+      }));
+    } catch (err: any) {
+      if (err?.response?.status === 404) {
+        setContractForm({
+          ...emptyContractForm,
+          program: student.department || '',
+        });
+        setContractModal((prev) => ({
+          ...prev,
+          loading: false,
+          isNew: true,
+          contract: null,
+        }));
+        return;
+      }
+
+      console.error('Failed to load contract', err);
+      setContractModal({
+        open: false,
+        contract: null,
+        studentId: null,
+        studentName: '',
+        loading: false,
+        isNew: false,
+      });
+      setSnackbar({
+        open: true,
+        message: '❌ Failed to load contract',
+        severity: 'error',
+      });
+    }
+  };
+
+  const handleCloseContractModal = () => {
+    setContractModal({
+      open: false,
+      contract: null,
+      studentId: null,
+      studentName: '',
+      loading: false,
+      isNew: false,
+    });
+    setContractForm(emptyContractForm);
+    setContractSaving(false);
+  };
+
+  const handleContractFormChange = (field: keyof ContractForm, value: string | boolean) => {
+    setContractForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const validateContractForm = () => {
+    if (!contractForm.program.trim()) return 'Program is required';
+    if (!contractForm.academic_year.trim()) return 'Academic year is required';
+    if (!contractForm.tuition_share_percent.trim()) return 'Tuition share percent is required';
+    if (!contractForm.signed_at.trim()) return 'Signed date/time is required';
+
+    const tuitionShare = Number(contractForm.tuition_share_percent);
+    if (Number.isNaN(tuitionShare)) return 'Tuition share percent must be a valid number';
+    if (tuitionShare < 0 || tuitionShare > 100) return 'Tuition share percent must be between 0 and 100';
+
+    return null;
+  };
+
+  const handleSaveContract = async () => {
+    if (!contractModal.studentId) return;
+
+    const validationError = validateContractForm();
+    if (validationError) {
+      setSnackbar({ open: true, message: `❌ ${validationError}`, severity: 'error' });
+      return;
+    }
+
+    setContractSaving(true);
+    try {
+      const payload = {
+        program: contractForm.program.trim(),
+        academic_year: contractForm.academic_year.trim(),
+        tuition_share_percent: Number(contractForm.tuition_share_percent),
+        boarding_full_cost: contractForm.boarding_full_cost,
+        signed_at: new Date(contractForm.signed_at).toISOString(),
+      };
+
+      const method = contractModal.isNew ? 'post' : 'put';
+      const res = await api[method]<{ contract: ContractRecord }>(
+        `/api/admin/students/${contractModal.studentId}/contract`,
+        payload
+      );
+
+      const { contract } = res.data;
+      setContractModal((prev) => ({ ...prev, contract, isNew: false }));
+      setContractForm({
+        program: contract.program,
+        academic_year: contract.academic_year,
+        tuition_share_percent: String(contract.tuition_share_percent),
+        boarding_full_cost: Boolean(contract.boarding_full_cost),
+        signed_at: toInputDateTime(contract.signed_at),
+      });
+      setSnackbar({
+        open: true,
+        message: contractModal.isNew ? '✅ Contract created' : '✅ Contract updated',
+        severity: 'success',
+      });
+    } catch (err) {
+      console.error('Failed to save contract', err);
+      setSnackbar({
+        open: true,
+        message: '❌ Failed to save contract',
+        severity: 'error',
+      });
+    } finally {
+      setContractSaving(false);
+    }
+  };
+
+  const handleDeleteContract = async () => {
+    if (!contractModal.studentId) return;
+
+    const confirmed = window.confirm('Deactivate this active contract?');
+    if (!confirmed) return;
+
+    setContractSaving(true);
+    try {
+      await api.delete(`/api/admin/students/${contractModal.studentId}/contract`);
+      setContractModal((prev) => ({ ...prev, contract: null, isNew: true }));
+      setContractForm((prev) => ({ ...prev }));
+      setSnackbar({
+        open: true,
+        message: '✅ Contract deactivated',
+        severity: 'success',
+      });
+    } catch (err) {
+      console.error('Failed to delete contract', err);
+      setSnackbar({
+        open: true,
+        message: '❌ Failed to delete contract',
+        severity: 'error',
+      });
+    } finally {
+      setContractSaving(false);
+    }
+  };
+
+  const handlePrintContract = () => {
+    const { contract, studentName } = contractModal;
+    if (!contract) return;
+
+    const signedAt = contract.signed_at
+      ? new Date(contract.signed_at).toLocaleString('en-ET')
+      : 'N/A';
+
+    const printWindow = window.open('', '_blank', 'width=800,height=900');
+    if (!printWindow) {
+      setSnackbar({
+        open: true,
+        message: '❌ Could not open print window',
+        severity: 'error',
+      });
+      return;
+    }
+
+    const content = `
+      <!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Student Contract</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 32px; line-height: 1.5; color: #111; }
+            h1 { margin: 0 0 8px; }
+            h2 { margin: 0 0 24px; color: #444; font-size: 18px; }
+            .row { margin-bottom: 10px; }
+            .label { font-weight: 700; }
+            .note { margin-top: 24px; color: #444; font-size: 14px; }
+          </style>
+        </head>
+        <body>
+          <h1>Student Cost-Sharing Contract</h1>
+          <h2>${studentName || 'Student'}</h2>
+          <div class="row"><span class="label">Program:</span> ${contract.program ?? 'N/A'}</div>
+          <div class="row"><span class="label">Academic Year:</span> ${contract.academic_year ?? 'N/A'}</div>
+          <div class="row"><span class="label">Tuition Share:</span> ${contract.tuition_share_percent ?? 'N/A'}%</div>
+          <div class="row"><span class="label">Boarding Cost:</span> ${contract.boarding_full_cost ? 'Full (100%)' : 'Partial'}</div>
+          <div class="row"><span class="label">Signed At:</span> ${signedAt}</div>
+          <div class="note">Legally binding agreement per Council of Ministers Regulation No. 91/2003.</div>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.open();
+    printWindow.document.write(content);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  };
+
   const normalizeSelectionModel = (selection: unknown): GridRowSelectionModel => {
     if (Array.isArray(selection)) {
       return { type: 'include', ids: new Set(selection) };
@@ -264,17 +548,27 @@ export default function StudentManagement() {
     {
       field: 'actions',
       headerName: 'Actions',
-      width: 100,
+      width: 180,
       sortable: false,
       renderCell: (params) => (
-        <Button
-          color="error"
-          size="small"
-          startIcon={<DeleteIcon />}
-          onClick={() => handleDeleteClick(params.row.student_id, params.row.full_name)}
-        >
-          Delete
-        </Button>
+        <>
+          <Button
+            size="small"
+            startIcon={<DescriptionIcon />}
+            onClick={() => handleViewContract(params.row as Student)}
+            sx={{ mr: 1 }}
+          >
+            View Contract
+          </Button>
+          <Button
+            color="error"
+            size="small"
+            startIcon={<DeleteIcon />}
+            onClick={() => handleDeleteClick(params.row.student_id, params.row.full_name)}
+          >
+            Delete
+          </Button>
+        </>
       ),
     },
   ];
@@ -387,6 +681,106 @@ export default function StudentManagement() {
         studentName={deleteModal.studentName}
         onStudentDeleted={loadStudents}
       />
+
+      <Dialog
+        open={contractModal.open}
+        onClose={handleCloseContractModal}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          Student Contract{contractModal.studentName ? ` - ${contractModal.studentName}` : ''}
+        </DialogTitle>
+        <DialogContent dividers>
+          {contractModal.loading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+              <CircularProgress />
+            </Box>
+          ) : (
+            <Box sx={{ minWidth: 300 }}>
+              <TextField
+                label="Program"
+                value={contractForm.program}
+                onChange={(e) => handleContractFormChange('program', e.target.value)}
+                fullWidth
+                size="small"
+                sx={{ mb: 2 }}
+              />
+              <TextField
+                label="Academic Year"
+                value={contractForm.academic_year}
+                onChange={(e) => handleContractFormChange('academic_year', e.target.value)}
+                fullWidth
+                size="small"
+                sx={{ mb: 2 }}
+              />
+              <TextField
+                label="Tuition Share (%)"
+                type="number"
+                inputProps={{ min: 0, max: 100, step: 0.01 }}
+                value={contractForm.tuition_share_percent}
+                onChange={(e) => handleContractFormChange('tuition_share_percent', e.target.value)}
+                fullWidth
+                size="small"
+                sx={{ mb: 2 }}
+              />
+              <TextField
+                label="Signed At"
+                type="datetime-local"
+                value={contractForm.signed_at}
+                onChange={(e) => handleContractFormChange('signed_at', e.target.value)}
+                fullWidth
+                size="small"
+                InputLabelProps={{ shrink: true }}
+                sx={{ mb: 2 }}
+              />
+              <FormControlLabel
+                control={(
+                  <Switch
+                    checked={contractForm.boarding_full_cost}
+                    onChange={(e) => handleContractFormChange('boarding_full_cost', e.target.checked)}
+                  />
+                )}
+                label="Boarding Cost Obligation: Full (100%)"
+              />
+              {contractModal.contract && (
+                <Typography sx={{ mt: 1 }}>
+                  <strong>Signed At (ET):</strong>{' '}
+                  {new Date(contractModal.contract.signed_at).toLocaleString('en-ET')}
+                </Typography>
+              )}
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                Legally binding agreement per Council of Ministers Regulation No. 91/2003.
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={handlePrintContract}
+            disabled={!contractModal.contract}
+          >
+            Print / Download
+          </Button>
+          <Button
+            onClick={handleDeleteContract}
+            color="error"
+            disabled={!contractModal.contract || contractSaving || contractModal.loading}
+          >
+            Deactivate
+          </Button>
+          <Button
+            onClick={handleSaveContract}
+            variant="contained"
+            disabled={contractSaving || contractModal.loading}
+          >
+            {contractModal.isNew ? 'Create Contract' : 'Update Contract'}
+          </Button>
+          <Button onClick={handleCloseContractModal}>
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Snackbar
         open={snackbar.open}
