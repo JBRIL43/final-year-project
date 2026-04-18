@@ -42,17 +42,44 @@ async function resolveStudentFromRequest(req) {
      FROM public.users u
      JOIN public.students s ON s.user_id = u.user_id
      WHERE ($1::text IS NOT NULL AND u.firebase_uid = $1)
-        OR ($2::text IS NOT NULL AND LOWER(u.email) = LOWER($2))
+        OR ($2::text IS NOT NULL AND LOWER(TRIM(u.email)) = LOWER(TRIM($2)))
      ORDER BY CASE WHEN $1::text IS NOT NULL AND u.firebase_uid = $1 THEN 0 ELSE 1 END
      LIMIT 1`,
     [firebaseUid, email]
   );
 
-  if (userResult.rows.length === 0) {
-    return null;
+  if (userResult.rows.length > 0) {
+    return Number(userResult.rows[0].student_id);
   }
 
-  return Number(userResult.rows[0].student_id);
+  // Backward-compatible fallback for records where students.email exists but user linkage is missing.
+  if (email) {
+    const columnCheck = await pool.query(
+      `SELECT 1
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'students'
+         AND column_name = 'email'
+       LIMIT 1`
+    );
+
+    if (columnCheck.rows.length > 0) {
+      const studentByEmail = await pool.query(
+        `SELECT student_id
+         FROM public.students
+         WHERE LOWER(TRIM(email)) = LOWER(TRIM($1))
+         ORDER BY student_id DESC
+         LIMIT 1`,
+        [email]
+      );
+
+      if (studentByEmail.rows.length > 0) {
+        return Number(studentByEmail.rows[0].student_id);
+      }
+    }
+  }
+
+  return null;
 }
 
 // UC-02: Get student debt balance with Ethiopian policy calculation
