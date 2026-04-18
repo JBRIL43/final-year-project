@@ -1345,28 +1345,119 @@ router.post('/payments/:id/reject', async (req, res) => {
 
 // DELETE /api/admin/students/:id — delete student and associated user
 router.delete('/students/:id', async (req, res) => {
+  let client;
   try {
     const { id } = req.params;
 
-    const studentResult = await pool.query(
+    client = await pool.connect();
+    await client.query('BEGIN');
+
+    const studentResult = await client.query(
       'SELECT user_id FROM public.students WHERE student_id = $1',
       [id]
     );
 
     if (studentResult.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Student not found' });
     }
 
     const userId = studentResult.rows[0].user_id;
 
-    await pool.query('DELETE FROM public.students WHERE student_id = $1', [id]);
+    const paymentCols = await client.query(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'payment_history'
+         AND column_name = ANY($1::text[])`,
+      [['student_id', 'debt_id']]
+    );
+    const debtCols = await client.query(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'debt_records'
+         AND column_name = ANY($1::text[])`,
+      [['debt_id', 'student_id']]
+    );
 
-    if (userId) {
-      await pool.query('DELETE FROM public.users WHERE user_id = $1', [userId]);
+    const hasPhStudentId = paymentCols.rows.some((row) => row.column_name === 'student_id');
+    const hasPhDebtId = paymentCols.rows.some((row) => row.column_name === 'debt_id');
+    const hasDebtId = debtCols.rows.some((row) => row.column_name === 'debt_id');
+    const hasDebtStudentId = debtCols.rows.some((row) => row.column_name === 'student_id');
+
+    // Explicit cleanup for schema variants where FK cascades may be missing.
+    if (hasPhStudentId) {
+      await client.query('DELETE FROM public.payment_history WHERE student_id = $1', [id]);
     }
 
-    res.json({ success: true, message: 'Student deleted successfully' });
+    if (hasPhDebtId && hasDebtId && hasDebtStudentId) {
+      await client.query(
+        `DELETE FROM public.payment_history
+         WHERE debt_id IN (
+           SELECT debt_id
+           FROM public.debt_records
+           WHERE student_id = $1
+         )`,
+        [id]
+      );
+    }
+
+    await client.query('DELETE FROM public.contracts WHERE student_id = $1', [id]);
+
+    if (hasDebtStudentId) {
+      await client.query('DELETE FROM public.debt_records WHERE student_id = $1', [id]);
+    }
+
+    await client.query('DELETE FROM public.students WHERE student_id = $1', [id]);
+
+    let userDeleted = false;
+
+    if (userId) {
+      const remainingStudents = await client.query(
+        'SELECT 1 FROM public.students WHERE user_id = $1 LIMIT 1',
+        [userId]
+      );
+
+      if (remainingStudents.rows.length === 0) {
+        // User cleanup is best-effort. Keep student deletion successful even if other
+        // tables still reference the user (e.g. audit/verification foreign keys).
+        await client.query('SAVEPOINT sp_delete_user');
+        try {
+          const userDeleteResult = await client.query(
+            'DELETE FROM public.users WHERE user_id = $1',
+            [userId]
+          );
+          userDeleted = userDeleteResult.rowCount > 0;
+        } catch (userDeleteError) {
+          await client.query('ROLLBACK TO SAVEPOINT sp_delete_user');
+          console.warn('Student deleted but user cleanup skipped:', {
+            message: userDeleteError.message,
+            code: userDeleteError.code,
+            detail: userDeleteError.detail,
+            hint: userDeleteError.hint,
+            table: userDeleteError.table,
+            column: userDeleteError.column,
+            constraint: userDeleteError.constraint,
+          });
+        } finally {
+          await client.query('RELEASE SAVEPOINT sp_delete_user');
+        }
+      }
+    }
+
+    await client.query('COMMIT');
+
+    res.json({
+      success: true,
+      message: userDeleted
+        ? 'Student and user deleted successfully'
+        : 'Student deleted successfully',
+    });
   } catch (error) {
+    if (client) {
+      await client.query('ROLLBACK');
+    }
     console.error('Delete student error:', {
       message: error.message,
       code: error.code,
@@ -1378,6 +1469,10 @@ router.delete('/students/:id', async (req, res) => {
       stack: error.stack,
     });
     res.status(500).json({ error: 'Failed to delete student' });
+  } finally {
+    if (client) {
+      client.release();
+    }
   }
 });
 
