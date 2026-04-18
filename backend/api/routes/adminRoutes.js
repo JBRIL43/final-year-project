@@ -1,5 +1,6 @@
 const express = require('express');
 const pool = require('../config/db');
+const firebaseAdmin = require('../config/firebaseAdmin');
 
 const router = express.Router();
 
@@ -24,6 +25,62 @@ function normalizeEnrollmentStatus(value) {
 function normalizeCampus(value) {
   const raw = String(value || '').trim();
   return raw || 'Main Campus';
+}
+
+function buildFallbackUid(studentNumber) {
+  const safeStudentNumber = String(studentNumber || 'student')
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]/g, '-');
+  return `local-${safeStudentNumber}-${Date.now()}`;
+}
+
+async function createOrResolveFirebaseUid({ studentNumber, email, fullName }) {
+  const fallbackUid = buildFallbackUid(studentNumber);
+
+  if (!firebaseAdmin || firebaseAdmin.apps.length === 0) {
+    return {
+      uid: fallbackUid,
+      source: 'fallback',
+      reason: 'firebase-admin-not-configured',
+    };
+  }
+
+  try {
+    const userRecord = await firebaseAdmin.auth().createUser({
+      email: String(email).trim(),
+      emailVerified: false,
+      password: '12345678',
+      displayName: String(fullName).trim(),
+      disabled: false,
+    });
+
+    return {
+      uid: userRecord.uid,
+      source: 'created',
+      reason: null,
+    };
+  } catch (error) {
+    if (error && error.code === 'auth/email-already-exists') {
+      try {
+        const existingFirebaseUser = await firebaseAdmin.auth().getUserByEmail(String(email).trim());
+        return {
+          uid: existingFirebaseUser.uid,
+          source: 'existing',
+          reason: null,
+        };
+      } catch (lookupError) {
+        console.error('Firebase lookup by email failed:', lookupError.message);
+      }
+    } else {
+      console.error('Firebase account creation failed:', error.message);
+    }
+
+    return {
+      uid: fallbackUid,
+      source: 'fallback',
+      reason: error && error.code ? error.code : 'firebase-create-failed',
+    };
+  }
 }
 
 async function getAvailableColumns(tableName, columns) {
@@ -253,22 +310,50 @@ router.post('/students', async (req, res) => {
     }
 
     const existingUser = await client.query(
-      'SELECT user_id FROM public.users WHERE email = $1 LIMIT 1',
+      'SELECT user_id, firebase_uid FROM public.users WHERE email = $1 LIMIT 1',
       [email]
     );
 
     let userId;
+    let firebaseSync = { source: 'none', reason: null };
     if (existingUser.rows.length > 0) {
       userId = existingUser.rows[0].user_id;
+      const currentUid = existingUser.rows[0].firebase_uid;
+
+      if (!currentUid || String(currentUid).startsWith('local-')) {
+        const firebaseResult = await createOrResolveFirebaseUid({
+          studentNumber: student_number,
+          email,
+          fullName: full_name,
+        });
+
+        await client.query(
+          'UPDATE public.users SET firebase_uid = $1 WHERE user_id = $2',
+          [firebaseResult.uid, userId]
+        );
+        firebaseSync = {
+          source: firebaseResult.source,
+          reason: firebaseResult.reason,
+        };
+      }
     } else {
-      const firebaseUid = `local-${student_number}-${Date.now()}`;
+      const firebaseResult = await createOrResolveFirebaseUid({
+        studentNumber: student_number,
+        email,
+        fullName: full_name,
+      });
+
       const userResult = await client.query(
         `INSERT INTO public.users (firebase_uid, email, full_name, role, created_at)
          VALUES ($1, $2, $3, 'STUDENT', NOW())
          RETURNING user_id`,
-        [firebaseUid, email, full_name]
+        [firebaseResult.uid, email, full_name]
       );
       userId = userResult.rows[0].user_id;
+      firebaseSync = {
+        source: firebaseResult.source,
+        reason: firebaseResult.reason,
+      };
     }
 
     const columnsResult = await client.query(
@@ -335,7 +420,14 @@ router.post('/students', async (req, res) => {
     const studentResult = await client.query(insertSql, values);
 
     await client.query('COMMIT');
-    res.status(201).json({ success: true, student: studentResult.rows[0] });
+    res.status(201).json({
+      success: true,
+      student: studentResult.rows[0],
+      firebase: {
+        status: firebaseSync.source,
+        reason: firebaseSync.reason,
+      },
+    });
   } catch (error) {
     if (client) {
       await client.query('ROLLBACK');
