@@ -35,6 +35,11 @@ interface CostShare {
   food_cost_per_month: number;
 }
 
+const toAmount = (value: unknown): number => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
 export default function CostManagement() {
   const [costs, setCosts] = useState<CostShare[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,7 +61,13 @@ export default function CostManagement() {
   const loadCosts = async () => {
     try {
       const res = await api.get<{ success: true; costs: CostShare[] }>('/api/admin/cost-shares');
-      setCosts(res.data.costs);
+      const normalizedCosts = res.data.costs.map((cost) => ({
+        ...cost,
+        tuition_cost_per_year: toAmount(cost.tuition_cost_per_year),
+        boarding_cost_per_year: toAmount(cost.boarding_cost_per_year),
+        food_cost_per_month: toAmount(cost.food_cost_per_month),
+      }));
+      setCosts(normalizedCosts);
     } catch (err) {
       console.error('Failed to load costs', err);
       setSnackbar({ open: true, message: '❌ Failed to load cost configurations', severity: 'error' });
@@ -175,18 +186,22 @@ export default function CostManagement() {
               </TableHead>
               <TableBody>
                 {costs.map((cost) => {
+                  const tuitionCostPerYear = toAmount(cost.tuition_cost_per_year);
+                  const boardingCostPerYear = toAmount(cost.boarding_cost_per_year);
+                  const foodCostPerMonth = toAmount(cost.food_cost_per_month);
+                  const tuitionShare = tuitionCostPerYear * 0.15;
                   const totalShare =
-                    cost.tuition_cost_per_year * 0.15 +
-                    cost.boarding_cost_per_year +
-                    cost.food_cost_per_month * 10;
+                    tuitionShare +
+                    boardingCostPerYear +
+                    foodCostPerMonth * 10;
                   return (
                     <TableRow key={cost.cost_share_id}>
                       <TableCell>{cost.program}</TableCell>
                       <TableCell>{cost.campus}</TableCell>
                       <TableCell>{cost.academic_year}</TableCell>
-                      <TableCell>{formatETB(cost.tuition_cost_per_year * 0.15)}</TableCell>
-                      <TableCell>{formatETB(cost.boarding_cost_per_year)}</TableCell>
-                      <TableCell>{formatETB(cost.food_cost_per_month)}</TableCell>
+                      <TableCell>{formatETB(tuitionShare)}</TableCell>
+                      <TableCell>{formatETB(boardingCostPerYear)}</TableCell>
+                      <TableCell>{formatETB(foodCostPerMonth)}</TableCell>
                       <TableCell>{formatETB(totalShare)}</TableCell>
                       <TableCell align="right">
                         <Button size="small" onClick={() => handleOpenModal(cost)} sx={{ mr: 1 }}>
