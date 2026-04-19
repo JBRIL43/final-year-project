@@ -2,6 +2,19 @@ const pool = require('../config/db');
 const { sendPaymentNotification } = require('../utils/notifications');
 const firebaseAdmin = require('../config/firebaseAdmin');
 
+function resolveStatusMode(sampleStatus) {
+  const value = String(sampleStatus || '').trim();
+  if (!value) {
+    return {
+      pending: 'PENDING',
+    };
+  }
+
+  return value === value.toLowerCase()
+    ? { pending: 'pending' }
+    : { pending: 'PENDING' };
+}
+
 async function resolveStudentFromRequest(req) {
   const authHeader = req.headers.authorization || '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
@@ -122,6 +135,14 @@ exports.recordPayment = async (req, res) => {
       });
     }
 
+    const normalizedAmount = Number(amount);
+    if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
+      return res.status(400).json({
+        error: 'Amount must be a valid positive number',
+        code: 'INVALID_AMOUNT',
+      });
+    }
+
     const resolvedStudent = await resolveStudentFromRequest(req);
     if (!resolvedStudent) {
       return res.status(401).json({
@@ -163,33 +184,73 @@ exports.recordPayment = async (req, res) => {
 
     const debtId = Number(debtResult.rows[0].debt_id);
 
+    const latestStatusResult = await client.query(
+      `SELECT status
+       FROM public.payment_history
+       WHERE debt_id = $1
+         AND status IS NOT NULL
+       ORDER BY payment_id DESC
+       LIMIT 1`,
+      [debtId]
+    );
+    const statusMode = resolveStatusMode(latestStatusResult.rows[0]?.status);
+
     const hasStudentId = await paymentHistoryHasStudentId();
+
+    const pendingCheck = hasStudentId
+      ? await client.query(
+          `SELECT payment_id
+           FROM public.payment_history
+           WHERE student_id = $1
+             AND UPPER(COALESCE(status, '')) = 'PENDING'
+           LIMIT 1`,
+          [resolvedStudent.studentId]
+        )
+      : await client.query(
+          `SELECT ph.payment_id
+           FROM public.payment_history ph
+           JOIN public.debt_records dr ON dr.debt_id = ph.debt_id
+           WHERE dr.student_id = $1
+             AND UPPER(COALESCE(ph.status, '')) = 'PENDING'
+           LIMIT 1`,
+          [resolvedStudent.studentId]
+        );
+
+    if (pendingCheck.rows.length > 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        error: 'You already have a pending payment under review',
+        code: 'PENDING_PAYMENT_EXISTS',
+      });
+    }
 
     const insertQuery = hasStudentId
       ? `INSERT INTO public.payment_history
          (debt_id, student_id, amount, payment_method, transaction_ref, status, verified_by, notes)
-         VALUES ($1, $2, $3, $4, $5, 'PENDING', $6, $7)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING *`
       : `INSERT INTO public.payment_history
          (debt_id, amount, payment_method, transaction_ref, status, verified_by, notes)
-         VALUES ($1, $2, $3, $4, 'PENDING', $5, $6)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING *`;
 
     const values = hasStudentId
       ? [
           debtId,
-          studentId,
-          amount,
+          resolvedStudent.studentId,
+          normalizedAmount,
           paymentMethod,
           transactionRef || null,
+          statusMode.pending,
           verifiedBy,
           notes || null,
         ]
       : [
           debtId,
-          amount,
+          normalizedAmount,
           paymentMethod,
           transactionRef || null,
+          statusMode.pending,
           verifiedBy,
           notes || null,
         ];
@@ -221,12 +282,12 @@ exports.recordPayment = async (req, res) => {
       await sendPaymentNotification(
         studentUserId,
         'Payment Submitted',
-        `Your payment of ETB ${amount} is pending finance verification.`,
+        `Your payment of ETB ${normalizedAmount} is pending finance verification.`,
         {
           type: 'PAYMENT_SUBMITTED',
           paymentId: String(createdPayment.payment_id),
           debtId: String(debtId),
-          status: 'PENDING',
+          status: statusMode.pending,
         }
       );
     }
@@ -235,12 +296,12 @@ exports.recordPayment = async (req, res) => {
       await sendPaymentNotification(
         financeUser.user_id,
         'New Payment Needs Review',
-        `A ${paymentMethod} payment of ETB ${amount} was submitted and is pending verification.`,
+        `A ${paymentMethod} payment of ETB ${normalizedAmount} was submitted and is pending verification.`,
         {
           type: 'PAYMENT_PENDING_VERIFICATION',
           paymentId: String(createdPayment.payment_id),
           debtId: String(debtId),
-          status: 'PENDING',
+          status: statusMode.pending,
         }
       );
     }
@@ -272,5 +333,66 @@ exports.recordPayment = async (req, res) => {
     if (client) {
       client.release();
     }
+  }
+};
+
+exports.getStudentPayments = async (req, res) => {
+  try {
+    const resolvedStudent = await resolveStudentFromRequest(req);
+    if (!resolvedStudent) {
+      return res.status(401).json({
+        error: 'Unable to resolve logged-in student',
+        code: 'UNAUTHORIZED',
+      });
+    }
+
+    const hasStudentId = await paymentHistoryHasStudentId();
+    const result = hasStudentId
+      ? await pool.query(
+          `SELECT
+             payment_id,
+             amount,
+             status,
+             payment_method,
+             transaction_ref,
+             notes,
+             submitted_at,
+             payment_date,
+             reviewed_at
+           FROM public.payment_history
+           WHERE student_id = $1
+           ORDER BY COALESCE(submitted_at, payment_date) DESC NULLS LAST, payment_id DESC`,
+          [resolvedStudent.studentId]
+        )
+      : await pool.query(
+          `SELECT
+             ph.payment_id,
+             ph.amount,
+             ph.status,
+             ph.payment_method,
+             ph.transaction_ref,
+             ph.notes,
+             ph.submitted_at,
+             ph.payment_date,
+             ph.reviewed_at
+           FROM public.payment_history ph
+           JOIN public.debt_records dr ON dr.debt_id = ph.debt_id
+           WHERE dr.student_id = $1
+           ORDER BY COALESCE(ph.submitted_at, ph.payment_date) DESC NULLS LAST, ph.payment_id DESC`,
+          [resolvedStudent.studentId]
+        );
+
+    const hasPending = result.rows.some((row) => String(row.status || '').toUpperCase() === 'PENDING');
+    res.json({
+      success: true,
+      payments: result.rows,
+      hasPending,
+    });
+  } catch (error) {
+    console.error('Fetch student payments error:', error);
+    res.status(500).json({
+      error: 'Failed to load payment history',
+      code: 'SERVER_ERROR',
+    });
   }
 };

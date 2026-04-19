@@ -13,9 +13,7 @@ class DebtService {
     final user = FirebaseAuth.instance.currentUser;
     final idToken = await user?.getIdToken(true);
 
-    final headers = <String, String>{
-      'Content-Type': 'application/json',
-    };
+    final headers = <String, String>{'Content-Type': 'application/json'};
 
     if (idToken != null && idToken.isNotEmpty) {
       headers['Authorization'] = 'Bearer $idToken';
@@ -32,10 +30,7 @@ class DebtService {
     for (final baseUrl in _candidateBaseUrls()) {
       try {
         final response = await http
-            .get(
-              Uri.parse('$baseUrl/api/debt/balance'),
-              headers: headers,
-            )
+            .get(Uri.parse('$baseUrl/api/debt/balance'), headers: headers)
             .timeout(const Duration(seconds: 5));
 
         if (response.statusCode == 200) {
