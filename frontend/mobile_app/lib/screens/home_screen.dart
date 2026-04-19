@@ -120,6 +120,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final dashboardHistory =
       (_debtData!['paymentHistory'] as List<dynamic>? ?? []);
+    final currentBalance = ((_debtData!['currentBalance'] as num?) ?? 0).toDouble();
+    final totalPaid = ((_debtData!['totalPaid'] as num?) ?? 0).toDouble();
+    final totalPortfolio = currentBalance + totalPaid;
+    final paidRatio = totalPortfolio <= 0 ? 0.0 : (totalPaid / totalPortfolio).clamp(0.0, 1.0);
     final hasPending = dashboardHistory.any(
       (item) =>
           ((item as Map<String, dynamic>)['status'] ?? '')
@@ -128,17 +132,21 @@ class _HomeScreenState extends State<HomeScreen> {
           'PENDING',
     );
 
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
+    return RefreshIndicator(
+      onRefresh: _loadDebtBalance,
+      child: ListView(
+        padding: const EdgeInsets.all(16.0),
         children: [
           Card(
             elevation: 4,
             child: Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Colors.blue[700]!, Colors.blue[900]!],
+                  colors: [Colors.indigo[700]!, Colors.blue[900]!, Colors.teal[700]!],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: Padding(
                 padding: const EdgeInsets.all(24.0),
@@ -172,12 +180,80 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 14),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(99),
+                      child: LinearProgressIndicator(
+                        value: paidRatio,
+                        minHeight: 9,
+                        backgroundColor: Colors.white24,
+                        valueColor: const AlwaysStoppedAnimation<Color>(Colors.lightGreenAccent),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Repayment progress ${(paidRatio * 100).toStringAsFixed(1)}%',
+                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
                   ],
                 ),
               ),
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: Card(
+                  elevation: 0,
+                  color: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    side: BorderSide(color: Colors.blueGrey.shade50),
+                  ),
+                  child: const Padding(
+                    padding: EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.insights_outlined, color: Colors.indigo),
+                        SizedBox(height: 6),
+                        Text('Health', style: TextStyle(fontWeight: FontWeight.w700)),
+                        SizedBox(height: 2),
+                        Text('Debt portfolio tracked live', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Card(
+                  elevation: 0,
+                  color: hasPending ? Colors.amber[50] : Colors.green[50],
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    side: BorderSide(color: hasPending ? Colors.amber.shade200 : Colors.green.shade200),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(hasPending ? Icons.hourglass_bottom : Icons.verified, color: hasPending ? Colors.amber[900] : Colors.green[800]),
+                        const SizedBox(height: 6),
+                        Text(hasPending ? 'Pending Review' : 'Up-to-date', style: const TextStyle(fontWeight: FontWeight.w700)),
+                        Text(
+                          hasPending ? 'A payment is waiting for finance confirmation' : 'No payments waiting for review',
+                          style: const TextStyle(fontSize: 12, color: Colors.black54),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
           Card(
             child: ListTile(
               leading: const Icon(Icons.request_quote, color: Colors.indigo),
@@ -210,6 +286,40 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           if (hasPending) const SizedBox(height: 16),
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Recent Activity',
+              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (dashboardHistory.isEmpty)
+            const Card(
+              child: Padding(
+                padding: EdgeInsets.all(14),
+                child: Text('No recent payment activity yet.'),
+              ),
+            )
+          else
+            ...dashboardHistory.take(3).map((item) {
+              final payment = item as Map<String, dynamic>;
+              final status = (payment['status'] ?? 'UNKNOWN').toString().toUpperCase();
+              final amount = ((payment['amount'] as num?) ?? 0).toDouble();
+              return Card(
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: status == 'PENDING' ? Colors.amber[100] : Colors.blue[100],
+                    child: Icon(
+                      status == 'PENDING' ? Icons.pending_actions : Icons.check_circle_outline,
+                      color: status == 'PENDING' ? Colors.amber[800] : Colors.blue[800],
+                    ),
+                  ),
+                  title: Text(formatter.format(amount), style: const TextStyle(fontWeight: FontWeight.w700)),
+                  subtitle: Text('Status: $status'),
+                ),
+              );
+            }),
         ],
       ),
     );

@@ -18,6 +18,7 @@ import {
   ReceiptLong as ReceiptLongIcon,
   NotificationsNone as NotificationsNoneIcon,
   Warning as WarningIcon,
+  Description as DescriptionIcon,
 } from '@mui/icons-material'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
@@ -29,6 +30,7 @@ const navItems = [
   { label: 'Manage Users', to: '/manage-users', icon: <SchoolIcon /> },
   { label: 'Graduate Management', to: '/graduates', icon: <SchoolIcon /> },
   { label: 'Delinquent Graduates', to: '/graduates/delinquent', icon: <WarningIcon /> },
+  { label: 'ERCA Export', to: '/erca-export', icon: <DescriptionIcon /> },
   { label: 'Cost Configuration', to: '/cost-config', icon: <ReceiptLongIcon /> },
   // { label: 'User List', to: '/user-list', icon: <SchoolIcon /> },
   // { label: 'SIS Import', to: '/sis-import', icon: <ReceiptLongIcon /> },
