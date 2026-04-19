@@ -11,9 +11,14 @@ import CostManagement from './components/CostManagement'
 import GraduateManagement from './components/GraduateManagement'
 import DelinquentGraduates from './components/DelinquentGraduates'
 import ErcaExportDashboard from './components/ErcaExportDashboard'
+import RegistrarDashboard from './components/RegistrarDashboard'
+import DepartmentDashboard from './components/DepartmentDashboard'
 
 function AppRoutes() {
-  const { loading } = useAuth()
+  const { loading, role } = useAuth()
+
+  const roleHome = role === 'registrar' ? '/registrar' : role === 'department_head' ? '/department' : '/'
+  const defaultHome = role === 'registrar' ? '/registrar' : role === 'department_head' ? '/department' : '/reports'
 
   if (loading) {
     return (
@@ -32,7 +37,7 @@ function AppRoutes() {
 
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
+      <Route path="login" element={<Login />} />
       <Route
         element={
           <ProtectedRoute>
@@ -40,15 +45,87 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<Dashboard />} />
-        <Route path="students" element={<StudentManagement />} />
-        <Route path="manage-users" element={<StudentManagement />} />
-        <Route path="user-list" element={<StudentManagement />} />
-        <Route path="sis-import" element={<StudentManagement />} />
-        <Route path="reports" element={<Dashboard />} />
-        <Route path="settings" element={<Dashboard />} />
-        <Route path="cost-config" element={<CostManagement />} />
-        <Route path="graduates" element={<GraduateManagement />} />
+        <Route index element={<Navigate to={defaultHome} replace />} />
+        <Route
+          path="students"
+          element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <StudentManagement />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="manage-users"
+          element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <StudentManagement />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="user-list"
+          element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <StudentManagement />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="sis-import"
+          element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <StudentManagement />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="reports"
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'finance']}>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="settings"
+          element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="cost-config"
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'finance']}>
+              <CostManagement />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="graduates"
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'registrar']}>
+              <GraduateManagement />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="registrar"
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'registrar']}>
+              <RegistrarDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="department"
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'department_head']}>
+              <DepartmentDashboard />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="graduates/delinquent"
           element={
@@ -57,10 +134,24 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
-        <Route path="erca-export" element={<ErcaExportDashboard />} />
-        <Route path="payment-review" element={<PaymentReviewQueue />} />
+        <Route
+          path="erca-export"
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'finance']}>
+              <ErcaExportDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="payment-review"
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'finance']}>
+              <PaymentReviewQueue />
+            </ProtectedRoute>
+          }
+        />
       </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<Navigate to={roleHome} replace />} />
     </Routes>
   )
 }
