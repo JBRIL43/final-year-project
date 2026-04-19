@@ -29,9 +29,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
       final user = FirebaseAuth.instance.currentUser;
       final idToken = await user?.getIdToken(true);
 
-      final headers = <String, String>{
-        'Content-Type': 'application/json',
-      };
+      final headers = <String, String>{'Content-Type': 'application/json'};
 
       if (idToken != null && idToken.isNotEmpty) {
         headers['Authorization'] = 'Bearer $idToken';
@@ -68,8 +66,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
             if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Payment recorded successfully!'),
-                backgroundColor: Colors.green,
+                content: Text(
+                  'Payment submitted successfully. It is now pending finance review.',
+                ),
+                backgroundColor: Colors.blue,
               ),
             );
             Navigator.pop(context);

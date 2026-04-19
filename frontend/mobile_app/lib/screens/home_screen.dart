@@ -77,6 +77,16 @@ class _HomeScreenState extends State<HomeScreen> {
       return const Center(child: Text('No debt data available'));
     }
 
+    final paymentHistory =
+        (_debtData!['paymentHistory'] as List<dynamic>? ?? []);
+    final hasPending = paymentHistory.any(
+      (item) =>
+          ((item as Map<String, dynamic>)['status'] ?? '')
+              .toString()
+              .toUpperCase() ==
+          'PENDING',
+    );
+
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Column(
@@ -127,20 +137,39 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           const SizedBox(height: 24),
+          if (hasPending)
+            Card(
+              color: Colors.amber[50],
+              child: const Padding(
+                padding: EdgeInsets.all(12.0),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.amber),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Your payment is pending finance review. Please wait before submitting another payment.',
+                        style: TextStyle(color: Colors.brown),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          if (hasPending) const SizedBox(height: 16),
           const Text(
             'Payment History',
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
           Expanded(
-            child: _debtData!['paymentHistory'].isEmpty
+            child: paymentHistory.isEmpty
                 ? const Center(child: Text('No payment history yet'))
                 : ListView.builder(
-                    itemCount: _debtData!['paymentHistory'].length,
+                    itemCount: paymentHistory.length,
                     itemBuilder: (context, index) {
                       final payment =
-                          _debtData!['paymentHistory'][index]
-                              as Map<String, dynamic>;
+                          paymentHistory[index] as Map<String, dynamic>;
                       final method =
                           payment['paymentMethod'] ??
                           payment['payment_method'] ??
@@ -160,6 +189,11 @@ class _HomeScreenState extends State<HomeScreen> {
                           : num.tryParse(amountValue?.toString() ?? '0') ?? 0;
                       final status = (payment['status'] ?? 'UNKNOWN')
                           .toString();
+                      final normalizedStatus = status.toUpperCase();
+                      final isPending = normalizedStatus == 'PENDING';
+                      final isApproved =
+                          normalizedStatus == 'SUCCESS' ||
+                          normalizedStatus == 'APPROVED';
                       return ListTile(
                         leading: CircleAvatar(
                           backgroundColor: method == 'CHAPA'
@@ -182,15 +216,19 @@ class _HomeScreenState extends State<HomeScreen> {
                             vertical: 4,
                           ),
                           decoration: BoxDecoration(
-                            color: status == 'SUCCESS'
+                            color: isPending
+                                ? Colors.amber[50]
+                                : isApproved
                                 ? Colors.green[50]
                                 : Colors.red[50],
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
-                            status,
+                            normalizedStatus,
                             style: TextStyle(
-                              color: status == 'SUCCESS'
+                              color: isPending
+                                  ? Colors.amber[900]
+                                  : isApproved
                                   ? Colors.green[800]
                                   : Colors.red[800],
                               fontWeight: FontWeight.w600,
