@@ -5,9 +5,10 @@ import { useAuth } from '../contexts/AuthContext'
 
 interface ProtectedRouteProps {
   children: ReactNode
+  allowedRoles?: Array<'admin' | 'finance'>
 }
 
-export default function ProtectedRoute({ children }: ProtectedRouteProps) {
+export default function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
   const { user, loading, isAdmin } = useAuth()
 
   if (loading) {
@@ -25,7 +26,9 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     )
   }
 
-  if (!user || !isAdmin) {
+  const roleAllowed = !allowedRoles || allowedRoles.includes('admin')
+
+  if (!user || !isAdmin || !roleAllowed) {
     return <Navigate to="/login" replace />
   }
 

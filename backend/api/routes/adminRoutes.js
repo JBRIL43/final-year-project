@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../config/db');
 const firebaseAdmin = require('../config/firebaseAdmin');
+const { sendPaymentNotification } = require('../utils/notifications');
 
 const router = express.Router();
 
@@ -328,6 +329,165 @@ router.get('/graduates', async (req, res) => {
   } catch (error) {
     console.error('Fetch graduates error:', error);
     res.status(500).json({ error: 'Failed to load graduates' });
+  }
+});
+
+// GET /api/admin/graduates/delinquent — get graduates past repayment start with unpaid debt
+router.get('/graduates/delinquent', async (req, res) => {
+  try {
+    const studentCols = await getAvailableColumns('students', [
+      'full_name',
+      'email',
+      'department',
+      'campus',
+      'graduation_date',
+      'repayment_start_date',
+      'clearance_status',
+    ]);
+    const debtCols = await getAvailableColumns('debt_records', ['student_id', 'current_balance']);
+
+    const hasStudentFullName = studentCols.has('full_name');
+    const hasStudentEmail = studentCols.has('email');
+    const hasDepartment = studentCols.has('department');
+    const hasCampus = studentCols.has('campus');
+    const hasGraduationDate = studentCols.has('graduation_date');
+    const hasRepaymentStartDate = studentCols.has('repayment_start_date');
+    const hasClearanceStatus = studentCols.has('clearance_status');
+    const hasCurrentBalance = debtCols.has('current_balance');
+
+    if (!hasGraduationDate || !hasRepaymentStartDate || !hasClearanceStatus || !hasCurrentBalance) {
+      return res.status(400).json({
+        error:
+          'students/debt_records schema is missing graduate delinquency columns. Run the graduate migration first.',
+      });
+    }
+
+    const fullNameExpr = hasStudentFullName ? 's.full_name' : 'u.full_name';
+    const emailExpr = hasStudentEmail ? 's.email' : 'u.email';
+    const departmentExpr = hasDepartment ? 's.department' : "''::text";
+    const campusExpr = hasCampus ? 's.campus' : "'Main Campus'::text";
+    const needsUsersJoin = !hasStudentFullName || !hasStudentEmail;
+
+    const result = await pool.query(
+      `SELECT
+         s.student_id,
+         ${fullNameExpr} AS full_name,
+         ${emailExpr} AS email,
+         ${departmentExpr} AS department,
+         ${campusExpr} AS campus,
+         s.graduation_date,
+         s.repayment_start_date,
+         dr.current_balance
+       FROM public.students s
+       JOIN public.debt_records dr ON dr.student_id = s.student_id
+       ${needsUsersJoin ? 'LEFT JOIN public.users u ON s.user_id = u.user_id' : ''}
+       WHERE s.graduation_date IS NOT NULL
+         AND s.repayment_start_date IS NOT NULL
+         AND s.repayment_start_date <= NOW()
+         AND UPPER(COALESCE(s.clearance_status, '')) = 'PENDING'
+         AND dr.current_balance > 0
+       ORDER BY s.repayment_start_date ASC, s.student_id ASC`
+    );
+
+    res.json({ success: true, delinquentGraduates: result.rows });
+  } catch (error) {
+    console.error('Fetch delinquent graduates error:', error);
+    res.status(500).json({ error: 'Failed to load delinquent graduates' });
+  }
+});
+
+async function getGraduateNotificationTarget(studentId) {
+  const result = await pool.query(
+    `SELECT s.student_id, s.user_id, s.full_name, s.email, u.firebase_uid
+     FROM public.students s
+     LEFT JOIN public.users u ON u.user_id = s.user_id
+     WHERE s.student_id = $1
+     LIMIT 1`,
+    [studentId]
+  );
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+}
+
+router.post('/graduates/:id/remind', async (req, res) => {
+  try {
+    const studentId = Number(req.params.id);
+
+    if (!Number.isFinite(studentId)) {
+      return res.status(400).json({ error: 'Invalid student id' });
+    }
+
+    const student = await getGraduateNotificationTarget(studentId);
+
+    if (!student) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    if (!student.user_id) {
+      return res.status(400).json({ error: 'Student is not linked to a user account' });
+    }
+
+    await sendPaymentNotification(
+      student.user_id,
+      'Repayment reminder',
+      'Your graduate repayment balance is overdue. Please review your account and make a payment as soon as possible.',
+      {
+        type: 'graduate_reminder',
+        student_id: String(student.student_id),
+        email: student.email || '',
+      }
+    );
+
+    res.json({
+      success: true,
+      message: `Reminder sent to ${student.full_name || 'the student'}`,
+    });
+  } catch (error) {
+    console.error('Send graduate reminder error:', error);
+    res.status(500).json({ error: 'Failed to send reminder' });
+  }
+});
+
+router.post('/graduates/:id/contacted', async (req, res) => {
+  try {
+    const studentId = Number(req.params.id);
+
+    if (!Number.isFinite(studentId)) {
+      return res.status(400).json({ error: 'Invalid student id' });
+    }
+
+    const student = await getGraduateNotificationTarget(studentId);
+
+    if (!student) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    if (!student.user_id) {
+      return res.status(400).json({ error: 'Student is not linked to a user account' });
+    }
+
+    await sendPaymentNotification(
+      student.user_id,
+      'Payment follow-up recorded',
+      'Your account has been marked as contacted by the finance office regarding your repayment balance.',
+      {
+        type: 'graduate_contacted',
+        student_id: String(student.student_id),
+        email: student.email || '',
+      }
+    );
+
+    res.json({
+      success: true,
+      message: `Contact log sent for ${student.full_name || 'the student'}`,
+    });
+  } catch (error) {
+    console.error('Record graduate contact error:', error);
+    res.status(500).json({ error: 'Failed to record contact' });
   }
 });
 

@@ -9,6 +9,7 @@ import PaymentReviewQueue from './components/PaymentReviewQueue'
 import StudentManagement from './components/StudentManagement'
 import CostManagement from './components/CostManagement'
 import GraduateManagement from './components/GraduateManagement'
+import DelinquentGraduates from './components/DelinquentGraduates'
 
 function AppRoutes() {
   const { loading } = useAuth()
@@ -47,6 +48,14 @@ function AppRoutes() {
         <Route path="settings" element={<Dashboard />} />
         <Route path="cost-config" element={<CostManagement />} />
         <Route path="graduates" element={<GraduateManagement />} />
+        <Route
+          path="graduates/delinquent"
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'finance']}>
+              <DelinquentGraduates />
+            </ProtectedRoute>
+          }
+        />
         <Route path="payment-review" element={<PaymentReviewQueue />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
