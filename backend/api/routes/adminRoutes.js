@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../config/db');
 const firebaseAdmin = require('../config/firebaseAdmin');
+const { authenticateRequest, requireRoles } = require('../middleware/auth');
 const { sendPaymentNotification } = require('../utils/notifications');
 
 const router = express.Router();
@@ -26,6 +27,17 @@ function normalizeEnrollmentStatus(value) {
 function normalizeCampus(value) {
   const raw = String(value || '').trim();
   return raw || 'Main Campus';
+}
+
+function normalizeAdminRole(role) {
+  const normalized = String(role || '').trim().toLowerCase();
+
+  if (normalized === 'registrar') return 'REGISTRAR';
+  if (normalized === 'department_head') return 'DEPARTMENT_HEAD';
+  if (normalized === 'finance') return 'FINANCE_OFFICER';
+  if (normalized === 'admin') return 'ADMIN';
+
+  return null;
 }
 
 function buildFallbackUid(studentNumber) {
@@ -202,6 +214,82 @@ async function ensureContractsTable(client) {
     EXECUTE FUNCTION public.create_contract_for_new_student();
   `);
 }
+
+router.post('/users', authenticateRequest, requireRoles(['admin']), async (req, res) => {
+  try {
+    const email = String(req.body?.email || '').trim();
+    const requestedRole = String(req.body?.role || '').trim();
+    const department = req.body?.department ? String(req.body.department).trim() : null;
+
+    if (!email) {
+      return res.status(400).json({ error: 'email is required' });
+    }
+
+    const role = normalizeAdminRole(requestedRole);
+    if (!role) {
+      return res.status(400).json({ error: 'Invalid role' });
+    }
+
+    if (role === 'DEPARTMENT_HEAD' && !department) {
+      return res.status(400).json({ error: 'department is required for department_head' });
+    }
+
+    const existingUser = await pool.query(
+      'SELECT user_id FROM public.users WHERE LOWER(email) = LOWER($1) LIMIT 1',
+      [email]
+    );
+
+    if (existingUser.rows.length > 0) {
+      return res.status(409).json({ error: 'User already exists' });
+    }
+
+    if (!firebaseAdmin || firebaseAdmin.apps.length === 0) {
+      return res.status(500).json({ error: 'Firebase Admin is not configured' });
+    }
+
+    const userRecord = await firebaseAdmin.auth().createUser({
+      email,
+      emailVerified: false,
+      password: '12345678',
+      displayName: email.split('@')[0],
+      disabled: false,
+    });
+
+    let insertResult;
+
+    try {
+      insertResult = await pool.query(
+        `INSERT INTO public.users (firebase_uid, email, full_name, role, department, created_at)
+         VALUES ($1, $2, $3, $4, $5, NOW())
+         RETURNING user_id, email, role, department`,
+        [userRecord.uid, email, email.split('@')[0], role, department]
+      );
+    } catch (dbError) {
+      try {
+        await firebaseAdmin.auth().deleteUser(userRecord.uid);
+      } catch (cleanupError) {
+        console.error('Failed to clean up Firebase user after DB insert error:', cleanupError.message);
+      }
+
+      throw dbError;
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'Admin user created successfully',
+      user: insertResult.rows[0],
+      defaultPassword: '12345678',
+    });
+  } catch (error) {
+    console.error('Create admin user error:', error);
+
+    if (error && error.code === 'auth/email-already-exists') {
+      return res.status(409).json({ error: 'Firebase account already exists' });
+    }
+
+    res.status(500).json({ error: 'Failed to create admin user' });
+  }
+});
 
 router.get('/students', async (req, res) => {
   console.log('✅ Admin students route hit');
