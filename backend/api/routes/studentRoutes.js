@@ -125,17 +125,12 @@ router.get('/cost-breakdown', authenticateToken, async (req, res) => {
 
     const hasStudentFullName = studentCols.has('full_name');
     const hasStudentCampus = studentCols.has('campus');
-    const hasCostCampus = costCols.has('campus');
     const hasFoodCostPerMonth = costCols.has('food_cost_per_month');
     const hasContractIsActive = contractCols.has('is_active');
 
     const fullNameExpr = hasStudentFullName ? 's.full_name' : 'u.full_name';
     const studentCampusExpr = hasStudentCampus ? 's.campus' : "'Main Campus'::text";
     const needsUsersJoin = !hasStudentFullName;
-
-    const campusJoinClause = hasCostCampus
-      ? `AND LOWER(TRIM(COALESCE(cs.campus, 'Main Campus'))) = LOWER(TRIM(${studentCampusExpr}))`
-      : '';
 
     const activeContractClause = hasContractIsActive ? 'AND c.is_active = true' : '';
 
@@ -156,15 +151,53 @@ router.get('/cost-breakdown', authenticateToken, async (req, res) => {
        JOIN public.cost_shares cs
          ON LOWER(TRIM(c.program)) = LOWER(TRIM(cs.program))
         AND c.academic_year = cs.academic_year
-        ${campusJoinClause}
        ${needsUsersJoin ? 'LEFT JOIN public.users u ON s.user_id = u.user_id' : ''}
        WHERE s.student_id = $1
        LIMIT 1`,
       [studentId]
     );
 
+    // Fallback for older/incomplete data where contracts or cost_shares are missing.
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Cost breakdown not found' });
+      const fallback = await pool.query(
+        `SELECT
+           ${fullNameExpr} AS full_name,
+           s.department,
+           ${studentCampusExpr} AS campus,
+           dr.initial_amount,
+           dr.current_balance
+         FROM public.students s
+         LEFT JOIN public.debt_records dr ON dr.student_id = s.student_id
+         ${needsUsersJoin ? 'LEFT JOIN public.users u ON s.user_id = u.user_id' : ''}
+         WHERE s.student_id = $1
+         ORDER BY dr.debt_id DESC NULLS LAST
+         LIMIT 1`,
+        [studentId]
+      );
+
+      if (fallback.rows.length === 0) {
+        return res.status(404).json({ error: 'Cost breakdown not found' });
+      }
+
+      const row = fallback.rows[0];
+      const fallbackTotal = Number(row.initial_amount || row.current_balance || 0);
+
+      return res.json({
+        success: true,
+        fallback: true,
+        costBreakdown: {
+          fullName: row.full_name,
+          program: row.department,
+          campus: row.campus,
+          academicYear: 'N/A',
+          tuitionFullCost: 0,
+          tuitionStudentShare: 0,
+          boardingCost: 0,
+          foodCostMonthly: 0,
+          foodCostAnnual: 0,
+          totalDebt: Number(fallbackTotal.toFixed(2)),
+        },
+      });
     }
 
     const data = result.rows[0];
