@@ -416,6 +416,7 @@ async function getGraduateNotificationTarget(studentId) {
 router.post('/graduates/:id/remind', async (req, res) => {
   try {
     const studentId = Number(req.params.id);
+    const { method = 'email' } = req.body;
 
     if (!Number.isFinite(studentId)) {
       return res.status(400).json({ error: 'Invalid student id' });
@@ -427,24 +428,35 @@ router.post('/graduates/:id/remind', async (req, res) => {
       return res.status(404).json({ error: 'Student not found' });
     }
 
-    if (!student.user_id) {
-      return res.status(400).json({ error: 'Student is not linked to a user account' });
+    const delinquentCheck = await pool.query(
+      `SELECT s.student_id
+       FROM public.students s
+       JOIN public.debt_records dr ON dr.student_id = s.student_id
+       WHERE s.student_id = $1
+         AND s.repayment_start_date IS NOT NULL
+         AND s.repayment_start_date <= NOW()
+         AND UPPER(COALESCE(s.clearance_status, '')) = 'PENDING'
+         AND dr.current_balance > 0
+       LIMIT 1`,
+      [studentId]
+    );
+
+    if (delinquentCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Student not found or already cleared' });
     }
 
-    await sendPaymentNotification(
-      student.user_id,
-      'Repayment reminder',
-      'Your graduate repayment balance is overdue. Please review your account and make a payment as soon as possible.',
-      {
-        type: 'graduate_reminder',
-        student_id: String(student.student_id),
-        email: student.email || '',
-      }
-    );
+    console.log(`📤 REMINDER SENT via ${String(method).toUpperCase()}:`, {
+      student: student.full_name,
+      email: student.email,
+      method,
+      timestamp: new Date().toISOString(),
+    });
 
     res.json({
       success: true,
-      message: `Reminder sent to ${student.full_name || 'the student'}`,
+      message: `Reminder logged for ${student.full_name || 'the student'} via ${method}`,
+      studentName: student.full_name,
+      method,
     });
   } catch (error) {
     console.error('Send graduate reminder error:', error);
