@@ -1,15 +1,17 @@
 import type { ReactNode } from 'react'
 import { CircularProgress, Box } from '@mui/material'
 import { Navigate } from 'react-router-dom'
-import { useAuth } from '../contexts/AuthContext'
+import { type UserRole, useAuth } from '../contexts/AuthContext'
 
 interface ProtectedRouteProps {
   children: ReactNode
-  allowedRoles?: Array<'admin' | 'finance'>
+  allowedRoles?: UserRole[]
 }
 
+const DEFAULT_ALLOWED_ROLES: UserRole[] = ['admin', 'finance', 'registrar', 'department_head']
+
 export default function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
-  const { user, loading, isAdmin } = useAuth()
+  const { user, loading, role } = useAuth()
 
   if (loading) {
     return (
@@ -26,9 +28,10 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
     )
   }
 
-  const roleAllowed = !allowedRoles || allowedRoles.includes('admin')
+  const effectiveRoles = allowedRoles || DEFAULT_ALLOWED_ROLES
+  const roleAllowed = effectiveRoles.includes(role)
 
-  if (!user || !isAdmin || !roleAllowed) {
+  if (!user || !roleAllowed) {
     return <Navigate to="/login" replace />
   }
 

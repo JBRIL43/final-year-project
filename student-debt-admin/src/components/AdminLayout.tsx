@@ -19,25 +19,58 @@ import {
   NotificationsNone as NotificationsNoneIcon,
   Warning as WarningIcon,
   Description as DescriptionIcon,
+  AccountBalance as AccountBalanceIcon,
+  Apartment as ApartmentIcon,
 } from '@mui/icons-material'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 
 const drawerWidth = 270
 
-const navItems = [
-  { label: 'Dashboard', to: '/', icon: <DashboardIcon /> },
-  { label: 'Manage Users', to: '/manage-users', icon: <SchoolIcon /> },
-  { label: 'Graduate Management', to: '/graduates', icon: <SchoolIcon /> },
-  { label: 'Delinquent Graduates', to: '/graduates/delinquent', icon: <WarningIcon /> },
-  { label: 'ERCA Export', to: '/erca-export', icon: <DescriptionIcon /> },
-  { label: 'Cost Configuration', to: '/cost-config', icon: <ReceiptLongIcon /> },
-  // { label: 'User List', to: '/user-list', icon: <SchoolIcon /> },
-  // { label: 'SIS Import', to: '/sis-import', icon: <ReceiptLongIcon /> },
-  { label: 'Reports', to: '/reports', icon: <ReceiptLongIcon /> },
-  { label: 'Settings', to: '/settings', icon: <ReceiptLongIcon /> },
-  { label: 'Payment Review', to: '/payment-review', icon: <ReceiptLongIcon /> },
-]
+function buildNavItems(role: string) {
+  if (role === 'registrar') {
+    return [
+      { label: 'Registrar Dashboard', to: '/registrar', icon: <AccountBalanceIcon /> },
+      { label: 'Graduate Management', to: '/graduates', icon: <SchoolIcon /> },
+    ]
+  }
+
+  if (role === 'department_head') {
+    return [
+      { label: 'Department Dashboard', to: '/department', icon: <ApartmentIcon /> },
+    ]
+  }
+
+  if (role === 'finance') {
+    return [
+      { label: 'Dashboard', to: '/', icon: <DashboardIcon /> },
+      { label: 'Delinquent Graduates', to: '/graduates/delinquent', icon: <WarningIcon /> },
+      { label: 'Payment Review', to: '/payment-review', icon: <ReceiptLongIcon /> },
+      { label: 'Cost Configuration', to: '/cost-config', icon: <ReceiptLongIcon /> },
+      { label: 'ERCA Export', to: '/erca-export', icon: <DescriptionIcon /> },
+    ]
+  }
+
+  return [
+    { label: 'Dashboard', to: '/', icon: <DashboardIcon /> },
+    { label: 'Manage Users', to: '/manage-users', icon: <SchoolIcon /> },
+    { label: 'Graduate Management', to: '/graduates', icon: <SchoolIcon /> },
+    { label: 'Delinquent Graduates', to: '/graduates/delinquent', icon: <WarningIcon /> },
+    { label: 'Registrar Dashboard', to: '/registrar', icon: <AccountBalanceIcon /> },
+    { label: 'Department Dashboard', to: '/department', icon: <ApartmentIcon /> },
+    { label: 'Cost Configuration', to: '/cost-config', icon: <ReceiptLongIcon /> },
+    { label: 'Payment Review', to: '/payment-review', icon: <ReceiptLongIcon /> },
+    { label: 'ERCA Export', to: '/erca-export', icon: <DescriptionIcon /> },
+  ]
+}
+
+function getRoleLabel(role: string) {
+  if (role === 'finance') return 'Finance Officer'
+  if (role === 'registrar') return 'Registrar'
+  if (role === 'department_head') return 'Department Head'
+  if (role === 'admin') return 'System Administrator'
+  return 'User'
+}
 
 function getInitials(name: string) {
   const parts = name.trim().split(/\s+/)
@@ -45,9 +78,11 @@ function getInitials(name: string) {
 }
 
 export default function AdminLayout({ children }: { children?: ReactNode }) {
-  const { user } = useAuth()
+  const { user, role } = useAuth()
   const email = user?.email || 'adminstudent@hu.edu.et'
   const displayName = user?.displayName || email.split('@')[0] || 'Admin'
+  const navItems = buildNavItems(role)
+  const roleLabel = getRoleLabel(role)
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: '#f1f4f9' }}>
@@ -156,7 +191,7 @@ export default function AdminLayout({ children }: { children?: ReactNode }) {
                   {email}
                 </Typography>
                 <Typography variant="caption" color="text.secondary" noWrap>
-                  System Administrator
+                  {roleLabel}
                 </Typography>
               </Box>
             </Box>
@@ -189,7 +224,7 @@ export default function AdminLayout({ children }: { children?: ReactNode }) {
                 {email}
               </Typography>
               <Typography variant="caption" color="text.secondary">
-                System Administrator
+                {roleLabel}
               </Typography>
             </Box>
             <NotificationsNoneIcon sx={{ color: '#f59e0b' }} />

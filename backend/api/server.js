@@ -8,6 +8,8 @@ const adminRoutes = require('./routes/adminRoutes');
 const userRoutes = require('./routes/userRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const studentRoutes = require('./routes/studentRoutes');
+const registrarRoutes = require('./routes/registrarRoutes');
+const departmentRoutes = require('./routes/departmentRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -40,6 +42,8 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/student', studentRoutes);
+app.use('/api/registrar', registrarRoutes);
+app.use('/api/department', departmentRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

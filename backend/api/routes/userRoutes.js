@@ -1,8 +1,22 @@
 const express = require('express');
 const pool = require('../config/db');
 const { ensureUsersFcmTokenColumn } = require('../utils/notifications');
+const { authenticateRequest } = require('../middleware/auth');
 
 const router = express.Router();
+
+router.get('/me', authenticateRequest, async (req, res) => {
+  res.json({
+    success: true,
+    user: {
+      user_id: req.user?.user_id || null,
+      email: req.user?.email || null,
+      role: req.user?.role || 'student',
+      department: req.user?.department || null,
+      full_name: req.user?.full_name || null,
+    },
+  });
+});
 
 router.post('/fcm-token', async (req, res) => {
   try {
