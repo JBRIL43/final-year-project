@@ -97,6 +97,58 @@ async function resolveStudentFromRequest(req) {
     }
   }
 
+  // Last-resort self-healing: if the student row exists by email but the user link is stale or missing,
+  // reconcile public.users and public.students so valid Firebase logins can submit payments.
+  if (email && studentEmailColumn.rows.length > 0) {
+    const candidateStudent = await pool.query(
+      `SELECT student_id, user_id
+       FROM public.students
+       WHERE LOWER(TRIM(email)) = LOWER(TRIM($1))
+       ORDER BY student_id DESC
+       LIMIT 1`,
+      [email]
+    );
+
+    if (candidateStudent.rows.length > 0) {
+      const studentRow = candidateStudent.rows[0];
+      let userId = Number(studentRow.user_id || 0);
+
+      if (!userId) {
+        const fullName = email.split('@')[0].replace(/[._-]+/g, ' ').trim() || email;
+        const upsertUser = await pool.query(
+          `INSERT INTO public.users (firebase_uid, email, full_name, role, created_at)
+           VALUES ($1, $2, $3, 'STUDENT', NOW())
+           ON CONFLICT (email) DO UPDATE
+           SET firebase_uid = COALESCE(EXCLUDED.firebase_uid, public.users.firebase_uid),
+               full_name = COALESCE(NULLIF(EXCLUDED.full_name, ''), public.users.full_name)
+           RETURNING user_id`,
+          [firebaseUid || `local-${Date.now()}`, email, fullName]
+        );
+
+        userId = Number(upsertUser.rows[0].user_id);
+
+        await pool.query(
+          `UPDATE public.students
+           SET user_id = $1
+           WHERE student_id = $2`,
+          [userId, studentRow.student_id]
+        );
+      } else if (firebaseUid) {
+        await pool.query(
+          `UPDATE public.users
+           SET firebase_uid = COALESCE($1, firebase_uid)
+           WHERE user_id = $2`,
+          [firebaseUid, userId]
+        );
+      }
+
+      return {
+        studentId: Number(studentRow.student_id),
+        userId,
+      };
+    }
+  }
+
   return null;
 }
 
