@@ -1,169 +1,140 @@
-import { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react';
 import {
-  Alert,
   Box,
-  Button,
-  Chip,
-  MenuItem,
   Paper,
-  Select,
-  Snackbar,
+  Typography,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
-  Typography,
-} from '@mui/material'
-import api from '../services/api'
+  Button,
+  Alert,
+  Snackbar,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Select,
+} from '@mui/material';
+import api from '../services/api';
 
-interface RegistrarStudent {
-  student_id: number
-  student_number: string
-  full_name: string
-  department: string
-  campus: string
-  enrollment_status: string
-  clearance_status: string
+interface StudentForClearance {
+  student_id: number;
+  full_name: string;
+  email: string;
+  department: string;
+  campus: string;
+  enrollment_status: string;
+  clearance_status: string;
 }
 
 export default function RegistrarDashboard() {
-  const [students, setStudents] = useState<RegistrarStudent[]>([])
-  const [status, setStatus] = useState('')
-  const [loading, setLoading] = useState(true)
+  const [students, setStudents] = useState<StudentForClearance[]>([]);
+  const [loading, setLoading] = useState(true);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
     open: false,
     message: '',
     severity: 'success',
-  })
+  });
 
-  const loadStudents = async (statusFilter = '') => {
-    setLoading(true)
-
+  const loadStudents = async () => {
+    setLoading(true);
     try {
-      const query = statusFilter ? `?status=${encodeURIComponent(statusFilter)}` : ''
-      const response = await api.get<{ success: true; students: RegistrarStudent[] }>(`/api/registrar/students${query}`)
-      setStudents(response.data.students)
-    } catch (error) {
-      console.error('Failed to load registrar students:', error)
-      setSnackbar({ open: true, message: 'Failed to load students', severity: 'error' })
+      const res = await api.get<{ success: true; students: StudentForClearance[] }>('/api/registrar/students');
+      setStudents(res.data.students);
+    } catch (err) {
+      console.error('Failed to load students', err);
+      setSnackbar({ open: true, message: 'Failed to load students', severity: 'error' });
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   useEffect(() => {
-    loadStudents(status)
-  }, [status])
+    loadStudents();
+  }, []);
 
-  const markCleared = async (studentId: number) => {
+  const handleUpdateClearance = async (studentId: number, status: string) => {
     try {
-      await api.post(`/api/registrar/students/${studentId}/clear`)
-      setSnackbar({ open: true, message: 'Student marked as cleared', severity: 'success' })
-      loadStudents(status)
-    } catch (error) {
-      console.error('Failed to clear student:', error)
-      setSnackbar({ open: true, message: 'Could not mark student as cleared', severity: 'error' })
+      await api.put(`/api/registrar/students/${studentId}/clearance`, { clearance_status: status });
+      setSnackbar({ open: true, message: 'Clearance updated', severity: 'success' });
+      loadStudents();
+    } catch (err: any) {
+      console.error('Clearance update error:', err);
+      setSnackbar({
+        open: true,
+        message: err.response?.data?.error || 'Update failed',
+        severity: 'error',
+      });
     }
-  }
+  };
 
-  const generateCertificate = (student: RegistrarStudent) => {
-    const certificateText = [
-      'HAWASSA UNIVERSITY - REGISTRAR CLEARANCE CERTIFICATE',
-      `Student: ${student.full_name}`,
-      `Student ID: ${student.student_number}`,
-      `Program: ${student.department || 'N/A'}`,
-      `Campus: ${student.campus || 'N/A'}`,
-      `Status: ${student.enrollment_status || 'N/A'}`,
-      `Clearance: ${student.clearance_status || 'N/A'}`,
-      `Generated: ${new Date().toLocaleString('en-ET')}`,
-    ].join('\n')
-
-    const blob = new Blob([certificateText], { type: 'text/plain;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `Clearance_Certificate_${student.student_number}.txt`
-    link.click()
-    URL.revokeObjectURL(url)
-  }
+  const generateCertificate = (studentId: number) => {
+    alert(`Generate clearance certificate for student ${studentId}`);
+  };
 
   return (
-    <Box sx={{ p: { xs: 2, md: 3 } }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, gap: 2, flexWrap: 'wrap' }}>
-        <Box>
-          <Typography variant="h4" sx={{ fontWeight: 800 }}>
-            Registrar Dashboard
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Review student academic status and process graduation or withdrawal clearances.
-          </Typography>
-        </Box>
-        <Select size="small" value={status} onChange={(event) => setStatus(event.target.value)} displayEmpty>
-          <MenuItem value="">All Statuses</MenuItem>
-          <MenuItem value="ACTIVE">Active</MenuItem>
-          <MenuItem value="WITHDRAWN">Withdrawn</MenuItem>
-          <MenuItem value="GRADUATED">Graduated</MenuItem>
-        </Select>
-      </Box>
+    <Box sx={{ p: 3 }}>
+      <Typography variant="h4" gutterBottom>
+        Registrar: Student Clearance Management
+      </Typography>
 
       {loading ? (
-        <Alert severity="info">Loading registrar students...</Alert>
-      ) : (
-        <Paper elevation={0} sx={{ border: '1px solid #e7ebf2', borderRadius: 3, overflow: 'hidden' }}>
-          <TableContainer>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Student Name</TableCell>
-                  <TableCell>Student ID</TableCell>
-                  <TableCell>Program</TableCell>
-                  <TableCell>Campus</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>Clearance</TableCell>
-                  <TableCell align="right">Actions</TableCell>
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Loading students...
+        </Alert>
+      ) : null}
+
+      <Paper>
+        <TableContainer>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>Student</TableCell>
+                <TableCell>Program</TableCell>
+                <TableCell>Campus</TableCell>
+                <TableCell>Status</TableCell>
+                <TableCell>Clearance</TableCell>
+                <TableCell>Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {students.map((s) => (
+                <TableRow key={s.student_id}>
+                  <TableCell>
+                    <strong>{s.full_name}</strong>
+                    <br />
+                    <small>{s.email}</small>
+                  </TableCell>
+                  <TableCell>{s.department}</TableCell>
+                  <TableCell>{s.campus}</TableCell>
+                  <TableCell>{s.enrollment_status}</TableCell>
+                  <TableCell>
+                    <FormControl size="small" sx={{ minWidth: 120 }}>
+                      <InputLabel>Clearance</InputLabel>
+                      <Select
+                        value={String(s.clearance_status || '').toLowerCase()}
+                        label="Clearance"
+                        onChange={(e) => handleUpdateClearance(s.student_id, e.target.value)}
+                      >
+                        <MenuItem value="pending">Pending</MenuItem>
+                        <MenuItem value="cleared">Cleared</MenuItem>
+                        <MenuItem value="waived">Waived</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </TableCell>
+                  <TableCell>
+                    <Button size="small" variant="outlined" onClick={() => generateCertificate(s.student_id)}>
+                      Certificate
+                    </Button>
+                  </TableCell>
                 </TableRow>
-              </TableHead>
-              <TableBody>
-                {students.map((student) => (
-                  <TableRow key={student.student_id} hover>
-                    <TableCell>{student.full_name}</TableCell>
-                    <TableCell>{student.student_number}</TableCell>
-                    <TableCell>{student.department || '-'}</TableCell>
-                    <TableCell>{student.campus || '-'}</TableCell>
-                    <TableCell>
-                      <Chip size="small" label={student.enrollment_status || 'UNKNOWN'} />
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        size="small"
-                        label={student.clearance_status || 'PENDING'}
-                        color={String(student.clearance_status || '').toUpperCase() === 'CLEARED' ? 'success' : 'warning'}
-                      />
-                    </TableCell>
-                    <TableCell align="right">
-                      <Button size="small" onClick={() => markCleared(student.student_id)} sx={{ mr: 1 }}>
-                        Mark Cleared
-                      </Button>
-                      <Button size="small" variant="outlined" onClick={() => generateCertificate(student)}>
-                        Generate Certificate
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {students.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={7} align="center">
-                      No students found for the selected status.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Paper>
-      )}
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Paper>
 
       <Snackbar
         open={snackbar.open}
@@ -171,10 +142,10 @@ export default function RegistrarDashboard() {
         onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
       >
-        <Alert severity={snackbar.severity} variant="filled">
+        <Alert severity={snackbar.severity}>
           {snackbar.message}
         </Alert>
       </Snackbar>
     </Box>
-  )
+  );
 }

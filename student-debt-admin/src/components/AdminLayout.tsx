@@ -30,7 +30,7 @@ const drawerWidth = 270
 function buildNavItems(role: string) {
   if (role === 'registrar') {
     return [
-      { label: 'Registrar Dashboard', to: '/registrar', icon: <AccountBalanceIcon /> },
+      { label: 'Registrar Clearance', to: '/registrar', icon: <AccountBalanceIcon /> },
       { label: 'Graduate Management', to: '/graduates', icon: <SchoolIcon /> },
     ]
   }
@@ -44,6 +44,7 @@ function buildNavItems(role: string) {
   if (role === 'finance') {
     return [
       { label: 'Dashboard', to: '/', icon: <DashboardIcon /> },
+      { label: 'Manage Users', to: '/manage-users', icon: <SchoolIcon /> },
       { label: 'Delinquent Graduates', to: '/graduates/delinquent', icon: <WarningIcon /> },
       { label: 'Payment Review', to: '/payment-review', icon: <ReceiptLongIcon /> },
       { label: 'Cost Configuration', to: '/cost-config', icon: <ReceiptLongIcon /> },
@@ -53,10 +54,9 @@ function buildNavItems(role: string) {
 
   return [
     { label: 'Dashboard', to: '/', icon: <DashboardIcon /> },
-    { label: 'Manage Users', to: '/manage-users', icon: <SchoolIcon /> },
     { label: 'Graduate Management', to: '/graduates', icon: <SchoolIcon /> },
     { label: 'Delinquent Graduates', to: '/graduates/delinquent', icon: <WarningIcon /> },
-    { label: 'Registrar Dashboard', to: '/registrar', icon: <AccountBalanceIcon /> },
+    { label: 'Registrar Clearance', to: '/registrar', icon: <AccountBalanceIcon /> },
     { label: 'Department Dashboard', to: '/department', icon: <ApartmentIcon /> },
     { label: 'Cost Configuration', to: '/cost-config', icon: <ReceiptLongIcon /> },
     { label: 'Payment Review', to: '/payment-review', icon: <ReceiptLongIcon /> },
