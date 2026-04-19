@@ -26,6 +26,7 @@ router.get('/students', async (req, res) => {
       'student_id',
       'student_number',
       'full_name',
+      'email',
       'department',
       'campus',
       'enrollment_status',
@@ -40,6 +41,7 @@ router.get('/students', async (req, res) => {
     }
 
     const fullNameExpr = studentColumns.has('full_name') ? 's.full_name' : "''::text";
+    const emailExpr = studentColumns.has('email') ? 's.email' : "''::text";
     const departmentExpr = studentColumns.has('department') ? 's.department' : "''::text";
     const campusExpr = studentColumns.has('campus') ? 's.campus' : "'Main Campus'::text";
     const enrollmentStatusExpr = studentColumns.has('enrollment_status') ? 's.enrollment_status' : "'ACTIVE'::text";
@@ -60,6 +62,7 @@ router.get('/students', async (req, res) => {
          s.student_id,
          s.student_number,
          ${fullNameExpr} AS full_name,
+         ${emailExpr} AS email,
          ${departmentExpr} AS department,
          ${campusExpr} AS campus,
          ${enrollmentStatusExpr} AS enrollment_status,
@@ -76,6 +79,51 @@ router.get('/students', async (req, res) => {
   } catch (error) {
     console.error('Registrar students list error:', error);
     res.status(500).json({ error: 'Failed to load registrar students' });
+  }
+});
+
+router.put('/students/:id/clearance', async (req, res) => {
+  try {
+    const studentId = Number(req.params.id);
+    const clearanceStatus = String(req.body?.clearance_status || '').trim().toUpperCase();
+
+    if (!Number.isFinite(studentId) || studentId <= 0) {
+      return res.status(400).json({ error: 'Invalid student id' });
+    }
+
+    if (!['PENDING', 'CLEARED', 'WAIVED'].includes(clearanceStatus)) {
+      return res.status(400).json({ error: 'clearance_status must be one of: pending, cleared, waived' });
+    }
+
+    const studentColumns = await getAvailableColumns('students', ['clearance_status', 'updated_at']);
+    if (!studentColumns.has('clearance_status')) {
+      return res.status(400).json({ error: 'students.clearance_status column is missing' });
+    }
+
+    const updateSql = studentColumns.has('updated_at')
+      ? `UPDATE public.students
+         SET clearance_status = $2, updated_at = NOW()
+         WHERE student_id = $1
+         RETURNING student_id, clearance_status, updated_at`
+      : `UPDATE public.students
+         SET clearance_status = $2
+         WHERE student_id = $1
+         RETURNING student_id, clearance_status, NOW()::timestamp AS updated_at`;
+
+    const result = await pool.query(updateSql, [studentId, clearanceStatus]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    res.json({
+      success: true,
+      message: 'Clearance updated',
+      student: result.rows[0],
+    });
+  } catch (error) {
+    console.error('Registrar clearance update error:', error);
+    res.status(500).json({ error: 'Failed to update clearance status' });
   }
 });
 
