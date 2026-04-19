@@ -6,9 +6,13 @@ import {
   Typography,
   Alert,
   Snackbar,
+  LinearProgress,
 } from '@mui/material';
 import SavingsOutlinedIcon from '@mui/icons-material/SavingsOutlined';
 import ShowChartOutlinedIcon from '@mui/icons-material/ShowChartOutlined';
+import DonutLargeOutlinedIcon from '@mui/icons-material/DonutLargeOutlined';
+import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
+import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import api from '../services/api';
 
 interface DebtMetrics {
@@ -130,6 +134,104 @@ export default function DebtOverviewDashboard() {
               <Box sx={{ width: 56, height: 56, borderRadius: 2.5, bgcolor: '#edf2ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <ShowChartOutlinedIcon sx={{ color: '#2f67dc' }} />
               </Box>
+            </Box>
+          </Paper>
+
+          <Paper sx={{ p: 3, borderRadius: 3, border: '1px solid #e6ebf2', bgcolor: '#fff' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.25 }}>
+              <Typography variant="body1" color="#4f5b70" sx={{ fontWeight: 700 }}>
+                Portfolio Health
+              </Typography>
+              <DonutLargeOutlinedIcon sx={{ color: '#2f67dc' }} />
+            </Box>
+            {(() => {
+              const totalPortfolio = metrics.totalCollections + metrics.outstandingDebt;
+              const recoveredRate = totalPortfolio > 0 ? (metrics.totalCollections / totalPortfolio) * 100 : 0;
+              return (
+                <>
+                  <Typography variant="h5" sx={{ fontWeight: 800, color: '#1c2333', mb: 1 }}>
+                    {recoveredRate.toFixed(1)}% recovered
+                  </Typography>
+                  <LinearProgress
+                    variant="determinate"
+                    value={Math.max(0, Math.min(100, recoveredRate))}
+                    sx={{
+                      height: 10,
+                      borderRadius: 999,
+                      backgroundColor: '#edf2ff',
+                      '& .MuiLinearProgress-bar': { backgroundColor: '#2f67dc' },
+                    }}
+                  />
+                  <Typography variant="body2" sx={{ mt: 1, color: '#8390a5' }}>
+                    Recovered {formatETB(metrics.totalCollections)} out of {formatETB(totalPortfolio)} total portfolio.
+                  </Typography>
+                </>
+              );
+            })()}
+          </Paper>
+
+          <Paper sx={{ p: 3, borderRadius: 3, border: '1px solid #e6ebf2', bgcolor: '#fff' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.25 }}>
+              <Typography variant="body1" color="#4f5b70" sx={{ fontWeight: 700 }}>
+                Debt vs Collection
+              </Typography>
+              <InsightsOutlinedIcon sx={{ color: '#2f67dc' }} />
+            </Box>
+            <Box sx={{ height: 220 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={[
+                    { name: 'Collections', value: metrics.totalCollections, color: '#2f67dc' },
+                    { name: 'Outstanding', value: metrics.outstandingDebt, color: '#f59e0b' },
+                  ]}
+                >
+                  <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip formatter={(value: number) => formatETB(Number(value))} />
+                  <Bar dataKey="value" radius={[8, 8, 0, 0]}>
+                    {[
+                      { color: '#2f67dc' },
+                      { color: '#f59e0b' },
+                    ].map((entry, index) => (
+                      <Cell key={index} fill={entry.color} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </Box>
+          </Paper>
+
+          <Paper sx={{ p: 3, borderRadius: 3, border: '1px solid #e6ebf2', bgcolor: '#fff' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.25 }}>
+              <Typography variant="body1" color="#4f5b70" sx={{ fontWeight: 700 }}>
+                Allocation Split
+              </Typography>
+              <DonutLargeOutlinedIcon sx={{ color: '#2f67dc' }} />
+            </Box>
+            <Box sx={{ height: 220 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={[
+                      { name: 'Collected', value: Math.max(metrics.totalCollections, 0), color: '#16a34a' },
+                      { name: 'Outstanding', value: Math.max(metrics.outstandingDebt, 0), color: '#f97316' },
+                    ]}
+                    dataKey="value"
+                    nameKey="name"
+                    innerRadius={55}
+                    outerRadius={84}
+                    paddingAngle={3}
+                  >
+                    {[
+                      { color: '#16a34a' },
+                      { color: '#f97316' },
+                    ].map((entry, index) => (
+                      <Cell key={index} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value: number) => formatETB(Number(value))} />
+                </PieChart>
+              </ResponsiveContainer>
             </Box>
           </Paper>
         </Box>

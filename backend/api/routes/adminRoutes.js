@@ -396,6 +396,96 @@ router.get('/graduates/delinquent', async (req, res) => {
   }
 });
 
+// GET /api/admin/erca/debtors — export debtor list for ERCA
+router.get('/erca/debtors', async (req, res) => {
+  try {
+    const studentCols = await getAvailableColumns('students', [
+      'full_name',
+      'student_number',
+      'email',
+      'phone',
+      'tin',
+      'department',
+      'campus',
+      'graduation_date',
+      'repayment_start_date',
+      'clearance_status',
+    ]);
+
+    const debtCols = await getAvailableColumns('debt_records', ['student_id', 'current_balance']);
+
+    const hasStudentFullName = studentCols.has('full_name');
+    const hasStudentEmail = studentCols.has('email');
+    const hasStudentPhone = studentCols.has('phone');
+    const hasStudentTin = studentCols.has('tin');
+    const hasStudentNumber = studentCols.has('student_number');
+    const hasDepartment = studentCols.has('department');
+    const hasCampus = studentCols.has('campus');
+    const hasGraduationDate = studentCols.has('graduation_date');
+    const hasRepaymentStartDate = studentCols.has('repayment_start_date');
+    const hasClearanceStatus = studentCols.has('clearance_status');
+    const hasCurrentBalance = debtCols.has('current_balance');
+
+    if (!hasStudentNumber || !hasGraduationDate || !hasRepaymentStartDate || !hasClearanceStatus || !hasCurrentBalance) {
+      return res.status(400).json({
+        error: 'students/debt_records schema is missing ERCA export columns. Run graduate and debt migrations first.',
+      });
+    }
+
+    const fullNameExpr = hasStudentFullName ? 's.full_name' : 'u.full_name';
+    const emailExpr = hasStudentEmail ? 's.email' : 'u.email';
+    const phoneExpr = hasStudentPhone ? 's.phone' : "''::text";
+    const tinExpr = hasStudentTin ? 'COALESCE(s.tin, \''\')' : "''::text";
+    const departmentExpr = hasDepartment ? 's.department' : "''::text";
+    const campusExpr = hasCampus ? 's.campus' : "'Main Campus'::text";
+    const needsUsersJoin = !hasStudentFullName || !hasStudentEmail;
+
+    const result = await pool.query(
+      `SELECT
+         ${fullNameExpr} AS full_name,
+         s.student_number,
+         ${emailExpr} AS email,
+         ${phoneExpr} AS phone,
+         ${tinExpr} AS tin,
+         SUM(dr.current_balance) AS total_debt,
+         ${departmentExpr} AS program,
+         ${campusExpr} AS campus,
+         s.graduation_date,
+         s.repayment_start_date
+       FROM public.students s
+       JOIN public.debt_records dr ON s.student_id = dr.student_id
+       ${needsUsersJoin ? 'LEFT JOIN public.users u ON s.user_id = u.user_id' : ''}
+       WHERE UPPER(COALESCE(s.clearance_status, '')) = 'PENDING'
+         AND dr.current_balance > 0
+         AND s.graduation_date IS NOT NULL
+         AND s.repayment_start_date IS NOT NULL
+         AND s.repayment_start_date <= NOW()
+       GROUP BY
+         s.student_id,
+         s.student_number,
+         ${fullNameExpr},
+         ${emailExpr},
+         ${phoneExpr},
+         ${tinExpr},
+         ${departmentExpr},
+         ${campusExpr},
+         s.graduation_date,
+         s.repayment_start_date
+       ORDER BY s.repayment_start_date ASC, s.student_id ASC`
+    );
+
+    res.json({
+      success: true,
+      ercaDebtors: result.rows,
+      generatedAt: new Date().toISOString(),
+      totalCount: result.rows.length,
+    });
+  } catch (error) {
+    console.error('ERCA debtor list error:', error);
+    res.status(500).json({ error: 'Failed to generate ERCA debtor list' });
+  }
+});
+
 async function getGraduateNotificationTarget(studentId) {
   const result = await pool.query(
     `SELECT s.student_id, s.user_id, s.full_name, s.email, u.firebase_uid

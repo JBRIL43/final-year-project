@@ -10,6 +10,7 @@ import StudentManagement from './components/StudentManagement'
 import CostManagement from './components/CostManagement'
 import GraduateManagement from './components/GraduateManagement'
 import DelinquentGraduates from './components/DelinquentGraduates'
+import ErcaExportDashboard from './components/ErcaExportDashboard'
 
 function AppRoutes() {
   const { loading } = useAuth()
@@ -56,6 +57,7 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
+        <Route path="erca-export" element={<ErcaExportDashboard />} />
         <Route path="payment-review" element={<PaymentReviewQueue />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
