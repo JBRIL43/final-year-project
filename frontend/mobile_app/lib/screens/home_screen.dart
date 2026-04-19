@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:printing/printing.dart';
 import 'payment_screen.dart';
 import '../service/debt_service.dart';
 import 'notifications_screen.dart';
 import '../services/student_statement_service.dart';
+import '../utils/cost_statement_pdf.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -382,6 +384,38 @@ class _HomeScreenState extends State<HomeScreen> {
           Text(
             'Academic Year: ${_costBreakdown!['academicYear'] ?? 'N/A'}',
             style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo),
+          ),
+          const SizedBox(height: 12),
+          ElevatedButton.icon(
+            onPressed: () async {
+              final pdf = generateCostStatementPdf(
+                fullName: '${_costBreakdown!['fullName'] ?? 'Student'}',
+                program: '${_costBreakdown!['program'] ?? 'N/A'}',
+                campus: '${_costBreakdown!['campus'] ?? 'Main Campus'}',
+                academicYear: '${_costBreakdown!['academicYear'] ?? 'N/A'}',
+                tuitionFullCost: tuitionFull,
+                tuitionStudentShare: tuitionShare,
+                boardingCost: boarding,
+                foodCostMonthly: foodMonthly,
+                foodCostAnnual: foodAnnual,
+                totalDebt: totalDebt,
+              );
+
+              try {
+                await Printing.sharePdf(
+                  bytes: await pdf.save(),
+                  filename:
+                      'Hawassa_University_Cost_Statement_${DateTime.now().year}.pdf',
+                );
+              } catch (e) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Failed to generate PDF: $e')),
+                );
+              }
+            },
+            icon: const Icon(Icons.picture_as_pdf),
+            label: const Text('Download Statement'),
           ),
           const SizedBox(height: 12),
           Card(
