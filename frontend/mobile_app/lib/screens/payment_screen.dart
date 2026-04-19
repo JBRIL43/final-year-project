@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../services/api_config.dart';
@@ -25,13 +26,31 @@ class _PaymentScreenState extends State<PaymentScreen> {
     setState(() => _isLoading = true);
     try {
       Exception? lastError;
+      final user = FirebaseAuth.instance.currentUser;
+      final idToken = await user?.getIdToken(true);
+
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+      };
+
+      if (idToken != null && idToken.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $idToken';
+      }
+
+      if (user?.uid != null && user!.uid.isNotEmpty) {
+        headers['x-firebase-uid'] = user.uid;
+      }
+
+      if (user?.email != null && user!.email!.isNotEmpty) {
+        headers['x-user-email'] = user.email!;
+      }
 
       for (final baseUrl in ApiConfig.candidateBaseUrls()) {
         try {
           final response = await http
               .post(
                 Uri.parse('$baseUrl/api/payment/record'),
-                headers: {'Content-Type': 'application/json'},
+                headers: headers,
                 body: jsonEncode({
                   'amount': double.parse(_amountController.text),
                   'paymentMethod': _selectedMethod,
