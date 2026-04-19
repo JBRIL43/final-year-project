@@ -275,6 +275,139 @@ router.get('/students', async (req, res) => {
   }
 });
 
+// GET /api/admin/graduates — fetch students for graduate management
+router.get('/graduates', async (req, res) => {
+  try {
+    const studentCols = await getAvailableColumns('students', [
+      'full_name',
+      'email',
+      'department',
+      'campus',
+      'graduation_date',
+      'repayment_start_date',
+      'clearance_status',
+    ]);
+
+    const hasStudentFullName = studentCols.has('full_name');
+    const hasStudentEmail = studentCols.has('email');
+    const hasDepartment = studentCols.has('department');
+    const hasCampus = studentCols.has('campus');
+    const hasGraduationDate = studentCols.has('graduation_date');
+    const hasRepaymentStartDate = studentCols.has('repayment_start_date');
+    const hasClearanceStatus = studentCols.has('clearance_status');
+
+    if (!hasGraduationDate || !hasRepaymentStartDate || !hasClearanceStatus) {
+      return res.status(400).json({
+        error:
+          'students schema is missing graduate tracking columns. Run the graduate migration first.',
+      });
+    }
+
+    const fullNameExpr = hasStudentFullName ? 's.full_name' : 'u.full_name';
+    const emailExpr = hasStudentEmail ? 's.email' : 'u.email';
+    const departmentExpr = hasDepartment ? 's.department' : "''::text";
+    const campusExpr = hasCampus ? 's.campus' : "'Main Campus'::text";
+    const needsUsersJoin = !hasStudentFullName || !hasStudentEmail;
+
+    const result = await pool.query(
+      `SELECT
+         s.student_id,
+         ${fullNameExpr} AS full_name,
+         ${emailExpr} AS email,
+         ${departmentExpr} AS department,
+         ${campusExpr} AS campus,
+         s.graduation_date,
+         s.repayment_start_date,
+         s.clearance_status
+       FROM public.students s
+       ${needsUsersJoin ? 'LEFT JOIN public.users u ON s.user_id = u.user_id' : ''}
+       ORDER BY s.graduation_date DESC NULLS LAST, full_name`)
+    ;
+
+    res.json({ success: true, graduates: result.rows });
+  } catch (error) {
+    console.error('Fetch graduates error:', error);
+    res.status(500).json({ error: 'Failed to load graduates' });
+  }
+});
+
+// PUT /api/admin/graduates/:id — update graduate fields
+router.put('/graduates/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { graduation_date, repayment_start_date, clearance_status } = req.body;
+
+    const studentCols = await getAvailableColumns('students', [
+      'graduation_date',
+      'repayment_start_date',
+      'clearance_status',
+      'updated_at',
+    ]);
+
+    const hasGraduationDate = studentCols.has('graduation_date');
+    const hasRepaymentStartDate = studentCols.has('repayment_start_date');
+    const hasClearanceStatus = studentCols.has('clearance_status');
+    const hasUpdatedAt = studentCols.has('updated_at');
+
+    if (!hasGraduationDate || !hasRepaymentStartDate || !hasClearanceStatus) {
+      return res.status(400).json({
+        error:
+          'students schema is missing graduate tracking columns. Run the graduate migration first.',
+      });
+    }
+
+    const fields = [];
+    const values = [];
+    let paramIndex = 1;
+
+    if (graduation_date !== undefined) {
+      fields.push(`graduation_date = $${paramIndex}`);
+      values.push(graduation_date || null);
+      paramIndex += 1;
+    }
+
+    if (repayment_start_date !== undefined) {
+      fields.push(`repayment_start_date = $${paramIndex}`);
+      values.push(repayment_start_date || null);
+      paramIndex += 1;
+    }
+
+    if (clearance_status !== undefined) {
+      fields.push(`clearance_status = $${paramIndex}`);
+      values.push(clearance_status);
+      paramIndex += 1;
+    }
+
+    if (fields.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
+    if (hasUpdatedAt) {
+      fields.push('updated_at = NOW()');
+    }
+
+    values.push(Number(id));
+
+    const query = `
+      UPDATE public.students
+      SET ${fields.join(', ')}
+      WHERE student_id = $${paramIndex}
+      RETURNING student_id
+    `;
+
+    const result = await pool.query(query, values);
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    res.json({ success: true, message: 'Graduate record updated' });
+  } catch (error) {
+    console.error('Update graduate error:', error);
+    res.status(500).json({ error: 'Failed to update graduate record' });
+  }
+});
+
 // POST /api/admin/students — create new student + auto-create contract
 router.post('/students', async (req, res) => {
   let client;
