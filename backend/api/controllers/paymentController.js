@@ -90,6 +90,71 @@ async function resolveStudentFromRequest(req) {
     );
 
     if (fallbackStudent.rows.length > 0) {
+
+  if (email) {
+    const existingUserByEmail = await pool.query(
+      `SELECT user_id, firebase_uid, full_name
+       FROM public.users
+       WHERE LOWER(TRIM(email)) = LOWER(TRIM($1))
+       LIMIT 1`,
+      [email]
+    );
+
+    if (existingUserByEmail.rows.length > 0) {
+      const userRow = existingUserByEmail.rows[0];
+      const repairedFirebaseUid = firebaseUid || userRow.firebase_uid || `local-${Date.now()}`;
+
+      const repairedStudent = await pool.query(
+        `SELECT student_id, user_id
+         FROM public.students
+         WHERE user_id = $1
+         LIMIT 1`,
+        [userRow.user_id]
+      );
+
+      if (repairedStudent.rows.length > 0) {
+        return {
+          studentId: Number(repairedStudent.rows[0].student_id),
+          userId: Number(userRow.user_id),
+        };
+      }
+
+      if (studentEmailColumn.rows.length > 0) {
+        const studentByEmail = await pool.query(
+          `SELECT student_id, user_id
+           FROM public.students
+           WHERE LOWER(TRIM(email)) = LOWER(TRIM($1))
+           ORDER BY student_id DESC
+           LIMIT 1`,
+          [email]
+        );
+
+        if (studentByEmail.rows.length > 0) {
+          const studentRow = studentByEmail.rows[0];
+          await pool.query(
+            `UPDATE public.users
+             SET firebase_uid = COALESCE($1, firebase_uid)
+             WHERE user_id = $2`,
+            [repairedFirebaseUid, userRow.user_id]
+          );
+
+          if (!studentRow.user_id) {
+            await pool.query(
+              `UPDATE public.students
+               SET user_id = $1
+               WHERE student_id = $2`,
+              [userRow.user_id, studentRow.student_id]
+            );
+          }
+
+          return {
+            studentId: Number(studentRow.student_id),
+            userId: Number(userRow.user_id),
+          };
+        }
+      }
+    }
+  }
       return {
         studentId: Number(fallbackStudent.rows[0].student_id),
         userId: Number(fallbackStudent.rows[0].user_id),
