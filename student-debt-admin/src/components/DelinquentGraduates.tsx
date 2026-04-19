@@ -30,6 +30,7 @@ interface DelinquentGraduate {
 export default function DelinquentGraduates() {
   const [graduates, setGraduates] = useState<DelinquentGraduate[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingReminder, setLoadingReminder] = useState<number | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
   const [snackbar, setSnackbar] = useState<{
     open: boolean;
@@ -102,6 +103,32 @@ export default function DelinquentGraduates() {
     }
   };
 
+  const sendReminder = async (graduate: DelinquentGraduate) => {
+    if (loadingReminder !== null) {
+      return;
+    }
+
+    setLoadingReminder(graduate.student_id);
+
+    try {
+      await api.post(`/api/admin/graduates/${graduate.student_id}/remind`, { method: 'email' });
+      setSnackbar({
+        open: true,
+        message: `✅ Reminder sent to ${graduate.full_name}`,
+        severity: 'success',
+      });
+    } catch (err: any) {
+      console.error('Reminder error:', err);
+      setSnackbar({
+        open: true,
+        message: err.response?.data?.error || '❌ Failed to send reminder',
+        severity: 'error',
+      });
+    } finally {
+      setLoadingReminder(null);
+    }
+  };
+
   return (
     <Box sx={{ p: 3 }}>
       <Typography variant="h4" gutterBottom>
@@ -150,11 +177,11 @@ export default function DelinquentGraduates() {
                       <Button
                         size="small"
                         variant="outlined"
-                        disabled={actionLoadingId === g.student_id}
-                        onClick={() => runAction(g.student_id, 'remind')}
+                        disabled={loadingReminder === g.student_id}
+                        onClick={() => sendReminder(g)}
                         sx={{ mr: 1 }}
                       >
-                        Remind
+                        {loadingReminder === g.student_id ? 'Sending...' : 'Remind'}
                       </Button>
                       <Button
                         size="small"
