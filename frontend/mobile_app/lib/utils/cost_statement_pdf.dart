@@ -48,7 +48,10 @@ pw.Document generateCostStatementPdf({
               children: [
                 pw.Text(
                   'HAWASSA UNIVERSITY',
-                  style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
+                  style: pw.TextStyle(
+                    fontSize: 20,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
                 ),
                 pw.Text(
                   'Cost-Sharing Statement',
@@ -103,92 +106,110 @@ pw.Document generateCostStatementPdf({
                   ),
                 ],
               ),
-              pw.TableRow(children: [
-                pw.Padding(
-                  padding: const pw.EdgeInsets.all(6),
-                  child: pw.Text('Full Tuition Cost'),
-                ),
-                pw.Padding(
-                  padding: const pw.EdgeInsets.all(6),
-                  child: pw.Text(
-                    tuitionFullCost.toStringAsFixed(2),
-                    textAlign: pw.TextAlign.right,
+              pw.TableRow(
+                children: [
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.all(6),
+                    child: pw.Text('Full Tuition Cost'),
                   ),
-                ),
-              ]),
-              pw.TableRow(children: [
-                pw.Padding(
-                  padding: const pw.EdgeInsets.all(6),
-                  child: pw.Text(
-                    'Your Share (15%)',
-                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.all(6),
+                    child: pw.Text(
+                      tuitionFullCost.toStringAsFixed(2),
+                      textAlign: pw.TextAlign.right,
+                    ),
                   ),
-                ),
-                pw.Padding(
-                  padding: const pw.EdgeInsets.all(6),
-                  child: pw.Text(
-                    tuitionStudentShare.toStringAsFixed(2),
-                    textAlign: pw.TextAlign.right,
-                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                ],
+              ),
+              pw.TableRow(
+                children: [
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.all(6),
+                    child: pw.Text(
+                      'Your Share (15%)',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                    ),
                   ),
-                ),
-              ]),
-              pw.TableRow(children: [
-                pw.Padding(
-                  padding: const pw.EdgeInsets.all(6),
-                  child: pw.Text('Boarding (Full)'),
-                ),
-                pw.Padding(
-                  padding: const pw.EdgeInsets.all(6),
-                  child: pw.Text(
-                    boardingCost.toStringAsFixed(2),
-                    textAlign: pw.TextAlign.right,
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.all(6),
+                    child: pw.Text(
+                      tuitionStudentShare.toStringAsFixed(2),
+                      textAlign: pw.TextAlign.right,
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                    ),
                   ),
-                ),
-              ]),
-              pw.TableRow(children: [
-                pw.Padding(
-                  padding: const pw.EdgeInsets.all(6),
-                  child: pw.Text('Food (Monthly)'),
-                ),
-                pw.Padding(
-                  padding: const pw.EdgeInsets.all(6),
-                  child: pw.Text(
-                    foodCostMonthly.toStringAsFixed(2),
-                    textAlign: pw.TextAlign.right,
+                ],
+              ),
+              pw.TableRow(
+                children: [
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.all(6),
+                    child: pw.Text('Boarding (Full)'),
                   ),
-                ),
-              ]),
-              pw.TableRow(children: [
-                pw.Padding(
-                  padding: const pw.EdgeInsets.all(6),
-                  child: pw.Text('Food (Annual - 10 months)'),
-                ),
-                pw.Padding(
-                  padding: const pw.EdgeInsets.all(6),
-                  child: pw.Text(
-                    foodCostAnnual.toStringAsFixed(2),
-                    textAlign: pw.TextAlign.right,
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.all(6),
+                    child: pw.Text(
+                      boardingCost.toStringAsFixed(2),
+                      textAlign: pw.TextAlign.right,
+                    ),
                   ),
-                ),
-              ]),
-              pw.TableRow(children: [
-                pw.Padding(
-                  padding: const pw.EdgeInsets.all(6),
-                  child: pw.Text(
-                    'TOTAL DEBT',
-                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14),
+                ],
+              ),
+              pw.TableRow(
+                children: [
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.all(6),
+                    child: pw.Text('Food (Monthly)'),
                   ),
-                ),
-                pw.Padding(
-                  padding: const pw.EdgeInsets.all(6),
-                  child: pw.Text(
-                    totalDebt.toStringAsFixed(2),
-                    textAlign: pw.TextAlign.right,
-                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14),
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.all(6),
+                    child: pw.Text(
+                      foodCostMonthly.toStringAsFixed(2),
+                      textAlign: pw.TextAlign.right,
+                    ),
                   ),
-                ),
-              ]),
+                ],
+              ),
+              pw.TableRow(
+                children: [
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.all(6),
+                    child: pw.Text('Food (Annual - 10 months)'),
+                  ),
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.all(6),
+                    child: pw.Text(
+                      foodCostAnnual.toStringAsFixed(2),
+                      textAlign: pw.TextAlign.right,
+                    ),
+                  ),
+                ],
+              ),
+              pw.TableRow(
+                children: [
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.all(6),
+                    child: pw.Text(
+                      'TOTAL DEBT',
+                      style: pw.TextStyle(
+                        fontWeight: pw.FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.all(6),
+                    child: pw.Text(
+                      totalDebt.toStringAsFixed(2),
+                      textAlign: pw.TextAlign.right,
+                      style: pw.TextStyle(
+                        fontWeight: pw.FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
           pw.SizedBox(height: 30),

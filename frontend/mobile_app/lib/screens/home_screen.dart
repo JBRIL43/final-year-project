@@ -34,10 +34,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadAllStudentData() async {
-    await Future.wait([
-      _loadDebtBalance(),
-      _loadStudentStatement(),
-    ]);
+    await Future.wait([_loadDebtBalance(), _loadStudentStatement()]);
   }
 
   Future<void> _loadDebtBalance() async {
@@ -119,11 +116,14 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     final dashboardHistory =
-      (_debtData!['paymentHistory'] as List<dynamic>? ?? []);
-    final currentBalance = ((_debtData!['currentBalance'] as num?) ?? 0).toDouble();
+        (_debtData!['paymentHistory'] as List<dynamic>? ?? []);
+    final currentBalance = ((_debtData!['currentBalance'] as num?) ?? 0)
+        .toDouble();
     final totalPaid = ((_debtData!['totalPaid'] as num?) ?? 0).toDouble();
     final totalPortfolio = currentBalance + totalPaid;
-    final paidRatio = totalPortfolio <= 0 ? 0.0 : (totalPaid / totalPortfolio).clamp(0.0, 1.0);
+    final paidRatio = totalPortfolio <= 0
+        ? 0.0
+        : (totalPaid / totalPortfolio).clamp(0.0, 1.0);
     final hasPending = dashboardHistory.any(
       (item) =>
           ((item as Map<String, dynamic>)['status'] ?? '')
@@ -142,7 +142,11 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Colors.indigo[700]!, Colors.blue[900]!, Colors.teal[700]!],
+                  colors: [
+                    Colors.indigo[700]!,
+                    Colors.blue[900]!,
+                    Colors.teal[700]!,
+                  ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -187,13 +191,18 @@ class _HomeScreenState extends State<HomeScreen> {
                         value: paidRatio,
                         minHeight: 9,
                         backgroundColor: Colors.white24,
-                        valueColor: const AlwaysStoppedAnimation<Color>(Colors.lightGreenAccent),
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          Colors.lightGreenAccent,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 6),
                     Text(
                       'Repayment progress ${(paidRatio * 100).toStringAsFixed(1)}%',
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                      ),
                     ),
                   ],
                 ),
@@ -218,9 +227,15 @@ class _HomeScreenState extends State<HomeScreen> {
                       children: [
                         Icon(Icons.insights_outlined, color: Colors.indigo),
                         SizedBox(height: 6),
-                        Text('Health', style: TextStyle(fontWeight: FontWeight.w700)),
+                        Text(
+                          'Health',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
                         SizedBox(height: 2),
-                        Text('Debt portfolio tracked live', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                        Text(
+                          'Debt portfolio tracked live',
+                          style: TextStyle(fontSize: 12, color: Colors.black54),
+                        ),
                       ],
                     ),
                   ),
@@ -232,19 +247,36 @@ class _HomeScreenState extends State<HomeScreen> {
                   color: hasPending ? Colors.amber[50] : Colors.green[50],
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
-                    side: BorderSide(color: hasPending ? Colors.amber.shade200 : Colors.green.shade200),
+                    side: BorderSide(
+                      color: hasPending
+                          ? Colors.amber.shade200
+                          : Colors.green.shade200,
+                    ),
                   ),
                   child: Padding(
                     padding: const EdgeInsets.all(14),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(hasPending ? Icons.hourglass_bottom : Icons.verified, color: hasPending ? Colors.amber[900] : Colors.green[800]),
+                        Icon(
+                          hasPending ? Icons.hourglass_bottom : Icons.verified,
+                          color: hasPending
+                              ? Colors.amber[900]
+                              : Colors.green[800],
+                        ),
                         const SizedBox(height: 6),
-                        Text(hasPending ? 'Pending Review' : 'Up-to-date', style: const TextStyle(fontWeight: FontWeight.w700)),
                         Text(
-                          hasPending ? 'A payment is waiting for finance confirmation' : 'No payments waiting for review',
-                          style: const TextStyle(fontSize: 12, color: Colors.black54),
+                          hasPending ? 'Pending Review' : 'Up-to-date',
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        Text(
+                          hasPending
+                              ? 'A payment is waiting for finance confirmation'
+                              : 'No payments waiting for review',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.black54,
+                          ),
                         ),
                       ],
                     ),
@@ -258,7 +290,9 @@ class _HomeScreenState extends State<HomeScreen> {
             child: ListTile(
               leading: const Icon(Icons.request_quote, color: Colors.indigo),
               title: const Text('Cost-Sharing Statement'),
-              subtitle: const Text('See full tuition, boarding, food, and payment breakdown'),
+              subtitle: const Text(
+                'See full tuition, boarding, food, and payment breakdown',
+              ),
               trailing: FilledButton(
                 onPressed: () => setState(() => _selectedIndex = 1),
                 child: const Text('Open'),
@@ -304,18 +338,29 @@ class _HomeScreenState extends State<HomeScreen> {
           else
             ...dashboardHistory.take(3).map((item) {
               final payment = item as Map<String, dynamic>;
-              final status = (payment['status'] ?? 'UNKNOWN').toString().toUpperCase();
+              final status = (payment['status'] ?? 'UNKNOWN')
+                  .toString()
+                  .toUpperCase();
               final amount = ((payment['amount'] as num?) ?? 0).toDouble();
               return Card(
                 child: ListTile(
                   leading: CircleAvatar(
-                    backgroundColor: status == 'PENDING' ? Colors.amber[100] : Colors.blue[100],
+                    backgroundColor: status == 'PENDING'
+                        ? Colors.amber[100]
+                        : Colors.blue[100],
                     child: Icon(
-                      status == 'PENDING' ? Icons.pending_actions : Icons.check_circle_outline,
-                      color: status == 'PENDING' ? Colors.amber[800] : Colors.blue[800],
+                      status == 'PENDING'
+                          ? Icons.pending_actions
+                          : Icons.check_circle_outline,
+                      color: status == 'PENDING'
+                          ? Colors.amber[800]
+                          : Colors.blue[800],
                     ),
                   ),
-                  title: Text(formatter.format(amount), style: const TextStyle(fontWeight: FontWeight.w700)),
+                  title: Text(
+                    formatter.format(amount),
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
                   subtitle: Text('Status: $status'),
                 ),
               );
@@ -346,8 +391,9 @@ class _HomeScreenState extends State<HomeScreen> {
           Text(
             value,
             style: TextStyle(
-              fontWeight:
-                  isHighlighted || isTotal ? FontWeight.bold : FontWeight.normal,
+              fontWeight: isHighlighted || isTotal
+                  ? FontWeight.bold
+                  : FontWeight.normal,
               color: isTotal ? Colors.blue[800] : null,
               fontSize: isTotal ? 16 : 14,
             ),
@@ -364,7 +410,9 @@ class _HomeScreenState extends State<HomeScreen> {
     Color color,
     NumberFormat formatter,
   ) {
-    final ratio = total <= 0 ? 0.0 : (amount / total).clamp(0.0, 1.0).toDouble();
+    final ratio = total <= 0
+        ? 0.0
+        : (amount / total).clamp(0.0, 1.0).toDouble();
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Column(
@@ -392,9 +440,14 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildPaymentItem(Map<String, dynamic> payment, NumberFormat formatter) {
-    final method = payment['paymentMethod'] ?? payment['payment_method'] ?? 'UNKNOWN';
-    final transactionRef = payment['transactionRef'] ?? payment['transaction_ref'] ?? 'N/A';
+  Widget _buildPaymentItem(
+    Map<String, dynamic> payment,
+    NumberFormat formatter,
+  ) {
+    final method =
+        payment['paymentMethod'] ?? payment['payment_method'] ?? 'UNKNOWN';
+    final transactionRef =
+        payment['transactionRef'] ?? payment['transaction_ref'] ?? 'N/A';
     final paymentDateValue = payment['paymentDate'] ?? payment['payment_date'];
     final paymentDate = paymentDateValue != null
         ? DateTime.tryParse(paymentDateValue.toString())
@@ -409,7 +462,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return ListTile(
       leading: CircleAvatar(
-        backgroundColor: method == 'CHAPA' ? Colors.blue[100] : Colors.orange[100],
+        backgroundColor: method == 'CHAPA'
+            ? Colors.blue[100]
+            : Colors.orange[100],
         child: Icon(
           method == 'CHAPA' ? Icons.payments : Icons.receipt,
           color: method == 'CHAPA' ? Colors.blue[800] : Colors.orange[800],
@@ -425,8 +480,8 @@ class _HomeScreenState extends State<HomeScreen> {
           color: isPending
               ? Colors.amber[50]
               : isApproved
-                  ? Colors.green[50]
-                  : Colors.red[50],
+              ? Colors.green[50]
+              : Colors.red[50],
           borderRadius: BorderRadius.circular(12),
         ),
         child: Text(
@@ -435,8 +490,8 @@ class _HomeScreenState extends State<HomeScreen> {
             color: isPending
                 ? Colors.amber[900]
                 : isApproved
-                    ? Colors.green[800]
-                    : Colors.red[800],
+                ? Colors.green[800]
+                : Colors.red[800],
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -474,11 +529,15 @@ class _HomeScreenState extends State<HomeScreen> {
       return const Center(child: Text('No cost statement available'));
     }
 
-    final tuitionFull = (_costBreakdown!['tuitionFullCost'] as num?)?.toDouble() ?? 0;
-    final tuitionShare = (_costBreakdown!['tuitionStudentShare'] as num?)?.toDouble() ?? 0;
+    final tuitionFull =
+        (_costBreakdown!['tuitionFullCost'] as num?)?.toDouble() ?? 0;
+    final tuitionShare =
+        (_costBreakdown!['tuitionStudentShare'] as num?)?.toDouble() ?? 0;
     final boarding = (_costBreakdown!['boardingCost'] as num?)?.toDouble() ?? 0;
-    final foodMonthly = (_costBreakdown!['foodCostMonthly'] as num?)?.toDouble() ?? 0;
-    final foodAnnual = (_costBreakdown!['foodCostAnnual'] as num?)?.toDouble() ?? 0;
+    final foodMonthly =
+        (_costBreakdown!['foodCostMonthly'] as num?)?.toDouble() ?? 0;
+    final foodAnnual =
+        (_costBreakdown!['foodCostAnnual'] as num?)?.toDouble() ?? 0;
     final totalDebt = (_costBreakdown!['totalDebt'] as num?)?.toDouble() ?? 0;
 
     return RefreshIndicator(
@@ -493,7 +552,10 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 4),
           Text(
             'Academic Year: ${_costBreakdown!['academicYear'] ?? 'N/A'}',
-            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo),
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Colors.indigo,
+            ),
           ),
           const SizedBox(height: 12),
           ElevatedButton.icon(
@@ -534,21 +596,45 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildCostRow('Program', '${_costBreakdown!['program'] ?? 'N/A'}'),
-                  _buildCostRow('Campus', '${_costBreakdown!['campus'] ?? 'Main Campus'}'),
+                  _buildCostRow(
+                    'Program',
+                    '${_costBreakdown!['program'] ?? 'N/A'}',
+                  ),
+                  _buildCostRow(
+                    'Campus',
+                    '${_costBreakdown!['campus'] ?? 'Main Campus'}',
+                  ),
                   const Divider(),
-                  _buildCostRow('Full Tuition Cost', formatter.format(tuitionFull)),
-                  _buildCostRow('Your Share (15%)', formatter.format(tuitionShare), isHighlighted: true),
+                  _buildCostRow(
+                    'Full Tuition Cost',
+                    formatter.format(tuitionFull),
+                  ),
+                  _buildCostRow(
+                    'Your Share (15%)',
+                    formatter.format(tuitionShare),
+                    isHighlighted: true,
+                  ),
                   const Divider(),
-                  _buildCostRow('Boarding (Full)', formatter.format(boarding), isHighlighted: true),
-                  _buildCostRow('Food (Monthly)', formatter.format(foodMonthly)),
+                  _buildCostRow(
+                    'Boarding (Full)',
+                    formatter.format(boarding),
+                    isHighlighted: true,
+                  ),
+                  _buildCostRow(
+                    'Food (Monthly)',
+                    formatter.format(foodMonthly),
+                  ),
                   _buildCostRow(
                     'Food (Annual - 10 months)',
                     formatter.format(foodAnnual),
                     isHighlighted: true,
                   ),
                   const Divider(),
-                  _buildCostRow('TOTAL DEBT', formatter.format(totalDebt), isTotal: true),
+                  _buildCostRow(
+                    'TOTAL DEBT',
+                    formatter.format(totalDebt),
+                    isTotal: true,
+                  ),
                 ],
               ),
             ),
@@ -565,9 +651,27 @@ class _HomeScreenState extends State<HomeScreen> {
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 12),
-                  _buildBreakdownBar('Tuition Share', tuitionShare, totalDebt, Colors.blue, formatter),
-                  _buildBreakdownBar('Boarding', boarding, totalDebt, Colors.deepOrange, formatter),
-                  _buildBreakdownBar('Food (Annual)', foodAnnual, totalDebt, Colors.green, formatter),
+                  _buildBreakdownBar(
+                    'Tuition Share',
+                    tuitionShare,
+                    totalDebt,
+                    Colors.blue,
+                    formatter,
+                  ),
+                  _buildBreakdownBar(
+                    'Boarding',
+                    boarding,
+                    totalDebt,
+                    Colors.deepOrange,
+                    formatter,
+                  ),
+                  _buildBreakdownBar(
+                    'Food (Annual)',
+                    foodAnnual,
+                    totalDebt,
+                    Colors.green,
+                    formatter,
+                  ),
                 ],
               ),
             ),
@@ -586,7 +690,9 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             )
           else
-            ..._paymentHistory.map((p) => _buildPaymentItem(p as Map<String, dynamic>, formatter)),
+            ..._paymentHistory.map(
+              (p) => _buildPaymentItem(p as Map<String, dynamic>, formatter),
+            ),
         ],
       ),
     );
@@ -602,14 +708,16 @@ class _HomeScreenState extends State<HomeScreen> {
           _selectedIndex == 0
               ? 'HU Student Debt System'
               : _selectedIndex == 1
-                  ? 'Cost Statement'
-                  : 'Notifications',
+              ? 'Cost Statement'
+              : 'Notifications',
         ),
         actions: [
           if (_selectedIndex == 0 || _selectedIndex == 1)
             IconButton(
               icon: const Icon(Icons.refresh),
-              onPressed: _selectedIndex == 0 ? _loadDebtBalance : _loadStudentStatement,
+              onPressed: _selectedIndex == 0
+                  ? _loadDebtBalance
+                  : _loadStudentStatement,
             ),
         ],
       ),

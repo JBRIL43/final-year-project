@@ -34,14 +34,19 @@ class StudentStatementService {
     for (final baseUrl in ApiConfig.candidateBaseUrls()) {
       try {
         final response = await http
-            .get(Uri.parse('$baseUrl/api/student/cost-breakdown'), headers: headers)
+            .get(
+              Uri.parse('$baseUrl/api/student/cost-breakdown'),
+              headers: headers,
+            )
             .timeout(const Duration(seconds: 8));
 
         if (response.statusCode == 200) {
           return jsonDecode(response.body) as Map<String, dynamic>;
         }
 
-        errors.add('API Error ${response.statusCode} on $baseUrl/cost-breakdown');
+        errors.add(
+          'API Error ${response.statusCode} on $baseUrl/cost-breakdown',
+        );
       } catch (e) {
         errors.add('Request failed on $baseUrl/cost-breakdown: $e');
       }
