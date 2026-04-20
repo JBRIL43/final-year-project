@@ -29,6 +29,7 @@ interface DepartmentStudent {
   campus: string
   credit_load: number | null
   enrollment_status: string
+  withdrawal_requested_at: string | null
   department_clearance: string
 }
 
@@ -65,14 +66,18 @@ export default function DepartmentDashboard() {
 
   const approveWithdrawal = async (studentId: number) => {
     try {
-      await api.post(`/api/department/students/${studentId}/actions`, {
-        action: 'approve_withdrawal',
+      await api.post(`/api/department/students/${studentId}/withdrawal/approve`, {
+        approved: true,
       })
       setSnackbar({ open: true, message: 'Withdrawal approved', severity: 'success' })
       loadStudents()
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to approve withdrawal:', error)
-      setSnackbar({ open: true, message: 'Could not approve withdrawal', severity: 'error' })
+      setSnackbar({
+        open: true,
+        message: error?.response?.data?.error || 'Could not approve withdrawal',
+        severity: 'error',
+      })
     }
   }
 
@@ -150,7 +155,9 @@ export default function DepartmentDashboard() {
                     </TableCell>
                     <TableCell>{student.campus || '-'}</TableCell>
                     <TableCell>{student.credit_load ?? '-'}</TableCell>
-                    <TableCell>{student.enrollment_status || '-'}</TableCell>
+                    <TableCell>
+                      {student.withdrawal_requested_at ? 'Withdrawal Requested' : student.enrollment_status || '-'}
+                    </TableCell>
                     <TableCell>
                       <FormControl size="small" sx={{ minWidth: 140 }}>
                         <InputLabel>Clearance</InputLabel>

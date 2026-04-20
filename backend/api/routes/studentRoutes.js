@@ -277,4 +277,66 @@ router.get('/payments', authenticateToken, async (req, res) => {
   }
 });
 
+// POST /api/student/withdrawal/request — submit student withdrawal request
+router.post('/withdrawal/request', authenticateToken, async (req, res) => {
+  try {
+    const studentId = req.user.student_id;
+
+    const studentColumns = await getAvailableColumns('students', [
+      'withdrawal_requested_at',
+      'department_withdrawal_approved',
+      'registrar_withdrawal_processed',
+      'updated_at',
+    ]);
+
+    if (!studentColumns.has('withdrawal_requested_at')) {
+      return res.status(400).json({
+        error: 'students.withdrawal_requested_at column is missing. Run withdrawal workflow migration first.',
+      });
+    }
+
+    const existing = await pool.query(
+      `SELECT withdrawal_requested_at
+       FROM public.students
+       WHERE student_id = $1
+       LIMIT 1`,
+      [studentId]
+    );
+
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    if (existing.rows[0].withdrawal_requested_at) {
+      return res.status(409).json({ error: 'Withdrawal already requested' });
+    }
+
+    const setParts = ['withdrawal_requested_at = NOW()'];
+    if (studentColumns.has('department_withdrawal_approved')) {
+      setParts.push('department_withdrawal_approved = NULL');
+    }
+    if (studentColumns.has('registrar_withdrawal_processed')) {
+      setParts.push('registrar_withdrawal_processed = FALSE');
+    }
+    if (studentColumns.has('updated_at')) {
+      setParts.push('updated_at = NOW()');
+    }
+
+    await pool.query(
+      `UPDATE public.students
+       SET ${setParts.join(', ')}
+       WHERE student_id = $1`,
+      [studentId]
+    );
+
+    return res.json({
+      success: true,
+      message: 'Withdrawal request submitted successfully. Awaiting department approval.',
+    });
+  } catch (error) {
+    console.error('Withdrawal request error:', error);
+    return res.status(500).json({ error: 'Failed to submit withdrawal request' });
+  }
+});
+
 module.exports = router;

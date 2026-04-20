@@ -29,6 +29,7 @@ router.get('/students', async (req, res) => {
       'department',
       'campus',
       'enrollment_status',
+      'withdrawal_requested_at',
       'credit_load',
       'department_clearance',
       'updated_at',
@@ -50,6 +51,9 @@ router.get('/students', async (req, res) => {
     const emailExpr = studentColumns.has('email') ? 's.email' : "''::text";
     const campusExpr = studentColumns.has('campus') ? 's.campus' : "'Main Campus'::text";
     const enrollmentExpr = studentColumns.has('enrollment_status') ? 's.enrollment_status' : "'ACTIVE'::text";
+    const withdrawalRequestedAtExpr = studentColumns.has('withdrawal_requested_at')
+      ? 's.withdrawal_requested_at'
+      : 'NULL::timestamp';
     const creditLoadExpr = studentColumns.has('credit_load') ? 's.credit_load' : 'NULL::numeric';
     const departmentClearanceExpr = studentColumns.has('department_clearance')
       ? 's.department_clearance'
@@ -66,6 +70,7 @@ router.get('/students', async (req, res) => {
          ${campusExpr} AS campus,
          ${creditLoadExpr} AS credit_load,
          ${enrollmentExpr} AS enrollment_status,
+         ${withdrawalRequestedAtExpr} AS withdrawal_requested_at,
          ${departmentClearanceExpr} AS department_clearance,
          ${updatedAtExpr} AS updated_at
        FROM public.students s
@@ -147,6 +152,78 @@ router.put('/students/:id/clearance', async (req, res) => {
   } catch (error) {
     console.error('Department clearance update error:', error);
     return res.status(500).json({ error: 'Failed to update department clearance' });
+  }
+});
+
+// POST /api/department/students/:id/withdrawal/approve — approve or reject withdrawal request
+router.post('/students/:id/withdrawal/approve', async (req, res) => {
+  try {
+    const studentId = Number(req.params.id);
+    const approved = req.body?.approved;
+
+    if (!Number.isFinite(studentId) || studentId <= 0) {
+      return res.status(400).json({ error: 'Invalid student id' });
+    }
+
+    if (typeof approved !== 'boolean') {
+      return res.status(400).json({ error: 'Missing approval decision' });
+    }
+
+    const studentColumns = await getAvailableColumns('students', [
+      'department',
+      'withdrawal_requested_at',
+      'department_withdrawal_approved',
+      'updated_at',
+    ]);
+
+    if (!studentColumns.has('withdrawal_requested_at') || !studentColumns.has('department_withdrawal_approved')) {
+      return res.status(400).json({
+        error: 'students withdrawal workflow columns are missing. Run withdrawal workflow migration first.',
+      });
+    }
+
+    const department = req.user?.role === 'admin'
+      ? String(req.body?.department || '').trim()
+      : String(req.user?.department || '').trim();
+
+    if (req.user?.role !== 'admin' && !department) {
+      return res.status(400).json({ error: 'No department is configured for this user' });
+    }
+
+    const query = studentColumns.has('updated_at')
+      ? `UPDATE public.students
+         SET department_withdrawal_approved = $2,
+             updated_at = NOW()
+         WHERE student_id = $1
+           AND withdrawal_requested_at IS NOT NULL
+           AND ($3::text IS NULL OR LOWER(COALESCE(department, '')) = LOWER($3))
+         RETURNING student_id, department, department_withdrawal_approved, withdrawal_requested_at, updated_at`
+      : `UPDATE public.students
+         SET department_withdrawal_approved = $2
+         WHERE student_id = $1
+           AND withdrawal_requested_at IS NOT NULL
+           AND ($3::text IS NULL OR LOWER(COALESCE(department, '')) = LOWER($3))
+         RETURNING student_id, department, department_withdrawal_approved, withdrawal_requested_at, NOW()::timestamp AS updated_at`;
+
+    const result = await pool.query(query, [studentId, approved, department || null]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        error: req.user?.role === 'admin'
+          ? 'Student not found or no withdrawal request exists'
+          : 'Student not in your department or no withdrawal request exists',
+      });
+    }
+
+    const action = approved ? 'approved' : 'rejected';
+    return res.json({
+      success: true,
+      message: `Withdrawal request ${action} successfully.`,
+      student: result.rows[0],
+    });
+  } catch (error) {
+    console.error('Withdrawal approval error:', error);
+    return res.status(500).json({ error: 'Failed to process withdrawal approval' });
   }
 });
 
