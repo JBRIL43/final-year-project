@@ -31,8 +31,21 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
   const effectiveRoles = allowedRoles || DEFAULT_ALLOWED_ROLES
   const roleAllowed = effectiveRoles.includes(role)
 
-  if (!user || !roleAllowed) {
+  const roleHome =
+    role === 'registrar'
+      ? '/registrar'
+      : role === 'department_head'
+      ? '/department'
+      : role === 'student'
+      ? '/login'
+      : '/'
+
+  if (!user) {
     return <Navigate to="/login" replace />
+  }
+
+  if (!roleAllowed) {
+    return <Navigate to={roleHome} replace />
   }
 
   return <>{children}</>
