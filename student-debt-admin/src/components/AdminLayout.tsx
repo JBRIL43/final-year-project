@@ -55,6 +55,7 @@ function buildNavItems(role: string) {
   return [
     { label: 'Dashboard', to: '/', icon: <DashboardIcon /> },
     { label: 'Graduate Management', to: '/graduates', icon: <SchoolIcon /> },
+    { label: 'Manage Users', to: '/manage-users', icon: <SchoolIcon /> },
     { label: 'Delinquent Graduates', to: '/graduates/delinquent', icon: <WarningIcon /> },
     { label: 'Registrar Clearance', to: '/registrar', icon: <AccountBalanceIcon /> },
     { label: 'Department Dashboard', to: '/department', icon: <ApartmentIcon /> },

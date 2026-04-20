@@ -17,8 +17,22 @@ import DepartmentDashboard from './components/DepartmentDashboard'
 function AppRoutes() {
   const { loading, role } = useAuth()
 
-  const roleHome = role === 'registrar' ? '/registrar' : role === 'department_head' ? '/department' : '/'
-  const defaultHome = role === 'registrar' ? '/registrar' : role === 'department_head' ? '/department' : '/reports'
+  const roleHome =
+    role === 'registrar'
+      ? '/registrar'
+      : role === 'department_head'
+      ? '/department'
+      : role === 'student'
+      ? '/login'
+      : '/'
+  const defaultHome =
+    role === 'registrar'
+      ? '/registrar'
+      : role === 'department_head'
+      ? '/department'
+      : role === 'student'
+      ? '/login'
+      : '/reports'
 
   if (loading) {
     return (
@@ -49,7 +63,7 @@ function AppRoutes() {
         <Route
           path="students"
           element={
-            <ProtectedRoute allowedRoles={['admin']}>
+            <ProtectedRoute allowedRoles={['admin', 'finance']}>
               <StudentManagement />
             </ProtectedRoute>
           }
@@ -57,7 +71,7 @@ function AppRoutes() {
         <Route
           path="manage-users"
           element={
-            <ProtectedRoute allowedRoles={['admin']}>
+            <ProtectedRoute allowedRoles={['admin', 'finance']}>
               <StudentManagement />
             </ProtectedRoute>
           }
@@ -65,7 +79,7 @@ function AppRoutes() {
         <Route
           path="user-list"
           element={
-            <ProtectedRoute allowedRoles={['admin']}>
+            <ProtectedRoute allowedRoles={['admin', 'finance']}>
               <StudentManagement />
             </ProtectedRoute>
           }
@@ -73,7 +87,7 @@ function AppRoutes() {
         <Route
           path="sis-import"
           element={
-            <ProtectedRoute allowedRoles={['admin']}>
+            <ProtectedRoute allowedRoles={['admin', 'finance']}>
               <StudentManagement />
             </ProtectedRoute>
           }

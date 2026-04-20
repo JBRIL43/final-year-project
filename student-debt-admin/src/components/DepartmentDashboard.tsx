@@ -3,7 +3,11 @@ import {
   Alert,
   Box,
   Button,
+  FormControl,
+  InputLabel,
+  MenuItem,
   Paper,
+  Select,
   Snackbar,
   Table,
   TableBody,
@@ -20,10 +24,12 @@ interface DepartmentStudent {
   student_id: number
   student_number: string
   full_name: string
+  email: string
   department: string
   campus: string
   credit_load: number | null
   enrollment_status: string
+  department_clearance: string
 }
 
 export default function DepartmentDashboard() {
@@ -91,6 +97,23 @@ export default function DepartmentDashboard() {
     }
   }
 
+  const updateDepartmentClearance = async (studentId: number, status: string) => {
+    try {
+      await api.put(`/api/department/students/${studentId}/clearance`, {
+        department_clearance: status,
+      })
+      setSnackbar({ open: true, message: 'Department clearance updated', severity: 'success' })
+      loadStudents()
+    } catch (error: any) {
+      console.error('Failed to update department clearance:', error)
+      setSnackbar({
+        open: true,
+        message: error?.response?.data?.error || 'Could not update department clearance',
+        severity: 'error',
+      })
+    }
+  }
+
   return (
     <Box sx={{ p: { xs: 2, md: 3 } }}>
       <Typography variant="h4" sx={{ fontWeight: 800 }}>
@@ -108,10 +131,11 @@ export default function DepartmentDashboard() {
             <Table size="small">
               <TableHead>
                 <TableRow>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Student ID</TableCell>
+                  <TableCell>Student</TableCell>
+                  <TableCell>Campus</TableCell>
                   <TableCell>Credits</TableCell>
                   <TableCell>Status</TableCell>
+                  <TableCell>Dept. Clearance</TableCell>
                   <TableCell>New Program</TableCell>
                   <TableCell align="right">Actions</TableCell>
                 </TableRow>
@@ -119,10 +143,28 @@ export default function DepartmentDashboard() {
               <TableBody>
                 {students.map((student) => (
                   <TableRow key={student.student_id} hover>
-                    <TableCell>{student.full_name}</TableCell>
-                    <TableCell>{student.student_number}</TableCell>
+                    <TableCell>
+                      <strong>{student.full_name}</strong>
+                      <br />
+                      <small>{student.email || student.student_number}</small>
+                    </TableCell>
+                    <TableCell>{student.campus || '-'}</TableCell>
                     <TableCell>{student.credit_load ?? '-'}</TableCell>
                     <TableCell>{student.enrollment_status || '-'}</TableCell>
+                    <TableCell>
+                      <FormControl size="small" sx={{ minWidth: 140 }}>
+                        <InputLabel>Clearance</InputLabel>
+                        <Select
+                          value={String(student.department_clearance || 'PENDING').toLowerCase()}
+                          label="Clearance"
+                          onChange={(event) => updateDepartmentClearance(student.student_id, event.target.value)}
+                        >
+                          <MenuItem value="pending">Pending</MenuItem>
+                          <MenuItem value="approved">Approved</MenuItem>
+                          <MenuItem value="rejected">Rejected</MenuItem>
+                        </Select>
+                      </FormControl>
+                    </TableCell>
                     <TableCell>
                       <TextField
                         size="small"
@@ -148,7 +190,7 @@ export default function DepartmentDashboard() {
                 ))}
                 {students.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6} align="center">
+                    <TableCell colSpan={7} align="center">
                       No students found in this department.
                     </TableCell>
                   </TableRow>
