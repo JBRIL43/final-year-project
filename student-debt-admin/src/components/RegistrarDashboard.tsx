@@ -27,6 +27,9 @@ interface StudentForClearance {
   campus: string;
   enrollment_status: string;
   clearance_status: string;
+  withdrawal_requested_at: string | null;
+  department_withdrawal_approved: boolean | null;
+  registrar_withdrawal_processed: boolean;
 }
 
 export default function RegistrarDashboard() {
@@ -72,6 +75,20 @@ export default function RegistrarDashboard() {
 
   const generateCertificate = (studentId: number) => {
     alert(`Generate clearance certificate for student ${studentId}`);
+  };
+
+  const processWithdrawal = async (studentId: number) => {
+    try {
+      await api.post(`/api/registrar/students/${studentId}/withdrawal/process`);
+      setSnackbar({ open: true, message: 'Withdrawal processed', severity: 'success' });
+      loadStudents();
+    } catch (err: any) {
+      setSnackbar({
+        open: true,
+        message: err.response?.data?.error || 'Processing failed',
+        severity: 'error',
+      });
+    }
   };
 
   return (
@@ -125,9 +142,23 @@ export default function RegistrarDashboard() {
                     </FormControl>
                   </TableCell>
                   <TableCell>
-                    <Button size="small" variant="outlined" onClick={() => generateCertificate(s.student_id)}>
-                      Certificate
-                    </Button>
+                    {String(s.enrollment_status || '').toUpperCase() === 'ACTIVE' &&
+                    Boolean(s.withdrawal_requested_at) &&
+                    s.department_withdrawal_approved === true &&
+                    !s.registrar_withdrawal_processed ? (
+                      <Button
+                        size="small"
+                        variant="contained"
+                        color="warning"
+                        onClick={() => processWithdrawal(s.student_id)}
+                      >
+                        Process Withdrawal
+                      </Button>
+                    ) : (
+                      <Button size="small" variant="outlined" onClick={() => generateCertificate(s.student_id)}>
+                        Certificate
+                      </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

@@ -31,6 +31,9 @@ router.get('/students', async (req, res) => {
       'campus',
       'enrollment_status',
       'clearance_status',
+      'withdrawal_requested_at',
+      'department_withdrawal_approved',
+      'registrar_withdrawal_processed',
       'graduation_date',
       'updated_at',
     ]);
@@ -46,6 +49,15 @@ router.get('/students', async (req, res) => {
     const campusExpr = studentColumns.has('campus') ? 's.campus' : "'Main Campus'::text";
     const enrollmentStatusExpr = studentColumns.has('enrollment_status') ? 's.enrollment_status' : "'ACTIVE'::text";
     const clearanceStatusExpr = studentColumns.has('clearance_status') ? 's.clearance_status' : "'PENDING'::text";
+    const withdrawalRequestedAtExpr = studentColumns.has('withdrawal_requested_at')
+      ? 's.withdrawal_requested_at'
+      : 'NULL::timestamp';
+    const departmentWithdrawalApprovedExpr = studentColumns.has('department_withdrawal_approved')
+      ? 's.department_withdrawal_approved'
+      : 'NULL::boolean';
+    const registrarWithdrawalProcessedExpr = studentColumns.has('registrar_withdrawal_processed')
+      ? 's.registrar_withdrawal_processed'
+      : 'FALSE::boolean';
     const graduationDateExpr = studentColumns.has('graduation_date') ? 's.graduation_date' : 'NULL::date';
     const updatedAtExpr = studentColumns.has('updated_at') ? 's.updated_at' : 'NULL::timestamp';
 
@@ -67,6 +79,9 @@ router.get('/students', async (req, res) => {
          ${campusExpr} AS campus,
          ${enrollmentStatusExpr} AS enrollment_status,
          ${clearanceStatusExpr} AS clearance_status,
+         ${withdrawalRequestedAtExpr} AS withdrawal_requested_at,
+         ${departmentWithdrawalApprovedExpr} AS department_withdrawal_approved,
+         ${registrarWithdrawalProcessedExpr} AS registrar_withdrawal_processed,
          ${graduationDateExpr} AS graduation_date,
          ${updatedAtExpr} AS updated_at
        FROM public.students s
@@ -79,6 +94,80 @@ router.get('/students', async (req, res) => {
   } catch (error) {
     console.error('Registrar students list error:', error);
     res.status(500).json({ error: 'Failed to load registrar students' });
+  }
+});
+
+// POST /api/registrar/students/:id/withdrawal/process — registrar finalizes withdrawal
+router.post('/students/:id/withdrawal/process', async (req, res) => {
+  try {
+    const studentId = Number(req.params.id);
+    if (!Number.isFinite(studentId) || studentId <= 0) {
+      return res.status(400).json({ error: 'Invalid student id' });
+    }
+
+    const studentColumns = await getAvailableColumns('students', [
+      'full_name',
+      'department_withdrawal_approved',
+      'registrar_withdrawal_processed',
+      'enrollment_status',
+      'updated_at',
+    ]);
+
+    if (!studentColumns.has('department_withdrawal_approved') || !studentColumns.has('registrar_withdrawal_processed')) {
+      return res.status(400).json({
+        error: 'students withdrawal workflow columns are missing. Run withdrawal workflow migration first.',
+      });
+    }
+
+    const fullNameExpr = studentColumns.has('full_name') ? 'full_name' : "''::text AS full_name";
+
+    const studentRes = await pool.query(
+      `SELECT
+         ${fullNameExpr},
+         department_withdrawal_approved,
+         registrar_withdrawal_processed
+       FROM public.students
+       WHERE student_id = $1
+       LIMIT 1`,
+      [studentId]
+    );
+
+    if (studentRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    const student = studentRes.rows[0];
+
+    if (student.registrar_withdrawal_processed === true) {
+      return res.status(409).json({ error: 'Withdrawal already processed' });
+    }
+
+    if (student.department_withdrawal_approved !== true) {
+      return res.status(400).json({ error: 'Department approval required first' });
+    }
+
+    const setParts = [
+      "enrollment_status = 'WITHDRAWN'",
+      'registrar_withdrawal_processed = TRUE',
+    ];
+    if (studentColumns.has('updated_at')) {
+      setParts.push('updated_at = NOW()');
+    }
+
+    await pool.query(
+      `UPDATE public.students
+       SET ${setParts.join(', ')}
+       WHERE student_id = $1`,
+      [studentId]
+    );
+
+    return res.json({
+      success: true,
+      message: `Withdrawal processed for ${student.full_name || 'the student'}. Student marked as WITHDRAWN.`,
+    });
+  } catch (error) {
+    console.error('Registrar withdrawal processing error:', error);
+    return res.status(500).json({ error: 'Failed to process withdrawal' });
   }
 });
 
