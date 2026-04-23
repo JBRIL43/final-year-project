@@ -19,9 +19,11 @@ import {
   TextField,
 } from '@mui/material';
 import api from '../services/api';
+import { generateClearanceCertificate, pdfMake } from '../utils/clearanceCertificate';
 
 interface StudentForClearance {
   student_id: number;
+  student_number: string;
   full_name: string;
   email: string;
   department: string;
@@ -107,8 +109,22 @@ export default function RegistrarDashboard() {
     }
   };
 
-  const generateCertificate = (studentId: number) => {
-    alert(`Generate clearance certificate for student ${studentId}`);
+  const handleGenerateCertificate = async (studentId: number) => {
+    try {
+      const res = await api.get<{ success: true; student: StudentForClearance & Record<string, unknown> }>(
+        `/api/registrar/students/${studentId}/details`
+      );
+      const studentData = res.data.student;
+      const docDefinition = generateClearanceCertificate(studentData);
+      pdfMake.createPdf(docDefinition).download(`HU_Clearance_${studentData.student_number}.pdf`);
+    } catch (err) {
+      console.error('Certificate generation error:', err);
+      setSnackbar({
+        open: true,
+        message: 'Failed to generate certificate',
+        severity: 'error',
+      });
+    }
   };
 
   const processWithdrawal = async (studentId: number) => {
@@ -203,7 +219,12 @@ export default function RegistrarDashboard() {
                         Process Withdrawal
                       </Button>
                     ) : (
-                      <Button size="small" variant="outlined" onClick={() => generateCertificate(s.student_id)}>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        disabled={!['CLEARED', 'WAIVED'].includes(String(s.clearance_status || '').toUpperCase())}
+                        onClick={() => handleGenerateCertificate(s.student_id)}
+                      >
                         Certificate
                       </Button>
                     )}

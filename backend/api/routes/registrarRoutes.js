@@ -105,6 +105,141 @@ router.get('/students', async (req, res) => {
   }
 });
 
+router.get('/students/:id/details', async (req, res) => {
+  try {
+    const studentId = Number(req.params.id);
+
+    if (!Number.isFinite(studentId) || studentId <= 0) {
+      return res.status(400).json({ error: 'Invalid student id' });
+    }
+
+    const studentColumns = await getAvailableColumns('students', [
+      'student_id',
+      'student_number',
+      'full_name',
+      'email',
+      'department',
+      'campus',
+      'enrollment_status',
+      'clearance_status',
+      'credits_registered',
+      'tuition_share_percent',
+      'updated_at',
+    ]);
+
+    const debtColumns = await getAvailableColumns('debt_records', [
+      'debt_id',
+      'student_id',
+      'initial_amount',
+      'current_balance',
+      'academic_year',
+      'updated_at',
+      'last_updated',
+    ]);
+
+    if (!studentColumns.has('student_id') || !studentColumns.has('student_number')) {
+      return res.status(400).json({ error: 'students schema is missing required columns' });
+    }
+
+    const fullNameExpr = studentColumns.has('full_name') ? 's.full_name' : "''::text";
+    const emailExpr = studentColumns.has('email') ? 's.email' : "''::text";
+    const departmentExpr = studentColumns.has('department') ? 's.department' : "''::text";
+    const campusExpr = studentColumns.has('campus') ? 's.campus' : "'Main Campus'::text";
+    const enrollmentStatusExpr = studentColumns.has('enrollment_status') ? 's.enrollment_status' : "'ACTIVE'::text";
+    const clearanceStatusExpr = studentColumns.has('clearance_status') ? 's.clearance_status' : "'PENDING'::text";
+    const creditsRegisteredExpr = studentColumns.has('credits_registered') ? 's.credits_registered' : 'NULL::integer';
+    const tuitionSharePercentExpr = studentColumns.has('tuition_share_percent')
+      ? 's.tuition_share_percent'
+      : '15.00::numeric';
+    const updatedAtExpr = studentColumns.has('updated_at') ? 's.updated_at' : 'NULL::timestamp';
+
+    const studentResult = await pool.query(
+      `SELECT
+         s.student_id,
+         s.student_number,
+         ${fullNameExpr} AS full_name,
+         ${emailExpr} AS email,
+         ${departmentExpr} AS department,
+         ${campusExpr} AS campus,
+         ${enrollmentStatusExpr} AS enrollment_status,
+         ${clearanceStatusExpr} AS clearance_status,
+         ${creditsRegisteredExpr} AS credits_registered,
+         ${tuitionSharePercentExpr} AS tuition_share_percent,
+         ${updatedAtExpr} AS updated_at
+       FROM public.students s
+       WHERE s.student_id = $1
+       LIMIT 1`,
+      [studentId]
+    );
+
+    if (studentResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    const hasDebtId = debtColumns.has('debt_id');
+    const hasInitialAmount = debtColumns.has('initial_amount');
+    const hasCurrentBalance = debtColumns.has('current_balance');
+    const hasDebtAcademicYear = debtColumns.has('academic_year');
+    const hasDebtUpdatedAt = debtColumns.has('updated_at');
+    const hasDebtLastUpdated = debtColumns.has('last_updated');
+
+    let latestDebt = null;
+
+    if (hasDebtId && hasCurrentBalance) {
+      const debtAcademicYearExpr = hasDebtAcademicYear ? 'dr.academic_year::text' : "'N/A'::text";
+      const debtUpdatedExpr = hasDebtUpdatedAt
+        ? 'dr.updated_at'
+        : hasDebtLastUpdated
+        ? 'dr.last_updated'
+        : 'NULL::timestamp';
+
+      const debtResult = await pool.query(
+        `SELECT
+           dr.debt_id,
+           dr.student_id,
+           ${hasInitialAmount ? 'dr.initial_amount' : 'NULL::numeric'} AS initial_amount,
+           dr.current_balance,
+           ${debtAcademicYearExpr} AS academic_year,
+           ${debtUpdatedExpr} AS updated_at
+         FROM public.debt_records dr
+         WHERE dr.student_id = $1
+         ORDER BY dr.debt_id DESC
+         LIMIT 1`,
+        [studentId]
+      );
+
+      latestDebt = debtResult.rows[0] || null;
+    }
+
+    const student = studentResult.rows[0];
+    const debtBalance = latestDebt
+      ? Number(latestDebt.current_balance ?? latestDebt.initial_amount ?? 0)
+      : null;
+    const hasOutstandingBalance = debtBalance !== null && debtBalance > 0;
+
+    res.json({
+      success: true,
+      student: {
+        ...student,
+        latest_debt: latestDebt,
+        debt_summary: {
+          has_debt_record: Boolean(latestDebt),
+          current_balance: debtBalance,
+          has_outstanding_balance: hasOutstandingBalance,
+          debt_status: latestDebt
+            ? hasOutstandingBalance
+              ? 'OUTSTANDING'
+              : 'CLEARED'
+            : 'UNKNOWN',
+        },
+      },
+    });
+  } catch (error) {
+    console.error('Registrar student details error:', error);
+    res.status(500).json({ error: 'Failed to load student details' });
+  }
+});
+
 // POST /api/registrar/students/:id/withdrawal/process — registrar finalizes withdrawal
 router.post('/students/:id/withdrawal/process', async (req, res) => {
   try {
