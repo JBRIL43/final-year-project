@@ -1,7 +1,19 @@
 import pdfMake from 'pdfmake/build/pdfmake';
 import pdfFonts from 'pdfmake/build/vfs_fonts';
 
-pdfMake.vfs = pdfFonts.pdfMake.vfs;
+const resolvedVfs =
+  pdfFonts?.pdfMake?.vfs ||
+  pdfFonts?.default?.pdfMake?.vfs ||
+  pdfFonts?.default ||
+  pdfFonts;
+
+if (resolvedVfs) {
+  if (typeof pdfMake.addVirtualFileSystem === 'function') {
+    pdfMake.addVirtualFileSystem(resolvedVfs);
+  } else {
+    pdfMake.vfs = resolvedVfs;
+  }
+}
 
 function formatMoney(value) {
   const amount = Number(value || 0);
