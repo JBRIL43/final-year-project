@@ -107,6 +107,10 @@ router.get('/students', async (req, res) => {
 
 router.get('/students/:id/details', async (req, res) => {
   try {
+    if (!['registrar', 'admin'].includes(req.user?.role)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
     const studentId = Number(req.params.id);
 
     if (!Number.isFinite(studentId) || studentId <= 0) {
@@ -124,6 +128,8 @@ router.get('/students/:id/details', async (req, res) => {
       'clearance_status',
       'credits_registered',
       'tuition_share_percent',
+      'graduation_date',
+      'withdrawal_requested_at',
       'updated_at',
     ]);
 
@@ -151,6 +157,10 @@ router.get('/students/:id/details', async (req, res) => {
     const tuitionSharePercentExpr = studentColumns.has('tuition_share_percent')
       ? 's.tuition_share_percent'
       : '15.00::numeric';
+    const graduationDateExpr = studentColumns.has('graduation_date') ? 's.graduation_date' : 'NULL::date';
+    const withdrawalRequestedAtExpr = studentColumns.has('withdrawal_requested_at')
+      ? 's.withdrawal_requested_at'
+      : 'NULL::timestamp';
     const updatedAtExpr = studentColumns.has('updated_at') ? 's.updated_at' : 'NULL::timestamp';
 
     const studentResult = await pool.query(
@@ -165,6 +175,8 @@ router.get('/students/:id/details', async (req, res) => {
          ${clearanceStatusExpr} AS clearance_status,
          ${creditsRegisteredExpr} AS credits_registered,
          ${tuitionSharePercentExpr} AS tuition_share_percent,
+         ${graduationDateExpr} AS graduation_date,
+         ${withdrawalRequestedAtExpr} AS withdrawal_requested_at,
          ${updatedAtExpr} AS updated_at
        FROM public.students s
        WHERE s.student_id = $1
