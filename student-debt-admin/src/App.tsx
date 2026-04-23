@@ -13,6 +13,7 @@ import DelinquentGraduates from './components/DelinquentGraduates'
 import ErcaExportDashboard from './components/ErcaExportDashboard'
 import RegistrarDashboard from './components/RegistrarDashboard'
 import DepartmentDashboard from './components/DepartmentDashboard'
+import ChangePassword from './components/ChangePassword'
 
 function AppRoutes() {
   const { loading, role } = useAuth()
@@ -161,6 +162,14 @@ function AppRoutes() {
           element={
             <ProtectedRoute allowedRoles={['admin', 'finance']}>
               <PaymentReviewQueue />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="change-password"
+          element={
+            <ProtectedRoute>
+              <ChangePassword />
             </ProtectedRoute>
           }
         />
