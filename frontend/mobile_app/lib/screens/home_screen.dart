@@ -21,6 +21,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   bool _isLoadingDebt = true;
   bool _isLoadingStatement = true;
+  bool _isSubmittingWithdrawal = false;
 
   String? _debtError;
   String? _statementError;
@@ -77,6 +78,50 @@ class _HomeScreenState extends State<HomeScreen> {
     } finally {
       if (mounted) {
         setState(() => _isLoadingStatement = false);
+      }
+    }
+  }
+
+  Future<void> _requestWithdrawal() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm Withdrawal Request'),
+        content: const Text(
+          'Submit a withdrawal request for department and registrar review? This action starts the formal withdrawal workflow.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[700]),
+            child: const Text('Submit Request'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isSubmittingWithdrawal = true);
+    try {
+      final message = await DebtService().requestWithdrawal();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), backgroundColor: Colors.green),
+      );
+      await _loadDebtBalance();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmittingWithdrawal = false);
       }
     }
   }
@@ -296,6 +341,27 @@ class _HomeScreenState extends State<HomeScreen> {
               trailing: FilledButton(
                 onPressed: () => setState(() => _selectedIndex = 1),
                 child: const Text('Open'),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Card(
+            child: ListTile(
+              leading: Icon(Icons.exit_to_app, color: Colors.orange[800]),
+              title: const Text('Request Withdrawal'),
+              subtitle: const Text(
+                'Start department and registrar withdrawal processing',
+              ),
+              trailing: FilledButton(
+                onPressed: _isSubmittingWithdrawal ? null : _requestWithdrawal,
+                style: FilledButton.styleFrom(backgroundColor: Colors.orange[700]),
+                child: _isSubmittingWithdrawal
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Text('Request'),
               ),
             ),
           ),

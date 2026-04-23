@@ -47,4 +47,61 @@ class DebtService {
       'Network error: ${errors.isEmpty ? 'Unable to reach backend' : errors.join(' | ')}',
     );
   }
+
+  Future<String> requestWithdrawal() async {
+    final errors = <String>[];
+    final user = FirebaseAuth.instance.currentUser;
+    final idToken = await user?.getIdToken(true);
+
+    final headers = <String, String>{'Content-Type': 'application/json'};
+
+    if (idToken != null && idToken.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $idToken';
+    }
+
+    if (user?.uid != null && user!.uid.isNotEmpty) {
+      headers['x-firebase-uid'] = user.uid;
+    }
+
+    if (user?.email != null && user!.email!.isNotEmpty) {
+      headers['x-user-email'] = user.email!;
+    }
+
+    for (final baseUrl in _candidateBaseUrls()) {
+      try {
+        final response = await http
+            .post(
+              Uri.parse('$baseUrl/api/student/withdrawal/request'),
+              headers: headers,
+            )
+            .timeout(const Duration(seconds: 8));
+
+        Map<String, dynamic>? body;
+        try {
+          body = jsonDecode(response.body) as Map<String, dynamic>;
+        } catch (_) {
+          body = null;
+        }
+
+        if (response.statusCode == 200) {
+          return (body?['message'] ?? 'Withdrawal request submitted successfully.')
+              .toString();
+        }
+
+        if (response.statusCode == 409) {
+          throw Exception((body?['error'] ?? 'Withdrawal already requested').toString());
+        }
+
+        errors.add(
+          'API Error ${response.statusCode} on $baseUrl: ${(body?['error'] ?? response.body).toString()}',
+        );
+      } catch (e) {
+        errors.add('Request failed on $baseUrl: $e');
+      }
+    }
+
+    throw Exception(
+      'Withdrawal request failed: ${errors.isEmpty ? 'Unable to reach backend' : errors.join(' | ')}',
+    );
+  }
 }

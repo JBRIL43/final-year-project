@@ -62,6 +62,12 @@ export default function DepartmentDashboard() {
 
   useEffect(() => {
     loadStudents()
+
+    const interval = setInterval(() => {
+      loadStudents()
+    }, 30000)
+
+    return () => clearInterval(interval)
   }, [])
 
   const approveWithdrawal = async (studentId: number) => {

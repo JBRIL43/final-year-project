@@ -56,6 +56,12 @@ export default function RegistrarDashboard() {
 
   useEffect(() => {
     loadStudents();
+
+    const interval = setInterval(() => {
+      loadStudents();
+    }, 30000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const handleUpdateClearance = async (studentId: number, status: string) => {
