@@ -6,6 +6,7 @@ import '../service/debt_service.dart';
 import 'notifications_screen.dart';
 import '../services/student_statement_service.dart';
 import '../utils/cost_statement_pdf.dart';
+import 'account_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -369,6 +370,18 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       )
                     : const Text('Request'),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Card(
+            child: ListTile(
+              leading: Icon(Icons.lock_reset, color: Colors.blue[800]),
+              title: const Text('Change Password'),
+              subtitle: const Text('Update your account password securely'),
+              trailing: FilledButton(
+                onPressed: () => setState(() => _selectedIndex = 3),
+                child: const Text('Open'),
               ),
             ),
           ),
@@ -782,7 +795,9 @@ class _HomeScreenState extends State<HomeScreen> {
               ? 'HU Student Debt System'
               : _selectedIndex == 1
               ? 'Cost Statement'
-              : 'Notifications',
+              : _selectedIndex == 2
+              ? 'Notifications'
+              : 'Account',
         ),
         actions: [
           if (_selectedIndex == 0 || _selectedIndex == 1)
@@ -814,6 +829,7 @@ class _HomeScreenState extends State<HomeScreen> {
           _buildDashboard(context, formatter),
           _buildStatement(context, formatter),
           const NotificationsScreen(),
+          const AccountScreen(),
         ],
       ),
       bottomNavigationBar: NavigationBar(
@@ -836,6 +852,11 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icon(Icons.notifications_none),
             selectedIcon: Icon(Icons.notifications),
             label: 'Notifications',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.lock_outline),
+            selectedIcon: Icon(Icons.lock),
+            label: 'Account',
           ),
         ],
       ),

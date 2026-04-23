@@ -7,6 +7,11 @@ const router = express.Router();
 // POST /api/auth/change-password — change password for current user
 router.post('/change-password', authenticateRequest, async (req, res) => {
   try {
+    if (!process.env.FIREBASE_API_KEY) {
+      console.error('FIREBASE_API_KEY not configured');
+      return res.status(500).json({ error: 'Server misconfiguration' });
+    }
+
     const { currentPassword, newPassword } = req.body || {};
     const email = String(req.user?.email || '').trim();
 
@@ -26,10 +31,6 @@ router.post('/change-password', authenticateRequest, async (req, res) => {
       return res.status(500).json({ error: 'Firebase Admin is not configured' });
     }
 
-    if (!process.env.FIREBASE_API_KEY) {
-      return res.status(500).json({ error: 'FIREBASE_API_KEY is not configured' });
-    }
-
     const signInResponse = await fetch(
       `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${process.env.FIREBASE_API_KEY}`,
       {
@@ -44,6 +45,22 @@ router.post('/change-password', authenticateRequest, async (req, res) => {
     );
 
     const signInData = await signInResponse.json();
+
+    if (signInData?.error) {
+      const firebaseErrorMessage = String(signInData.error.message || '').toUpperCase();
+
+      if (
+        firebaseErrorMessage === 'INVALID_PASSWORD' ||
+        firebaseErrorMessage === 'USER_DISABLED' ||
+        firebaseErrorMessage === 'INVALID_LOGIN_CREDENTIALS' ||
+        firebaseErrorMessage === 'EMAIL_NOT_FOUND'
+      ) {
+        return res.status(401).json({ error: 'Current password is incorrect' });
+      }
+
+      console.error('Firebase auth error:', signInData.error);
+      return res.status(401).json({ error: 'Authentication failed' });
+    }
 
     if (!signInResponse.ok || !signInData?.idToken) {
       return res.status(401).json({ error: 'Current password is incorrect' });
@@ -60,7 +77,7 @@ router.post('/change-password', authenticateRequest, async (req, res) => {
 
     return res.json({ success: true, message: 'Password updated successfully' });
   } catch (error) {
-    console.error('Password change error:', error.message);
+    console.error('Password change error:', error);
     return res.status(500).json({ error: 'Failed to update password' });
   }
 });
