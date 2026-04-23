@@ -84,12 +84,15 @@ class DebtService {
         }
 
         if (response.statusCode == 200) {
-          return (body?['message'] ?? 'Withdrawal request submitted successfully.')
+          return (body?['message'] ??
+                  'Withdrawal request submitted successfully.')
               .toString();
         }
 
         if (response.statusCode == 409) {
-          throw Exception((body?['error'] ?? 'Withdrawal already requested').toString());
+          throw Exception(
+            (body?['error'] ?? 'Withdrawal already requested').toString(),
+          );
         }
 
         errors.add(

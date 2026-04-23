@@ -97,7 +97,9 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[700]),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange[700],
+            ),
             child: const Text('Submit Request'),
           ),
         ],
@@ -354,12 +356,17 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               trailing: FilledButton(
                 onPressed: _isSubmittingWithdrawal ? null : _requestWithdrawal,
-                style: FilledButton.styleFrom(backgroundColor: Colors.orange[700]),
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.orange[700],
+                ),
                 child: _isSubmittingWithdrawal
                     ? const SizedBox(
                         width: 16,
                         height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
                       )
                     : const Text('Request'),
               ),
