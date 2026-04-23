@@ -16,6 +16,7 @@ import {
   FormControl,
   InputLabel,
   Select,
+  TextField,
 } from '@mui/material';
 import api from '../services/api';
 
@@ -27,6 +28,8 @@ interface StudentForClearance {
   campus: string;
   enrollment_status: string;
   clearance_status: string;
+  credits_registered: number | null;
+  tuition_share_percent: number | null;
   withdrawal_requested_at: string | null;
   department_withdrawal_approved: boolean | null;
   registrar_withdrawal_processed: boolean;
@@ -79,6 +82,31 @@ export default function RegistrarDashboard() {
     }
   };
 
+  const handleUpdateCredits = async (studentId: number, creditsStr: string) => {
+    const credits = creditsStr === '' ? null : Number.parseInt(creditsStr, 10);
+
+    if (credits !== null && (!Number.isFinite(credits) || credits < 0)) {
+      setSnackbar({
+        open: true,
+        message: 'Invalid credits value',
+        severity: 'error',
+      });
+      return;
+    }
+
+    try {
+      await api.put(`/api/registrar/students/${studentId}/credits`, { credits_registered: credits });
+      setSnackbar({ open: true, message: 'Credits updated', severity: 'success' });
+      loadStudents();
+    } catch (err: any) {
+      setSnackbar({
+        open: true,
+        message: err.response?.data?.error || 'Update failed',
+        severity: 'error',
+      });
+    }
+  };
+
   const generateCertificate = (studentId: number) => {
     alert(`Generate clearance certificate for student ${studentId}`);
   };
@@ -117,6 +145,8 @@ export default function RegistrarDashboard() {
                 <TableCell>Student</TableCell>
                 <TableCell>Program</TableCell>
                 <TableCell>Campus</TableCell>
+                <TableCell>Credits</TableCell>
+                <TableCell>Tuition Share</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell>Clearance</TableCell>
                 <TableCell>Actions</TableCell>
@@ -132,6 +162,18 @@ export default function RegistrarDashboard() {
                   </TableCell>
                   <TableCell>{s.department}</TableCell>
                   <TableCell>{s.campus}</TableCell>
+                  <TableCell>
+                    <TextField
+                      size="small"
+                      type="number"
+                      value={s.credits_registered ?? ''}
+                      onChange={(e) => handleUpdateCredits(s.student_id, e.target.value)}
+                      sx={{ width: 80 }}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    {s.tuition_share_percent != null ? `${s.tuition_share_percent}%` : '15%'}
+                  </TableCell>
                   <TableCell>{s.enrollment_status}</TableCell>
                   <TableCell>
                     <FormControl size="small" sx={{ minWidth: 120 }}>

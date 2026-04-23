@@ -17,7 +17,7 @@ async function getAvailableColumns(tableName, columns) {
   return new Set(result.rows.map((row) => row.column_name));
 }
 
-router.use(authenticateRequest, requireRoles(['registrar']));
+router.use(authenticateRequest, requireRoles(['registrar', 'finance']));
 
 router.get('/students', async (req, res) => {
   try {
@@ -31,6 +31,8 @@ router.get('/students', async (req, res) => {
       'campus',
       'enrollment_status',
       'clearance_status',
+      'credits_registered',
+      'tuition_share_percent',
       'withdrawal_requested_at',
       'department_withdrawal_approved',
       'registrar_withdrawal_processed',
@@ -49,6 +51,10 @@ router.get('/students', async (req, res) => {
     const campusExpr = studentColumns.has('campus') ? 's.campus' : "'Main Campus'::text";
     const enrollmentStatusExpr = studentColumns.has('enrollment_status') ? 's.enrollment_status' : "'ACTIVE'::text";
     const clearanceStatusExpr = studentColumns.has('clearance_status') ? 's.clearance_status' : "'PENDING'::text";
+    const creditsRegisteredExpr = studentColumns.has('credits_registered') ? 's.credits_registered' : 'NULL::integer';
+    const tuitionSharePercentExpr = studentColumns.has('tuition_share_percent')
+      ? 's.tuition_share_percent'
+      : '15.00::numeric';
     const withdrawalRequestedAtExpr = studentColumns.has('withdrawal_requested_at')
       ? 's.withdrawal_requested_at'
       : 'NULL::timestamp';
@@ -79,6 +85,8 @@ router.get('/students', async (req, res) => {
          ${campusExpr} AS campus,
          ${enrollmentStatusExpr} AS enrollment_status,
          ${clearanceStatusExpr} AS clearance_status,
+         ${creditsRegisteredExpr} AS credits_registered,
+         ${tuitionSharePercentExpr} AS tuition_share_percent,
          ${withdrawalRequestedAtExpr} AS withdrawal_requested_at,
          ${departmentWithdrawalApprovedExpr} AS department_withdrawal_approved,
          ${registrarWithdrawalProcessedExpr} AS registrar_withdrawal_processed,
@@ -168,6 +176,77 @@ router.post('/students/:id/withdrawal/process', async (req, res) => {
   } catch (error) {
     console.error('Registrar withdrawal processing error:', error);
     return res.status(500).json({ error: 'Failed to process withdrawal' });
+  }
+});
+
+// PUT /api/registrar/students/:id/credits — update credits and auto-calculate tuition share
+router.put('/students/:id/credits', async (req, res) => {
+  try {
+    const studentId = Number(req.params.id);
+    let { credits_registered } = req.body || {};
+
+    if (!Number.isFinite(studentId) || studentId <= 0) {
+      return res.status(400).json({ error: 'Invalid student id' });
+    }
+
+    const studentColumns = await getAvailableColumns('students', [
+      'credits_registered',
+      'tuition_share_percent',
+      'updated_at',
+    ]);
+
+    if (!studentColumns.has('credits_registered') || !studentColumns.has('tuition_share_percent')) {
+      return res.status(400).json({
+        error: 'students credit columns are missing. Run the credit load migration first.',
+      });
+    }
+
+    if (credits_registered === '') {
+      credits_registered = null;
+    }
+
+    if (credits_registered !== null && credits_registered !== undefined) {
+      credits_registered = Number.parseInt(credits_registered, 10);
+      if (!Number.isFinite(credits_registered) || credits_registered < 0) {
+        return res.status(400).json({ error: 'Invalid credits' });
+      }
+    }
+
+    let tuitionSharePercent = 15.0;
+    if (credits_registered !== null && credits_registered !== undefined) {
+      if (credits_registered >= 15) tuitionSharePercent = 15.0;
+      else if (credits_registered >= 12) tuitionSharePercent = 11.25;
+      else if (credits_registered >= 8) tuitionSharePercent = 7.5;
+      else tuitionSharePercent = 3.75;
+    }
+
+    const updateSql = studentColumns.has('updated_at')
+      ? `UPDATE public.students
+         SET credits_registered = $1,
+             tuition_share_percent = $2,
+             updated_at = NOW()
+         WHERE student_id = $3
+         RETURNING student_id, credits_registered, tuition_share_percent, updated_at`
+      : `UPDATE public.students
+         SET credits_registered = $1,
+             tuition_share_percent = $2
+         WHERE student_id = $3
+         RETURNING student_id, credits_registered, tuition_share_percent, NOW()::timestamp AS updated_at`;
+
+    const result = await pool.query(updateSql, [credits_registered, tuitionSharePercent, studentId]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    return res.json({
+      success: true,
+      message: 'Credits and tuition share updated',
+      student: result.rows[0],
+    });
+  } catch (error) {
+    console.error('Credits update error:', error);
+    return res.status(500).json({ error: 'Failed to update credits' });
   }
 });
 
