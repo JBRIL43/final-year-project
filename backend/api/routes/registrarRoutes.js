@@ -105,6 +105,196 @@ router.get('/students', async (req, res) => {
   }
 });
 
+// POST /api/registrar/students/import — bulk import students from Excel
+router.post('/students/import', async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    if (!['registrar', 'admin'].includes(req.user?.role)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const students = Array.isArray(req.body?.students) ? req.body.students : null;
+
+    if (!students || students.length === 0) {
+      return res.status(400).json({ error: 'No student data provided' });
+    }
+
+    const studentColumns = await getAvailableColumns('students', [
+      'student_id',
+      'student_number',
+      'full_name',
+      'email',
+      'phone',
+      'department',
+      'campus',
+      'enrollment_status',
+      'clearance_status',
+      'credits_registered',
+      'tuition_share_percent',
+      'created_at',
+      'updated_at',
+    ]);
+
+    const debtColumns = await getAvailableColumns('debt_records', [
+      'debt_id',
+      'student_id',
+      'initial_amount',
+      'current_balance',
+      'academic_year',
+      'created_at',
+      'updated_at',
+      'last_updated',
+    ]);
+
+    if (!studentColumns.has('student_number')) {
+      return res.status(400).json({ error: 'students.student_number column is required for import' });
+    }
+
+    await client.query('BEGIN');
+
+    let successCount = 0;
+    const errors = [];
+
+    for (const row of students) {
+      const studentNumber = String(row['Student ID'] || '').trim();
+      const fullName = String(row['Full Name'] || '').trim();
+      const email = String(row.Email || '').trim().toLowerCase();
+      const phone = String(row.Phone || '').trim();
+      const program = String(row.Program || '').trim();
+      const campus = String(row.Campus || '').trim() || 'Main Campus';
+      const enrollmentStatus = String(row['Enrollment Status'] || 'ACTIVE').trim().toUpperCase();
+      const clearanceStatus = String(row['Clearance Status'] || 'PENDING').trim().toUpperCase();
+      const creditsRaw = String(row['Credits Registered'] || '').trim();
+      const credits = creditsRaw === '' ? null : Number.parseInt(creditsRaw, 10);
+
+      if (!studentNumber || !fullName || !email || !program || !campus) {
+        errors.push(`Missing required fields for row with Student ID: ${studentNumber || '(empty)'}`);
+        continue;
+      }
+
+      if (Number.isFinite(credits) && credits < 0) {
+        errors.push(`Invalid credits for ${studentNumber}: must be non-negative`);
+        continue;
+      }
+
+      let tuitionSharePercent = 15.0;
+      if (Number.isFinite(credits)) {
+        if (credits >= 15) tuitionSharePercent = 15.0;
+        else if (credits >= 12) tuitionSharePercent = 11.25;
+        else if (credits >= 8) tuitionSharePercent = 7.5;
+        else if (credits >= 1) tuitionSharePercent = 3.75;
+        else tuitionSharePercent = 0.0;
+      }
+
+      const existing = await client.query(
+        `SELECT student_id
+         FROM public.students
+         WHERE student_number = $1 OR LOWER(COALESCE(email, '')) = LOWER($2)
+         LIMIT 1`,
+        [studentNumber, email]
+      );
+
+      if (existing.rows.length > 0) {
+        errors.push(`Student ${studentNumber} already exists`);
+        continue;
+      }
+
+      const insertColumns = ['student_number'];
+      const insertValues = [studentNumber];
+
+      const appendColumn = (columnName, value) => {
+        if (studentColumns.has(columnName)) {
+          insertColumns.push(columnName);
+          insertValues.push(value);
+        }
+      };
+
+      appendColumn('full_name', fullName);
+      appendColumn('email', email);
+      appendColumn('phone', phone || null);
+      appendColumn('department', program);
+      appendColumn('campus', campus);
+      appendColumn('enrollment_status', enrollmentStatus);
+      appendColumn('clearance_status', clearanceStatus);
+      appendColumn('credits_registered', Number.isFinite(credits) ? credits : null);
+      appendColumn('tuition_share_percent', tuitionSharePercent);
+
+      if (studentColumns.has('created_at')) {
+        insertColumns.push('created_at');
+        insertValues.push(new Date());
+      }
+      if (studentColumns.has('updated_at')) {
+        insertColumns.push('updated_at');
+        insertValues.push(new Date());
+      }
+
+      const placeholders = insertValues.map((_, index) => `$${index + 1}`).join(', ');
+      const returningId = studentColumns.has('student_id') ? ' RETURNING student_id' : '';
+
+      const insertStudentResult = await client.query(
+        `INSERT INTO public.students (${insertColumns.join(', ')})
+         VALUES (${placeholders})${returningId}`,
+        insertValues
+      );
+
+      const studentId = studentColumns.has('student_id')
+        ? insertStudentResult.rows[0]?.student_id
+        : null;
+
+      if (studentId && debtColumns.has('student_id')) {
+        const existingDebt = await client.query(
+          'SELECT 1 FROM public.debt_records WHERE student_id = $1 LIMIT 1',
+          [studentId]
+        );
+
+        if (existingDebt.rows.length === 0) {
+          const debtInsertColumns = ['student_id'];
+          const debtInsertValues = [studentId];
+
+          const appendDebtColumn = (columnName, value) => {
+            if (debtColumns.has(columnName)) {
+              debtInsertColumns.push(columnName);
+              debtInsertValues.push(value);
+            }
+          };
+
+          appendDebtColumn('initial_amount', 0);
+          appendDebtColumn('current_balance', 0);
+          appendDebtColumn('academic_year', null);
+          appendDebtColumn('created_at', new Date());
+          appendDebtColumn('updated_at', new Date());
+          appendDebtColumn('last_updated', new Date());
+
+          const debtPlaceholders = debtInsertValues.map((_, index) => `$${index + 1}`).join(', ');
+
+          await client.query(
+            `INSERT INTO public.debt_records (${debtInsertColumns.join(', ')})
+             VALUES (${debtPlaceholders})`,
+            debtInsertValues
+          );
+        }
+      }
+
+      successCount += 1;
+    }
+
+    await client.query('COMMIT');
+
+    return res.json({
+      success: true,
+      message: `Imported ${successCount} students successfully`,
+      errors,
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Bulk import error:', error);
+    return res.status(500).json({ error: 'Failed to import students' });
+  } finally {
+    client.release();
+  }
+});
+
 router.get('/students/:id/details', async (req, res) => {
   try {
     if (!['registrar', 'admin'].includes(req.user?.role)) {

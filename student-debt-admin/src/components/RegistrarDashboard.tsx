@@ -17,9 +17,20 @@ import {
   InputLabel,
   Select,
   TextField,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
 } from '@mui/material';
+import {
+  Description as DescriptionIcon,
+  FileDownload as FileDownloadIcon,
+  FileUpload as FileUploadIcon,
+} from '@mui/icons-material';
 import api from '../services/api';
 import { generateClearanceCertificate, pdfMake } from '../utils/clearanceCertificate';
+import { exportToExcel, formatStudentDataForExport } from '../utils/excelExport';
+import { importFromExcel, validateStudentImportData, type ImportedRow } from '../utils/excelImport';
 
 interface StudentForClearance {
   student_id: number;
@@ -35,11 +46,16 @@ interface StudentForClearance {
   withdrawal_requested_at: string | null;
   department_withdrawal_approved: boolean | null;
   registrar_withdrawal_processed: boolean;
+  phone?: string | null;
+  current_balance?: number | null;
+  graduation_date?: string | null;
+  repayment_start_date?: string | null;
 }
 
 export default function RegistrarDashboard() {
   const [students, setStudents] = useState<StudentForClearance[]>([]);
   const [loading, setLoading] = useState(true);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
     open: false,
     message: '',
@@ -141,11 +157,95 @@ export default function RegistrarDashboard() {
     }
   };
 
+  const handleImportStudents = async (data: ImportedRow[]) => {
+    const errors = validateStudentImportData(data);
+    if (errors.length > 0) {
+      setSnackbar({
+        open: true,
+        message: `Import validation failed (${errors.length} issues).`,
+        severity: 'error',
+      });
+      alert(`Validation errors:\n${errors.join('\n')}`);
+      return;
+    }
+
+    try {
+      const response = await api.post<{ message?: string; errors?: string[] }>('/api/registrar/students/import', {
+        students: data,
+      });
+
+      const importErrors = response.data?.errors || [];
+      if (importErrors.length > 0) {
+        alert(`Imported with some issues:\n${importErrors.join('\n')}`);
+      }
+
+      setSnackbar({
+        open: true,
+        message: response.data?.message || 'Students imported successfully',
+        severity: 'success',
+      });
+      await loadStudents();
+      setImportDialogOpen(false);
+    } catch (err: any) {
+      setSnackbar({
+        open: true,
+        message: err.response?.data?.error || 'Import failed',
+        severity: 'error',
+      });
+    }
+  };
+
+  const downloadImportTemplate = () => {
+    const template = [
+      {
+        'Student ID': 'HU123456',
+        'Full Name': 'Example Student',
+        Email: 'student@example.com',
+        Phone: '+251912345678',
+        Program: 'Computer Science',
+        Campus: 'Main Campus',
+        'Enrollment Status': 'ACTIVE',
+        'Clearance Status': 'PENDING',
+        'Credits Registered': '15',
+        'Tuition Share %': '15.00',
+      },
+    ];
+
+    exportToExcel(template, 'HU_Student_Import_Template');
+  };
+
   return (
     <Box sx={{ p: 3 }}>
       <Typography variant="h4" gutterBottom>
         Registrar: Student Clearance Management
       </Typography>
+
+      <Box sx={{ display: 'flex', gap: 1.5, mb: 2, flexWrap: 'wrap' }}>
+        <Button
+          variant="outlined"
+          startIcon={<FileUploadIcon />}
+          onClick={() => setImportDialogOpen(true)}
+        >
+          Import from Excel
+        </Button>
+        <Button
+          variant="outlined"
+          startIcon={<DescriptionIcon />}
+          onClick={downloadImportTemplate}
+        >
+          Download Template
+        </Button>
+        <Button
+          variant="outlined"
+          startIcon={<FileDownloadIcon />}
+          onClick={() => {
+            const formattedData = formatStudentDataForExport(students as unknown as Array<Record<string, unknown>>);
+            exportToExcel(formattedData, 'HU_Registrar_Students');
+          }}
+        >
+          Export to Excel
+        </Button>
+      </Box>
 
       {loading ? (
         <Alert severity="info" sx={{ mb: 2 }}>
@@ -246,6 +346,32 @@ export default function RegistrarDashboard() {
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      <Dialog open={importDialogOpen} onClose={() => setImportDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Import Students from Excel</DialogTitle>
+        <DialogContent>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Required columns: Student ID, Full Name, Email, Program, Campus.
+          </Alert>
+
+          <TextField
+            type="file"
+            inputProps={{ accept: '.xlsx,.xls' }}
+            fullWidth
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+
+              importFromExcel(file, async (data) => {
+                await handleImportStudents(data);
+              });
+            }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setImportDialogOpen(false)}>Cancel</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
