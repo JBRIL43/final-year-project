@@ -37,6 +37,16 @@ function normalizeCampus(value) {
   return raw || 'Main Campus';
 }
 
+function inferProgramType(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+
+  if (normalized.includes('engineering')) return 'Engineering';
+  if (normalized.includes('computer') || normalized.includes('software')) return 'Computer Science';
+  if (normalized.includes('health') || normalized.includes('medicine')) return 'Health Sciences';
+
+  return 'Social Sciences';
+}
+
 function normalizeAdminRole(role) {
   const normalized = String(role || '').trim().toLowerCase();
 
@@ -1781,16 +1791,22 @@ router.post('/debt/reconcile', async (req, res) => {
     client = await pool.connect();
     await client.query('BEGIN');
 
+    const hasSemesterAmounts = (
+      await client.query(
+        `SELECT to_regclass('public.semester_amounts') AS table_name`
+      )
+    ).rows[0].table_name;
+
     const hasCostShares = (
       await client.query(
         `SELECT to_regclass('public.cost_shares') AS table_name`
       )
     ).rows[0].table_name;
 
-    if (!hasCostShares) {
+    if (!hasSemesterAmounts && !hasCostShares) {
       await client.query('ROLLBACK');
       return res.status(400).json({
-        error: 'cost_shares table is missing. Run backend/database/add_cost_shares_table.sql first.',
+        error: 'Neither semester_amounts nor cost_shares tables are available for reconciliation.',
       });
     }
 
@@ -1805,25 +1821,58 @@ router.post('/debt/reconcile', async (req, res) => {
     const hasUpdatedAt = debtColumns.rows.some((row) => row.column_name === 'updated_at');
     const hasLastUpdated = debtColumns.rows.some((row) => row.column_name === 'last_updated');
 
-    const costShareCols = await getAvailableColumns('cost_shares', ['food_cost_per_month']);
+    const costShareCols = hasCostShares
+      ? await getAvailableColumns('cost_shares', ['food_cost_per_month'])
+      : new Set();
     const hasFoodCostPerMonth = costShareCols.has('food_cost_per_month');
+
+    const semesterAmountRows = hasSemesterAmounts
+      ? (
+          await client.query(
+            `SELECT
+               academic_year,
+               campus,
+               program_type,
+               tuition_cost_per_year,
+               boarding_cost_per_year,
+               food_cost_per_month,
+               health_insurance_fee,
+               other_fees,
+               effective_from
+             FROM public.semester_amounts
+             ORDER BY effective_from DESC, id DESC`
+          )
+        ).rows
+      : [];
+
+    const costShareRows = hasCostShares
+      ? (
+          await client.query(
+            `SELECT
+               program,
+               academic_year,
+               campus,
+               tuition_cost_per_year,
+               boarding_cost_per_year,
+               ${hasFoodCostPerMonth ? 'food_cost_per_month' : '0::numeric AS food_cost_per_month'}
+             FROM public.cost_shares`
+          )
+        ).rows
+      : [];
 
     const candidates = await client.query(
       `SELECT
          s.student_id,
+         COALESCE(c.program, s.department) AS program,
+         s.department,
+         COALESCE(s.campus, 'Main Campus') AS campus,
          c.program,
          c.academic_year,
          c.tuition_share_percent,
-         cs.tuition_cost_per_year,
-         cs.boarding_cost_per_year,
-         ${hasFoodCostPerMonth ? 'cs.food_cost_per_month' : '0::numeric'} AS food_cost_per_month
        FROM public.students s
        JOIN public.contracts c
          ON c.student_id = s.student_id
         AND c.is_active = true
-       LEFT JOIN public.cost_shares cs
-         ON LOWER(TRIM(cs.program)) = LOWER(TRIM(c.program))
-        AND cs.academic_year = c.academic_year
        WHERE UPPER(COALESCE(s.enrollment_status, '')) IN ('ACTIVE', 'GRADUATED')`
     );
 
@@ -1856,10 +1905,50 @@ router.post('/debt/reconcile', async (req, res) => {
 
     for (const row of candidates.rows) {
       const studentId = Number(row.student_id);
-      const tuitionCost = Number(row.tuition_cost_per_year);
-      const boardingCost = Number(row.boarding_cost_per_year);
-      const foodCostPerMonth = Number(row.food_cost_per_month);
+      const academicYear = String(row.academic_year || '').trim();
+      const campus = normalizeCampus(row.campus);
       const tuitionSharePercent = Number(row.tuition_share_percent);
+
+      const programType = inferProgramType(row.program || row.department);
+
+      const semesterConfig = semesterAmountRows.find((config) =>
+        String(config.academic_year || '').trim().toLowerCase() === academicYear.toLowerCase()
+        && String(config.campus || '').trim().toLowerCase() === campus.toLowerCase()
+        && String(config.program_type || '').trim().toLowerCase() === programType.toLowerCase()
+      )
+      || semesterAmountRows.find((config) =>
+        String(config.academic_year || '').trim().toLowerCase() === academicYear.toLowerCase()
+        && String(config.program_type || '').trim().toLowerCase() === programType.toLowerCase()
+      )
+      || semesterAmountRows.find((config) =>
+        String(config.academic_year || '').trim().toLowerCase() === academicYear.toLowerCase()
+      );
+
+      let tuitionCost;
+      let boardingCost;
+      let foodCostPerMonth;
+      let healthInsuranceFee = 0;
+      let otherFees = 0;
+
+      if (semesterConfig) {
+        tuitionCost = Number(semesterConfig.tuition_cost_per_year);
+        boardingCost = Number(semesterConfig.boarding_cost_per_year);
+        foodCostPerMonth = Number(semesterConfig.food_cost_per_month);
+        healthInsuranceFee = Number(semesterConfig.health_insurance_fee || 0);
+        otherFees = Number(semesterConfig.other_fees || 0);
+      } else {
+        const costShareConfig = costShareRows.find((config) =>
+          String(config.academic_year || '').trim().toLowerCase() === academicYear.toLowerCase()
+          && String(config.program || '').trim().toLowerCase() === String(row.program || '').trim().toLowerCase()
+        )
+        || costShareRows.find((config) =>
+          String(config.academic_year || '').trim().toLowerCase() === academicYear.toLowerCase()
+        );
+
+        tuitionCost = Number(costShareConfig?.tuition_cost_per_year);
+        boardingCost = Number(costShareConfig?.boarding_cost_per_year);
+        foodCostPerMonth = Number(costShareConfig?.food_cost_per_month);
+      }
 
       if (
         Number.isNaN(tuitionCost)
@@ -1873,7 +1962,7 @@ router.post('/debt/reconcile', async (req, res) => {
 
       const tuitionDebt = (tuitionCost * tuitionSharePercent) / 100;
       const foodDebt = foodCostPerMonth * FOOD_MONTHS_PER_YEAR;
-      const targetDebt = Number((tuitionDebt + boardingCost + foodDebt).toFixed(2));
+      const targetDebt = Number((tuitionDebt + boardingCost + foodDebt + healthInsuranceFee + otherFees).toFixed(2));
       const paidTotal = paidByStudentId.get(studentId) || 0;
       const currentBalance = Number(Math.max(0, targetDebt - paidTotal).toFixed(2));
 

@@ -51,7 +51,7 @@ export default function DebtOverviewDashboard() {
   }, []);
 
   const handleReconcileDebt = async () => {
-    if (!window.confirm('Recalculate debt for all active students based on current cost shares? This cannot be undone.')) {
+    if (!window.confirm('Recalculate debt for all active students based on semester amount configuration? This cannot be undone.')) {
       return;
     }
 
@@ -250,7 +250,7 @@ export default function DebtOverviewDashboard() {
           {reconciling ? 'Recalculating...' : 'Recalculate Annual Debt'}
         </Button>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-          Run at start of each academic year to apply official tuition & boarding costs.
+          Run at start of each academic year to apply official semester amount configurations.
         </Typography>
       </Box>
 
