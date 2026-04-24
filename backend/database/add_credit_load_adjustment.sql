@@ -25,11 +25,7 @@ END $$;
 
 -- Keep tuition_share_percent in a valid range when manually updated.
 ALTER TABLE public.students
-DROP CONSTRAINT IF E👉 **Your turn**:  
-After updating the Registrar Dashboard UI and adding the backend route, reply with:  
-> `"✅ Credit load management implemented"`  
-
-Then we’ll test by setting credits and verifying tuition share adjusts correctly.XISTS students_tuition_share_percent_check;
+DROP CONSTRAINT IF EXISTS students_tuition_share_percent_check;
 
 ALTER TABLE public.students
 ADD CONSTRAINT students_tuition_share_percent_check CHECK (

@@ -22,6 +22,7 @@ import {
   AccountBalance as AccountBalanceIcon,
   Apartment as ApartmentIcon,
   LockReset as LockResetIcon,
+  Hub as HubIcon,
 } from '@mui/icons-material'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
@@ -52,6 +53,7 @@ function buildNavItems(role: string) {
       { label: 'Payment Review', to: '/payment-review', icon: <ReceiptLongIcon /> },
       { label: 'Cost Configuration', to: '/cost-config', icon: <ReceiptLongIcon /> },
       { label: 'ERCA Export', to: '/erca-export', icon: <DescriptionIcon /> },
+      { label: 'Fayda Integration', to: '/fayda', icon: <HubIcon /> },
       { label: 'Change Password', to: '/change-password', icon: <LockResetIcon /> },
     ]
   }
@@ -66,6 +68,7 @@ function buildNavItems(role: string) {
     { label: 'Cost Configuration', to: '/cost-config', icon: <ReceiptLongIcon /> },
     { label: 'Payment Review', to: '/payment-review', icon: <ReceiptLongIcon /> },
     { label: 'ERCA Export', to: '/erca-export', icon: <DescriptionIcon /> },
+    { label: 'Fayda Integration', to: '/fayda', icon: <HubIcon /> },
     { label: 'Change Password', to: '/change-password', icon: <LockResetIcon /> },
   ]
 }

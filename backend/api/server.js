@@ -11,6 +11,7 @@ const notificationRoutes = require('./routes/notificationRoutes');
 const studentRoutes = require('./routes/studentRoutes');
 const registrarRoutes = require('./routes/registrarRoutes');
 const departmentRoutes = require('./routes/departmentRoutes');
+const faydaRoutes = require('./routes/faydaRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -45,6 +46,7 @@ app.use('/api/user', userRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/student', studentRoutes);
 app.use('/api/registrar', registrarRoutes);
+app.use('/api/admin/fayda', faydaRoutes);
 app.use('/api/department', departmentRoutes);
 
 // Health check

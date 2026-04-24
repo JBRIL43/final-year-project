@@ -14,6 +14,7 @@ import ErcaExportDashboard from './components/ErcaExportDashboard'
 import RegistrarDashboard from './components/RegistrarDashboard'
 import DepartmentDashboard from './components/DepartmentDashboard'
 import ChangePassword from './components/ChangePassword'
+import FaydaIntegrationDashboard from './components/FaydaIntegrationDashboard'
 
 function AppRoutes() {
   const { loading, role } = useAuth()
@@ -170,6 +171,22 @@ function AppRoutes() {
           element={
             <ProtectedRoute>
               <ChangePassword />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="fayda"
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'finance']}>
+              <FaydaIntegrationDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="fayda-integration"
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'finance']}>
+              <FaydaIntegrationDashboard />
             </ProtectedRoute>
           }
         />

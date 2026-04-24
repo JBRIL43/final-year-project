@@ -208,6 +208,9 @@ export default function RegistrarDashboard() {
         'Clearance Status': 'PENDING',
         'Credits Registered': '15',
         'Tuition Share %': '15.00',
+        'Payment Model': 'post_graduation',
+        'Pre-Payment Amount (ETB)': '',
+        'Pre-Payment Date': '',
       },
     ];
 

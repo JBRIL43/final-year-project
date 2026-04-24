@@ -1,6 +1,14 @@
 const pool = require('../config/db');
 const firebaseAdmin = require('../config/firebaseAdmin');
 
+function normalizePaymentModel(value) {
+  const normalized = String(value || '').trim().toLowerCase().replace(/[-\s]+/g, '_');
+
+  if (normalized === 'pre_payment') return 'pre_payment';
+  if (normalized === 'hybrid') return 'hybrid';
+  return 'post_graduation';
+}
+
 async function resolveStudentFromRequest(req) {
   const authHeader = req.headers.authorization || '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
@@ -102,6 +110,10 @@ exports.getDebtBalance = async (req, res) => {
         dr.last_updated,
         s.student_number,
         u.full_name,
+        s.payment_model,
+        s.pre_payment_amount,
+        s.pre_payment_date,
+        s.pre_payment_clearance,
         s.living_arrangement,
         s.enrollment_status,
         (
@@ -133,26 +145,48 @@ exports.getDebtBalance = async (req, res) => {
     }
 
     const debt = result.rows[0];
-    const totalPaid = debt.initial_amount - debt.current_balance;
+    const paymentModel = normalizePaymentModel(debt.payment_model);
+    const initialAmount = Number(debt.initial_amount || 0);
+    const currentBalance = Number(debt.current_balance || 0);
+    const prePaymentAmount = Number(debt.pre_payment_amount || 0);
+    const prePaymentCleared = Boolean(debt.pre_payment_clearance);
+
+    let totalPaid = initialAmount - currentBalance;
+    let displayedBalance = currentBalance;
+    let isCleared = displayedBalance <= 0;
+
+    if (paymentModel === 'pre_payment') {
+      displayedBalance = prePaymentCleared ? 0 : prePaymentAmount;
+      totalPaid = prePaymentAmount - displayedBalance;
+      isCleared = prePaymentCleared;
+    } else if (paymentModel === 'hybrid') {
+      totalPaid += prePaymentAmount;
+    }
 
     res.json({
       success: true,
        data: {
         studentId: debt.student_number,
         studentName: debt.full_name,
+        paymentModel,
+        prePaymentAmount: parseFloat(prePaymentAmount.toFixed(2)),
+        prePaymentDate: debt.pre_payment_date,
+        prePaymentClearance: prePaymentCleared,
         livingArrangement: debt.living_arrangement,
         enrollmentStatus: debt.enrollment_status,
         debtId: debt.debt_id,
-        initialAmount: parseFloat(debt.initial_amount),
-        currentBalance: parseFloat(debt.current_balance),
+        initialAmount: parseFloat(initialAmount.toFixed(2)),
+        currentBalance: parseFloat(displayedBalance.toFixed(2)),
         totalPaid: parseFloat(totalPaid.toFixed(2)),
         lastUpdated: debt.last_updated,
         paymentHistory: debt.payment_history || [],
+        isCleared,
         policyNotes: [
           "Per Ethiopian Council of Ministers Regulation No. 447/2024:",
           "- Living stipend debt applies ONLY to students with 'CASH_STIPEND' arrangement",
           "- Tuition share = 15% of full tuition amount",
           "- Living stipend = 3,000 ETB × 5 months = 15,000 ETB per semester",
+          "- Pre-payment students are cleared against their upfront payment record",
           "- Graduation requires zero balance on ALL debts"
         ]
       }

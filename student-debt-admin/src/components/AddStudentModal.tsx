@@ -8,6 +8,9 @@ import {
   TextField,
   MenuItem,
   Alert,
+  FormControl,
+  InputLabel,
+  Select,
 } from '@mui/material';
 import api from '../services/api';
 import { DEPARTMENTS } from '../constants/departments';
@@ -28,6 +31,9 @@ export default function AddStudentModal({ open, onClose, onStudentAdded }: AddSt
     campus: 'Main Campus',
     living_arrangement: 'On-Campus',
     enrollment_status: 'Active',
+    payment_model: 'post_graduation',
+    pre_payment_amount: '',
+    pre_payment_date: '',
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -45,6 +51,14 @@ export default function AddStudentModal({ open, onClose, onStudentAdded }: AddSt
     if (!formData.department.trim()) return 'Department is required';
     if (!formData.enrollment_year || isNaN(Number(formData.enrollment_year)))
       return 'Valid enrollment year is required';
+
+    if (formData.payment_model !== 'post_graduation') {
+      const amount = Number(formData.pre_payment_amount);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return 'Pre-payment amount is required for pre-payment and hybrid students';
+      }
+    }
+
     return '';
   };
 
@@ -62,6 +76,11 @@ export default function AddStudentModal({ open, onClose, onStudentAdded }: AddSt
       await api.post('/api/admin/students', {
         ...formData,
         enrollment_year: Number(formData.enrollment_year),
+        payment_model: formData.payment_model,
+        pre_payment_amount:
+          formData.payment_model === 'post_graduation' ? 0 : Number(formData.pre_payment_amount),
+        pre_payment_date: formData.payment_model === 'post_graduation' ? null : formData.pre_payment_date || null,
+        pre_payment_clearance: false,
         campus: formData.campus || 'Main Campus',
       });
 
@@ -170,6 +189,50 @@ export default function AddStudentModal({ open, onClose, onStudentAdded }: AddSt
           <MenuItem value="Suspended">Suspended</MenuItem>
           <MenuItem value="Withdrawn">Withdrawn</MenuItem>
         </TextField>
+        <FormControl fullWidth margin="dense">
+          <InputLabel>Payment Model</InputLabel>
+          <Select
+            value={formData.payment_model}
+            label="Payment Model"
+            onChange={(e) =>
+              setFormData((prev) => ({
+                ...prev,
+                payment_model: String(e.target.value),
+                pre_payment_amount: String(e.target.value) === 'post_graduation' ? '' : prev.pre_payment_amount,
+                pre_payment_date: String(e.target.value) === 'post_graduation' ? '' : prev.pre_payment_date,
+              }))
+            }
+            disabled={loading}
+          >
+            <MenuItem value="post_graduation">Post-Graduation (Standard)</MenuItem>
+            <MenuItem value="pre_payment">Pre-Payment (Full Upfront)</MenuItem>
+            <MenuItem value="hybrid">Hybrid (Partial Upfront)</MenuItem>
+          </Select>
+        </FormControl>
+        {formData.payment_model !== 'post_graduation' && (
+          <>
+            <TextField
+              margin="dense"
+              label="Pre-Payment Amount (ETB)"
+              type="number"
+              fullWidth
+              value={formData.pre_payment_amount}
+              onChange={(e) => handleChange('pre_payment_amount', e.target.value)}
+              disabled={loading}
+              inputProps={{ min: 0, step: '0.01' }}
+            />
+            <TextField
+              margin="dense"
+              label="Pre-Payment Date"
+              type="date"
+              fullWidth
+              value={formData.pre_payment_date}
+              onChange={(e) => handleChange('pre_payment_date', e.target.value)}
+              disabled={loading}
+              InputLabelProps={{ shrink: true }}
+            />
+          </>
+        )}
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose} disabled={loading}>Cancel</Button>

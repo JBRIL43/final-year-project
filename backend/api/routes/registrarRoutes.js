@@ -4,6 +4,14 @@ const { authenticateRequest, requireRoles } = require('../middleware/auth');
 
 const router = express.Router();
 
+function normalizePaymentModel(value) {
+  const normalized = String(value || '').trim().toLowerCase().replace(/[-\s]+/g, '_');
+
+  if (normalized === 'pre_payment') return 'pre_payment';
+  if (normalized === 'hybrid') return 'hybrid';
+  return 'post_graduation';
+}
+
 async function getAvailableColumns(tableName, columns) {
   const result = await pool.query(
     `SELECT column_name
@@ -132,6 +140,10 @@ router.post('/students/import', async (req, res) => {
       'clearance_status',
       'credits_registered',
       'tuition_share_percent',
+      'payment_model',
+      'pre_payment_amount',
+      'pre_payment_date',
+      'pre_payment_clearance',
       'created_at',
       'updated_at',
     ]);
@@ -167,6 +179,15 @@ router.post('/students/import', async (req, res) => {
       const clearanceStatus = String(row['Clearance Status'] || 'PENDING').trim().toUpperCase();
       const creditsRaw = String(row['Credits Registered'] || '').trim();
       const credits = creditsRaw === '' ? null : Number.parseInt(creditsRaw, 10);
+      const paymentModel = normalizePaymentModel(row['Payment Model'] || 'post_graduation');
+      const prePaymentAmountRaw = String(
+        row['Pre-Payment Amount (ETB)'] || row['Pre-Payment Amount'] || row['Pre Payment Amount'] || ''
+      ).trim();
+      const prePaymentAmount = prePaymentAmountRaw === '' ? 0 : Number.parseFloat(prePaymentAmountRaw);
+      const prePaymentDate = String(row['Pre-Payment Date'] || row['Pre Payment Date'] || '').trim();
+      const prePaymentClearanceRaw = String(row['Pre-Payment Clearance'] || row['Pre Payment Clearance'] || '')
+        .trim()
+        .toLowerCase();
 
       if (!studentNumber || !fullName || !email || !program || !campus) {
         errors.push(`Missing required fields for row with Student ID: ${studentNumber || '(empty)'}`);
@@ -175,6 +196,11 @@ router.post('/students/import', async (req, res) => {
 
       if (Number.isFinite(credits) && credits < 0) {
         errors.push(`Invalid credits for ${studentNumber}: must be non-negative`);
+        continue;
+      }
+
+      if (paymentModel !== 'post_graduation' && (!Number.isFinite(prePaymentAmount) || prePaymentAmount <= 0)) {
+        errors.push(`Missing or invalid pre-payment amount for ${studentNumber}`);
         continue;
       }
 
@@ -219,6 +245,13 @@ router.post('/students/import', async (req, res) => {
       appendColumn('clearance_status', clearanceStatus);
       appendColumn('credits_registered', Number.isFinite(credits) ? credits : null);
       appendColumn('tuition_share_percent', tuitionSharePercent);
+      appendColumn('payment_model', paymentModel);
+
+      if (paymentModel !== 'post_graduation') {
+        appendColumn('pre_payment_amount', prePaymentAmount);
+        appendColumn('pre_payment_date', prePaymentDate || null);
+        appendColumn('pre_payment_clearance', ['1', 'true', 'yes', 'cleared'].includes(prePaymentClearanceRaw));
+      }
 
       if (studentColumns.has('created_at')) {
         insertColumns.push('created_at');
@@ -318,6 +351,10 @@ router.get('/students/:id/details', async (req, res) => {
       'clearance_status',
       'credits_registered',
       'tuition_share_percent',
+      'payment_model',
+      'pre_payment_amount',
+      'pre_payment_date',
+      'pre_payment_clearance',
       'graduation_date',
       'withdrawal_requested_at',
       'updated_at',
@@ -347,6 +384,14 @@ router.get('/students/:id/details', async (req, res) => {
     const tuitionSharePercentExpr = studentColumns.has('tuition_share_percent')
       ? 's.tuition_share_percent'
       : '15.00::numeric';
+    const paymentModelExpr = studentColumns.has('payment_model')
+      ? "COALESCE(s.payment_model, 'post_graduation')"
+      : "'post_graduation'::text";
+    const prePaymentAmountExpr = studentColumns.has('pre_payment_amount') ? 's.pre_payment_amount' : '0::numeric';
+    const prePaymentDateExpr = studentColumns.has('pre_payment_date') ? 's.pre_payment_date' : 'NULL::timestamp';
+    const prePaymentClearanceExpr = studentColumns.has('pre_payment_clearance')
+      ? 's.pre_payment_clearance'
+      : 'FALSE::boolean';
     const graduationDateExpr = studentColumns.has('graduation_date') ? 's.graduation_date' : 'NULL::date';
     const withdrawalRequestedAtExpr = studentColumns.has('withdrawal_requested_at')
       ? 's.withdrawal_requested_at'
@@ -365,6 +410,10 @@ router.get('/students/:id/details', async (req, res) => {
          ${clearanceStatusExpr} AS clearance_status,
          ${creditsRegisteredExpr} AS credits_registered,
          ${tuitionSharePercentExpr} AS tuition_share_percent,
+         ${paymentModelExpr} AS payment_model,
+         ${prePaymentAmountExpr} AS pre_payment_amount,
+         ${prePaymentDateExpr} AS pre_payment_date,
+         ${prePaymentClearanceExpr} AS pre_payment_clearance,
          ${graduationDateExpr} AS graduation_date,
          ${withdrawalRequestedAtExpr} AS withdrawal_requested_at,
          ${updatedAtExpr} AS updated_at
@@ -414,20 +463,29 @@ router.get('/students/:id/details', async (req, res) => {
     }
 
     const student = studentResult.rows[0];
+    const paymentModel = normalizePaymentModel(student.payment_model);
+    const prePaymentAmount = Number(student.pre_payment_amount || 0);
+    const prePaymentCleared = Boolean(student.pre_payment_clearance);
     const debtBalance = latestDebt
       ? Number(latestDebt.current_balance ?? latestDebt.initial_amount ?? 0)
       : null;
-    const hasOutstandingBalance = debtBalance !== null && debtBalance > 0;
+    const currentBalance = paymentModel === 'pre_payment'
+      ? (prePaymentCleared ? 0 : prePaymentAmount)
+      : debtBalance;
+    const hasOutstandingBalance = currentBalance !== null && currentBalance > 0;
 
     res.json({
       success: true,
       student: {
         ...student,
+        payment_model: paymentModel,
         latest_debt: latestDebt,
         debt_summary: {
           has_debt_record: Boolean(latestDebt),
-          current_balance: debtBalance,
+          current_balance: currentBalance,
           has_outstanding_balance: hasOutstandingBalance,
+          pre_payment_amount: prePaymentAmount,
+          pre_payment_clearance: prePaymentCleared,
           debt_status: latestDebt
             ? hasOutstandingBalance
               ? 'OUTSTANDING'
@@ -600,22 +658,44 @@ router.put('/students/:id/clearance', async (req, res) => {
       return res.status(400).json({ error: 'clearance_status must be one of: pending, cleared, waived' });
     }
 
-    const studentColumns = await getAvailableColumns('students', ['clearance_status', 'updated_at']);
+    const studentColumns = await getAvailableColumns('students', ['clearance_status', 'updated_at', 'payment_model', 'pre_payment_clearance']);
     if (!studentColumns.has('clearance_status')) {
       return res.status(400).json({ error: 'students.clearance_status column is missing' });
     }
 
+    const currentStudent = await pool.query(
+      `SELECT
+         ${studentColumns.has('payment_model') ? 'payment_model' : 'NULL::text'} AS payment_model,
+         ${studentColumns.has('pre_payment_clearance') ? 'pre_payment_clearance' : 'NULL::boolean'} AS pre_payment_clearance
+       FROM public.students
+       WHERE student_id = $1
+       LIMIT 1`,
+      [studentId]
+    );
+
+    if (currentStudent.rows.length === 0) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    const paymentModel = normalizePaymentModel(currentStudent.rows[0].payment_model);
+    const shouldUpdatePrePaymentClearance = paymentModel === 'pre_payment' && studentColumns.has('pre_payment_clearance');
+
     const updateSql = studentColumns.has('updated_at')
       ? `UPDATE public.students
-         SET clearance_status = $2, updated_at = NOW()
+         SET clearance_status = $2${shouldUpdatePrePaymentClearance ? ', pre_payment_clearance = $3' : ''}, updated_at = NOW()
          WHERE student_id = $1
          RETURNING student_id, clearance_status, updated_at`
       : `UPDATE public.students
-         SET clearance_status = $2
+         SET clearance_status = $2${shouldUpdatePrePaymentClearance ? ', pre_payment_clearance = $3' : ''}
          WHERE student_id = $1
          RETURNING student_id, clearance_status, NOW()::timestamp AS updated_at`;
 
-    const result = await pool.query(updateSql, [studentId, clearanceStatus]);
+    const result = await pool.query(
+      updateSql,
+      shouldUpdatePrePaymentClearance
+        ? [studentId, clearanceStatus, clearanceStatus === 'CLEARED' || clearanceStatus === 'WAIVED']
+        : [studentId, clearanceStatus]
+    );
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Student not found' });

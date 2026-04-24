@@ -66,6 +66,16 @@ export function validateStudentImportData(data: ImportedRow[]) {
     if (row['Credits Registered'] && Number.isNaN(Number(row['Credits Registered']))) {
       errors.push(`Row ${index + 2}: Credits must be a number`);
     }
+
+    const paymentModel = String(row['Payment Model'] || 'post_graduation').trim().toLowerCase();
+    if (paymentModel && !['pre_payment', 'post_graduation', 'hybrid'].includes(paymentModel)) {
+      errors.push(`Row ${index + 2}: Payment Model must be pre_payment, post_graduation, or hybrid`);
+    }
+
+    const prePaymentAmount = row['Pre-Payment Amount (ETB)'] || row['Pre-Payment Amount'] || '';
+    if (paymentModel !== 'post_graduation' && (!prePaymentAmount || Number.isNaN(Number(prePaymentAmount)))) {
+      errors.push(`Row ${index + 2}: Pre-Payment Amount is required for pre-payment and hybrid students`);
+    }
   });
 
   return errors;

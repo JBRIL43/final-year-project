@@ -24,6 +24,14 @@ function normalizeEnrollmentStatus(value) {
   return 'ACTIVE';
 }
 
+function normalizePaymentModel(value) {
+  const normalized = String(value || '').trim().toLowerCase().replace(/[-\s]+/g, '_');
+
+  if (normalized === 'pre_payment') return 'pre_payment';
+  if (normalized === 'hybrid') return 'hybrid';
+  return 'post_graduation';
+}
+
 function normalizeCampus(value) {
   const raw = String(value || '').trim();
   return raw || 'Main Campus';
@@ -498,6 +506,7 @@ router.get('/erca/debtors', async (req, res) => {
       'graduation_date',
       'repayment_start_date',
       'clearance_status',
+      'payment_model',
     ]);
 
     const debtCols = await getAvailableColumns('debt_records', ['student_id', 'current_balance']);
@@ -512,6 +521,7 @@ router.get('/erca/debtors', async (req, res) => {
     const hasGraduationDate = studentCols.has('graduation_date');
     const hasRepaymentStartDate = studentCols.has('repayment_start_date');
     const hasClearanceStatus = studentCols.has('clearance_status');
+    const hasPaymentModel = studentCols.has('payment_model');
     const hasCurrentBalance = debtCols.has('current_balance');
 
     if (!hasStudentNumber || !hasGraduationDate || !hasRepaymentStartDate || !hasClearanceStatus || !hasCurrentBalance) {
@@ -548,6 +558,7 @@ router.get('/erca/debtors', async (req, res) => {
          AND s.graduation_date IS NOT NULL
          AND s.repayment_start_date IS NOT NULL
          AND s.repayment_start_date <= NOW()
+        ${hasPaymentModel ? "AND LOWER(COALESCE(s.payment_model, 'post_graduation')) = 'post_graduation'" : ''}
        GROUP BY
          s.student_id,
          s.student_number,
@@ -839,68 +850,67 @@ router.post('/students', async (req, res) => {
       };
     }
 
-    const columnsResult = await client.query(
-      `SELECT column_name
-       FROM information_schema.columns
-       WHERE table_schema = 'public'
-         AND table_name = 'students'
-         AND column_name = ANY($1::text[])`,
-      [['updated_at', 'campus']]
-    );
+    const availableStudentColumns = await getAvailableColumns('students', [
+      'user_id',
+      'student_number',
+      'full_name',
+      'email',
+      'department',
+      'enrollment_year',
+      'campus',
+      'living_arrangement',
+      'enrollment_status',
+      'payment_model',
+      'pre_payment_amount',
+      'pre_payment_date',
+      'pre_payment_clearance',
+      'created_at',
+      'updated_at',
+    ]);
 
-    const hasUpdatedAt = columnsResult.rows.some((row) => row.column_name === 'updated_at');
-    const hasCampus = columnsResult.rows.some((row) => row.column_name === 'campus');
+    const insertColumns = [];
+    const insertValues = [];
+
+    const addStudentColumn = (columnName, value) => {
+      if (availableStudentColumns.has(columnName)) {
+        insertColumns.push(columnName);
+        insertValues.push(value);
+      }
+    };
 
     const normalizedCampus = normalizeCampus(campus);
 
-    const insertSql = hasUpdatedAt && hasCampus
-      ? `INSERT INTO public.students (
-          user_id, student_number, full_name, email, department,
-          enrollment_year, campus, living_arrangement, enrollment_status, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
-        RETURNING *`
-      : hasUpdatedAt
-      ? `INSERT INTO public.students (
-          user_id, student_number, full_name, email, department,
-          enrollment_year, living_arrangement, enrollment_status, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
-        RETURNING *`
-      : hasCampus
-      ? `INSERT INTO public.students (
-          user_id, student_number, full_name, email, department,
-          enrollment_year, campus, living_arrangement, enrollment_status, created_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
-        RETURNING *`
-      : `INSERT INTO public.students (
-          user_id, student_number, full_name, email, department,
-          enrollment_year, living_arrangement, enrollment_status, created_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
-        RETURNING *`;
+    addStudentColumn('user_id', userId);
+    addStudentColumn('student_number', student_number);
+    addStudentColumn('full_name', full_name);
+    addStudentColumn('email', email);
+    addStudentColumn('department', department);
+    addStudentColumn('enrollment_year', Number(enrollment_year));
+    addStudentColumn('campus', normalizedCampus);
+    addStudentColumn('living_arrangement', normalizeLivingArrangement(living_arrangement));
+    addStudentColumn('enrollment_status', normalizeEnrollmentStatus(enrollment_status));
+    addStudentColumn('payment_model', normalizedPaymentModel);
 
-    const values = hasCampus
-      ? [
-          userId,
-          student_number,
-          full_name,
-          email,
-          department,
-          Number(enrollment_year),
-          normalizedCampus,
-          normalizeLivingArrangement(living_arrangement),
-          normalizeEnrollmentStatus(enrollment_status),
-        ]
-      : [
-          userId,
-          student_number,
-          full_name,
-          email,
-          department,
-          Number(enrollment_year),
-          normalizeLivingArrangement(living_arrangement),
-          normalizeEnrollmentStatus(enrollment_status),
-        ];
+    if (normalizedPaymentModel !== 'post_graduation') {
+      addStudentColumn('pre_payment_amount', normalizedPrePaymentAmount);
+      addStudentColumn('pre_payment_date', pre_payment_date || null);
+      addStudentColumn('pre_payment_clearance', Boolean(pre_payment_clearance));
+    }
 
-    const studentResult = await client.query(insertSql, values);
+    if (availableStudentColumns.has('created_at')) {
+      addStudentColumn('created_at', new Date());
+    }
+    if (availableStudentColumns.has('updated_at')) {
+      addStudentColumn('updated_at', new Date());
+    }
+
+    const insertPlaceholders = insertValues.map((_, index) => `$${index + 1}`).join(', ');
+    const studentResult = await client.query(
+      `INSERT INTO public.students (${insertColumns.join(', ')})
+       VALUES (${insertPlaceholders})
+       RETURNING *`,
+      insertValues
+    );
 
     await client.query('COMMIT');
     res.status(201).json({
