@@ -121,12 +121,17 @@ router.get('/cost-breakdown', authenticateToken, async (req, res) => {
 
     const studentCols = await getAvailableColumns('students', ['full_name', 'campus']);
     const costCols = await getAvailableColumns('cost_shares', ['campus', 'food_cost_per_month']);
-    const contractCols = await getAvailableColumns('contracts', ['is_active']);
+    const contractCols = await getAvailableColumns('contracts', ['is_active', 'academic_year', 'tuition_share_percent']);
+    const hasSemesterAmountsTable = (
+      await pool.query(`SELECT to_regclass('public.semester_amounts') AS table_name`)
+    ).rows[0].table_name;
 
     const hasStudentFullName = studentCols.has('full_name');
     const hasStudentCampus = studentCols.has('campus');
     const hasFoodCostPerMonth = costCols.has('food_cost_per_month');
     const hasContractIsActive = contractCols.has('is_active');
+    const hasContractAcademicYear = contractCols.has('academic_year');
+    const hasContractTuitionSharePercent = contractCols.has('tuition_share_percent');
 
     const fullNameExpr = hasStudentFullName ? 's.full_name' : 'u.full_name';
     const studentCampusExpr = hasStudentCampus ? 's.campus' : "'Main Campus'::text";
@@ -134,81 +139,169 @@ router.get('/cost-breakdown', authenticateToken, async (req, res) => {
 
     const activeContractClause = hasContractIsActive ? 'AND c.is_active = true' : '';
 
-    const result = await pool.query(
-      `SELECT
-         ${fullNameExpr} AS full_name,
-         COALESCE(c.program, s.department) AS department,
-         ${studentCampusExpr} AS campus,
-         c.academic_year,
-         cs.tuition_cost_per_year,
-         cs.boarding_cost_per_year,
-         ${hasFoodCostPerMonth ? 'cs.food_cost_per_month' : '3000::numeric'} AS food_cost_per_month,
-         c.tuition_share_percent
-       FROM public.students s
-       JOIN public.contracts c
-         ON s.student_id = c.student_id
-        ${activeContractClause}
-       JOIN public.cost_shares cs
-         ON LOWER(TRIM(c.program)) = LOWER(TRIM(cs.program))
-        AND c.academic_year = cs.academic_year
-       ${needsUsersJoin ? 'LEFT JOIN public.users u ON s.user_id = u.user_id' : ''}
-       WHERE s.student_id = $1
-       LIMIT 1`,
-      [studentId]
-    );
+    const resolveProgramType = (department) => {
+      const normalized = String(department || '').trim().toLowerCase();
 
-    // Fallback for older/incomplete data where contracts or cost_shares are missing.
-    if (result.rows.length === 0) {
-      const fallback = await pool.query(
+      if (normalized.includes('engineering')) return 'Engineering';
+      if (normalized.includes('computer') || normalized.includes('software')) return 'Computer Science';
+      if (normalized.includes('health') || normalized.includes('medicine')) return 'Health Sciences';
+      return 'Social Sciences';
+    };
+
+    let data = null;
+    let tuitionCost = 0;
+    let tuitionSharePercent = 15;
+    let boardingCost = 0;
+    let foodCostMonthly = 0;
+    let healthInsuranceFee = 0;
+    let otherFees = 0;
+
+    if (hasSemesterAmountsTable && hasContractAcademicYear && hasContractTuitionSharePercent) {
+      const semesterBaseResult = await pool.query(
         `SELECT
            ${fullNameExpr} AS full_name,
-           s.department,
+           COALESCE(c.program, s.department) AS department,
            ${studentCampusExpr} AS campus,
-           dr.initial_amount,
-           dr.current_balance
+           c.academic_year,
+           c.tuition_share_percent
          FROM public.students s
-         LEFT JOIN public.debt_records dr ON dr.student_id = s.student_id
+         JOIN public.contracts c
+           ON s.student_id = c.student_id
+          ${activeContractClause}
          ${needsUsersJoin ? 'LEFT JOIN public.users u ON s.user_id = u.user_id' : ''}
          WHERE s.student_id = $1
-         ORDER BY dr.debt_id DESC NULLS LAST
          LIMIT 1`,
         [studentId]
       );
 
-      if (fallback.rows.length === 0) {
-        return res.status(404).json({ error: 'Cost breakdown not found' });
+      if (semesterBaseResult.rows.length > 0) {
+        const base = semesterBaseResult.rows[0];
+        const programType = resolveProgramType(base.department);
+
+        let semesterAmountResult = await pool.query(
+          `SELECT
+             tuition_cost_per_year,
+             boarding_cost_per_year,
+             food_cost_per_month,
+             health_insurance_fee,
+             other_fees
+           FROM public.semester_amounts
+           WHERE academic_year = $1
+             AND campus = $2
+             AND program_type = $3
+           ORDER BY effective_from DESC
+           LIMIT 1`,
+          [base.academic_year, base.campus, programType]
+        );
+
+        if (semesterAmountResult.rows.length === 0) {
+          semesterAmountResult = await pool.query(
+            `SELECT
+               tuition_cost_per_year,
+               boarding_cost_per_year,
+               food_cost_per_month,
+               health_insurance_fee,
+               other_fees
+             FROM public.semester_amounts
+             WHERE academic_year = $1
+             ORDER BY effective_from DESC
+             LIMIT 1`,
+            [base.academic_year]
+          );
+        }
+
+        if (semesterAmountResult.rows.length > 0) {
+          const amount = semesterAmountResult.rows[0];
+          data = base;
+          tuitionCost = Number(amount.tuition_cost_per_year || 0);
+          tuitionSharePercent = Number(base.tuition_share_percent || 15);
+          boardingCost = Number(amount.boarding_cost_per_year || 0);
+          foodCostMonthly = Number(amount.food_cost_per_month || 0);
+          healthInsuranceFee = Number(amount.health_insurance_fee || 0);
+          otherFees = Number(amount.other_fees || 0);
+        }
       }
-
-      const row = fallback.rows[0];
-      const fallbackTotal = Number(row.initial_amount || row.current_balance || 0);
-
-      return res.json({
-        success: true,
-        fallback: true,
-        costBreakdown: {
-          fullName: row.full_name,
-          program: row.department,
-          campus: row.campus,
-          academicYear: 'N/A',
-          tuitionFullCost: 0,
-          tuitionStudentShare: 0,
-          boardingCost: 0,
-          foodCostMonthly: 0,
-          foodCostAnnual: 0,
-          totalDebt: Number(fallbackTotal.toFixed(2)),
-        },
-      });
     }
 
-    const data = result.rows[0];
-    const tuitionCost = Number(data.tuition_cost_per_year || 0);
-    const tuitionSharePercent = Number(data.tuition_share_percent || 15);
-    const boardingCost = Number(data.boarding_cost_per_year || 0);
-    const foodCostMonthly = Number(data.food_cost_per_month || 0);
+    if (!data) {
+      const result = await pool.query(
+        `SELECT
+           ${fullNameExpr} AS full_name,
+           COALESCE(c.program, s.department) AS department,
+           ${studentCampusExpr} AS campus,
+           c.academic_year,
+           cs.tuition_cost_per_year,
+           cs.boarding_cost_per_year,
+           ${hasFoodCostPerMonth ? 'cs.food_cost_per_month' : '3000::numeric'} AS food_cost_per_month,
+           c.tuition_share_percent
+         FROM public.students s
+         JOIN public.contracts c
+           ON s.student_id = c.student_id
+          ${activeContractClause}
+         JOIN public.cost_shares cs
+           ON LOWER(TRIM(c.program)) = LOWER(TRIM(cs.program))
+          AND c.academic_year = cs.academic_year
+         ${needsUsersJoin ? 'LEFT JOIN public.users u ON s.user_id = u.user_id' : ''}
+         WHERE s.student_id = $1
+         LIMIT 1`,
+        [studentId]
+      );
+
+      // Fallback for older/incomplete data where contracts or cost_shares are missing.
+      if (result.rows.length === 0) {
+        const fallback = await pool.query(
+          `SELECT
+             ${fullNameExpr} AS full_name,
+             s.department,
+             ${studentCampusExpr} AS campus,
+             dr.initial_amount,
+             dr.current_balance
+           FROM public.students s
+           LEFT JOIN public.debt_records dr ON dr.student_id = s.student_id
+           ${needsUsersJoin ? 'LEFT JOIN public.users u ON s.user_id = u.user_id' : ''}
+           WHERE s.student_id = $1
+           ORDER BY dr.debt_id DESC NULLS LAST
+           LIMIT 1`,
+          [studentId]
+        );
+
+        if (fallback.rows.length === 0) {
+          return res.status(404).json({ error: 'Cost breakdown not found' });
+        }
+
+        const row = fallback.rows[0];
+        const fallbackTotal = Number(row.initial_amount || row.current_balance || 0);
+
+        return res.json({
+          success: true,
+          fallback: true,
+          costBreakdown: {
+            fullName: row.full_name,
+            program: row.department,
+            campus: row.campus,
+            academicYear: 'N/A',
+            tuitionFullCost: 0,
+            tuitionStudentShare: 0,
+            boardingCost: 0,
+            foodCostMonthly: 0,
+            foodCostAnnual: 0,
+            healthInsuranceFee: 0,
+            otherFees: 0,
+            totalDebt: Number(fallbackTotal.toFixed(2)),
+          },
+        });
+      }
+
+      data = result.rows[0];
+      tuitionCost = Number(data.tuition_cost_per_year || 0);
+      tuitionSharePercent = Number(data.tuition_share_percent || 15);
+      boardingCost = Number(data.boarding_cost_per_year || 0);
+      foodCostMonthly = Number(data.food_cost_per_month || 0);
+    }
 
     const tuitionShare = tuitionCost * (tuitionSharePercent / 100);
     const foodAnnual = foodCostMonthly * 10;
-    const totalDebt = tuitionShare + boardingCost + foodAnnual;
+    const totalDebt = tuitionShare + boardingCost + foodAnnual + healthInsuranceFee + otherFees;
 
     const payments = await pool.query(
       `SELECT
@@ -237,6 +330,8 @@ router.get('/cost-breakdown', authenticateToken, async (req, res) => {
         boardingCost: boardingCost,
         foodCostMonthly: foodCostMonthly,
         foodCostAnnual: Number(foodAnnual.toFixed(2)),
+        healthInsuranceFee: Number(healthInsuranceFee.toFixed(2)),
+        otherFees: Number(otherFees.toFixed(2)),
         totalDebt: Number(totalDebt.toFixed(2)),
       },
       paymentHistory: payments.rows,

@@ -15,6 +15,7 @@ import RegistrarDashboard from './components/RegistrarDashboard'
 import DepartmentDashboard from './components/DepartmentDashboard'
 import ChangePassword from './components/ChangePassword'
 import FaydaIntegrationDashboard from './components/FaydaIntegrationDashboard'
+import SemesterAmountsDashboard from './components/SemesterAmountsDashboard'
 
 function AppRoutes() {
   const { loading, role } = useAuth()
@@ -113,8 +114,16 @@ function AppRoutes() {
         <Route
           path="cost-config"
           element={
-            <ProtectedRoute allowedRoles={['admin', 'finance']}>
+            <ProtectedRoute allowedRoles={['admin', 'finance', 'registrar', 'department_head']}>
               <CostManagement />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="semester-amounts"
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'finance']}>
+              <SemesterAmountsDashboard />
             </ProtectedRoute>
           }
         />

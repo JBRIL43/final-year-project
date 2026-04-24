@@ -33,6 +33,7 @@ function buildNavItems(role: string) {
   if (role === 'registrar') {
     return [
       { label: 'Registrar Clearance', to: '/registrar', icon: <AccountBalanceIcon /> },
+      { label: 'Cost Configuration', to: '/cost-config', icon: <ReceiptLongIcon /> },
       { label: 'Graduate Management', to: '/graduates', icon: <SchoolIcon /> },
       { label: 'Change Password', to: '/change-password', icon: <LockResetIcon /> },
     ]
@@ -41,6 +42,7 @@ function buildNavItems(role: string) {
   if (role === 'department_head') {
     return [
       { label: 'Department Dashboard', to: '/department', icon: <ApartmentIcon /> },
+      { label: 'Cost Configuration', to: '/cost-config', icon: <ReceiptLongIcon /> },
       { label: 'Change Password', to: '/change-password', icon: <LockResetIcon /> },
     ]
   }
@@ -52,6 +54,7 @@ function buildNavItems(role: string) {
       { label: 'Delinquent Graduates', to: '/graduates/delinquent', icon: <WarningIcon /> },
       { label: 'Payment Review', to: '/payment-review', icon: <ReceiptLongIcon /> },
       { label: 'Cost Configuration', to: '/cost-config', icon: <ReceiptLongIcon /> },
+      { label: 'Semester Amounts', to: '/semester-amounts', icon: <ReceiptLongIcon /> },
       { label: 'ERCA Export', to: '/erca-export', icon: <DescriptionIcon /> },
       { label: 'Fayda Integration', to: '/fayda', icon: <HubIcon /> },
       { label: 'Change Password', to: '/change-password', icon: <LockResetIcon /> },
@@ -66,6 +69,7 @@ function buildNavItems(role: string) {
     { label: 'Registrar Clearance', to: '/registrar', icon: <AccountBalanceIcon /> },
     { label: 'Department Dashboard', to: '/department', icon: <ApartmentIcon /> },
     { label: 'Cost Configuration', to: '/cost-config', icon: <ReceiptLongIcon /> },
+    { label: 'Semester Amounts', to: '/semester-amounts', icon: <ReceiptLongIcon /> },
     { label: 'Payment Review', to: '/payment-review', icon: <ReceiptLongIcon /> },
     { label: 'ERCA Export', to: '/erca-export', icon: <DescriptionIcon /> },
     { label: 'Fayda Integration', to: '/fayda', icon: <HubIcon /> },

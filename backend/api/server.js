@@ -12,6 +12,7 @@ const studentRoutes = require('./routes/studentRoutes');
 const registrarRoutes = require('./routes/registrarRoutes');
 const departmentRoutes = require('./routes/departmentRoutes');
 const faydaRoutes = require('./routes/faydaRoutes');
+const semesterAmountsRoutes = require('./routes/semesterAmountsRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -47,6 +48,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/student', studentRoutes);
 app.use('/api/registrar', registrarRoutes);
 app.use('/api/admin/fayda', faydaRoutes);
+app.use('/api/admin/semester-amounts', semesterAmountsRoutes);
 app.use('/api/department', departmentRoutes);
 
 // Health check
