@@ -113,6 +113,95 @@ router.post('/', async (req, res) => {
   }
 });
 
+// PUT /api/admin/semester-amounts/:id — update an existing semester amount configuration
+router.put('/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+
+    if (!Number.isFinite(id) || id <= 0) {
+      return res.status(400).json({ error: 'Invalid semester amount id' });
+    }
+
+    const {
+      academic_year,
+      campus,
+      program_type,
+      tuition_cost_per_year,
+      boarding_cost_per_year,
+      food_cost_per_month,
+      health_insurance_fee = 0,
+      other_fees = 0,
+      effective_from,
+    } = req.body || {};
+
+    if (!academic_year || !campus || !program_type || !effective_from) {
+      return res.status(400).json({
+        error: 'academic_year, campus, program_type, and effective_from are required',
+      });
+    }
+
+    const tuitionCost = Number(tuition_cost_per_year);
+    const boardingCost = Number(boarding_cost_per_year);
+    const foodCost = Number(food_cost_per_month);
+    const healthFee = Number(health_insurance_fee);
+    const otherFee = Number(other_fees);
+
+    if (
+      [tuitionCost, boardingCost, foodCost, healthFee, otherFee].some(
+        (value) => Number.isNaN(value) || value < 0
+      )
+    ) {
+      return res.status(400).json({
+        error: 'All fee values must be valid non-negative numbers',
+      });
+    }
+
+    const result = await pool.query(
+      `UPDATE public.semester_amounts
+       SET academic_year = $1,
+           campus = $2,
+           program_type = $3,
+           tuition_cost_per_year = $4,
+           boarding_cost_per_year = $5,
+           food_cost_per_month = $6,
+           health_insurance_fee = $7,
+           other_fees = $8,
+           effective_from = $9,
+           updated_at = NOW()
+       WHERE id = $10
+       RETURNING *`,
+      [
+        String(academic_year).trim(),
+        String(campus).trim(),
+        String(program_type).trim(),
+        tuitionCost,
+        boardingCost,
+        foodCost,
+        healthFee,
+        otherFee,
+        effective_from,
+        id,
+      ]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Semester amount configuration not found' });
+    }
+
+    return res.json({ success: true, amount: result.rows[0] });
+  } catch (error) {
+    console.error('Semester amount update error:', error);
+
+    if (error && error.code === '23505') {
+      return res.status(409).json({
+        error: 'Configuration already exists for this academic year, campus, and program type',
+      });
+    }
+
+    return res.status(500).json({ error: 'Failed to update semester amount' });
+  }
+});
+
 // DELETE /api/admin/semester-amounts/:id — remove a semester amount configuration
 router.delete('/:id', async (req, res) => {
   try {
