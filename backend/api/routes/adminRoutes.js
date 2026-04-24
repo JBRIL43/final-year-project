@@ -1822,9 +1822,36 @@ router.post('/debt/reconcile', async (req, res) => {
     const hasLastUpdated = debtColumns.rows.some((row) => row.column_name === 'last_updated');
 
     const costShareCols = hasCostShares
-      ? await getAvailableColumns('cost_shares', ['food_cost_per_month'])
+      ? await getAvailableColumns('cost_shares', ['food_cost_per_month', 'campus'])
       : new Set();
     const hasFoodCostPerMonth = costShareCols.has('food_cost_per_month');
+    const hasCostShareCampus = costShareCols.has('campus');
+
+    const studentCols = await getAvailableColumns('students', ['campus', 'department', 'enrollment_status']);
+    const contractCols = await getAvailableColumns('contracts', ['program', 'academic_year', 'tuition_share_percent', 'is_active']);
+
+    const hasStudentCampus = studentCols.has('campus');
+    const hasStudentDepartment = studentCols.has('department');
+    const hasStudentEnrollmentStatus = studentCols.has('enrollment_status');
+    const hasContractProgram = contractCols.has('program');
+    const hasContractAcademicYear = contractCols.has('academic_year');
+    const hasContractTuitionSharePercent = contractCols.has('tuition_share_percent');
+    const hasContractIsActive = contractCols.has('is_active');
+
+    if (!hasContractAcademicYear || !hasContractTuitionSharePercent) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        error: 'contracts schema is missing academic_year or tuition_share_percent columns.',
+      });
+    }
+
+    const studentCampusExpr = hasStudentCampus ? 's.campus' : "'Main Campus'::text";
+    const studentDepartmentExpr = hasStudentDepartment ? 's.department' : "''::text";
+    const contractProgramExpr = hasContractProgram ? 'c.program' : 'NULL::text';
+    const activeContractCondition = hasContractIsActive ? 'AND c.is_active = true' : '';
+    const enrollmentFilter = hasStudentEnrollmentStatus
+      ? "WHERE UPPER(COALESCE(s.enrollment_status, '')) IN ('ACTIVE', 'GRADUATED')"
+      : '';
 
     const semesterAmountRows = hasSemesterAmounts
       ? (
@@ -1851,7 +1878,7 @@ router.post('/debt/reconcile', async (req, res) => {
             `SELECT
                program,
                academic_year,
-               campus,
+               ${hasCostShareCampus ? 'campus' : "'Main Campus'::text AS campus"},
                tuition_cost_per_year,
                boarding_cost_per_year,
                ${hasFoodCostPerMonth ? 'food_cost_per_month' : '0::numeric AS food_cost_per_month'}
@@ -1863,17 +1890,16 @@ router.post('/debt/reconcile', async (req, res) => {
     const candidates = await client.query(
       `SELECT
          s.student_id,
-         COALESCE(c.program, s.department) AS program,
-         s.department,
-         COALESCE(s.campus, 'Main Campus') AS campus,
-         c.program,
+         COALESCE(${contractProgramExpr}, ${studentDepartmentExpr}) AS program,
+         ${studentDepartmentExpr} AS department,
+         ${studentCampusExpr} AS campus,
          c.academic_year,
-         c.tuition_share_percent,
+         c.tuition_share_percent
        FROM public.students s
        JOIN public.contracts c
          ON c.student_id = s.student_id
-        AND c.is_active = true
-       WHERE UPPER(COALESCE(s.enrollment_status, '')) IN ('ACTIVE', 'GRADUATED')`
+        ${activeContractCondition}
+       ${enrollmentFilter}`
     );
 
     if (candidates.rows.length === 0) {
