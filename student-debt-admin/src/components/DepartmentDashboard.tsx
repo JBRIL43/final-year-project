@@ -15,7 +15,6 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  TextField,
   Typography,
 } from '@mui/material'
 import api from '../services/api'
@@ -36,7 +35,6 @@ interface DepartmentStudent {
 export default function DepartmentDashboard() {
   const [students, setStudents] = useState<DepartmentStudent[]>([])
   const [department, setDepartment] = useState('')
-  const [programChanges, setProgramChanges] = useState<Record<number, string>>({})
   const [loading, setLoading] = useState(true)
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
     open: false,
@@ -70,41 +68,24 @@ export default function DepartmentDashboard() {
     return () => clearInterval(interval)
   }, [])
 
-  const approveWithdrawal = async (studentId: number) => {
+  const handleWithdrawalDecision = async (studentId: number, approved: boolean) => {
     try {
       await api.post(`/api/department/students/${studentId}/withdrawal/approve`, {
-        approved: true,
+        approved,
       })
-      setSnackbar({ open: true, message: 'Withdrawal approved', severity: 'success' })
-      loadStudents()
-    } catch (error: any) {
-      console.error('Failed to approve withdrawal:', error)
       setSnackbar({
         open: true,
-        message: error?.response?.data?.error || 'Could not approve withdrawal',
+        message: approved ? 'Withdrawal approved' : 'Withdrawal rejected',
+        severity: 'success',
+      })
+      loadStudents()
+    } catch (error: any) {
+      console.error('Failed to process withdrawal decision:', error)
+      setSnackbar({
+        open: true,
+        message: error?.response?.data?.error || 'Could not process withdrawal decision',
         severity: 'error',
       })
-    }
-  }
-
-  const approveProgramChange = async (studentId: number) => {
-    const newDepartment = (programChanges[studentId] || '').trim()
-    if (!newDepartment) {
-      setSnackbar({ open: true, message: 'Enter the new program first', severity: 'error' })
-      return
-    }
-
-    try {
-      await api.post(`/api/department/students/${studentId}/actions`, {
-        action: 'approve_program_change',
-        newDepartment,
-      })
-      setSnackbar({ open: true, message: 'Program change approved', severity: 'success' })
-      setProgramChanges((prev) => ({ ...prev, [studentId]: '' }))
-      loadStudents()
-    } catch (error) {
-      console.error('Failed to approve program change:', error)
-      setSnackbar({ open: true, message: 'Could not approve program change', severity: 'error' })
     }
   }
 
@@ -147,7 +128,6 @@ export default function DepartmentDashboard() {
                   <TableCell>Credits</TableCell>
                   <TableCell>Status</TableCell>
                   <TableCell>Dept. Clearance</TableCell>
-                  <TableCell>New Program</TableCell>
                   <TableCell align="right">Actions</TableCell>
                 </TableRow>
               </TableHead>
@@ -178,32 +158,36 @@ export default function DepartmentDashboard() {
                         </Select>
                       </FormControl>
                     </TableCell>
-                    <TableCell>
-                      <TextField
-                        size="small"
-                        placeholder="e.g. Information Systems"
-                        value={programChanges[student.student_id] || ''}
-                        onChange={(event) =>
-                          setProgramChanges((prev) => ({
-                            ...prev,
-                            [student.student_id]: event.target.value,
-                          }))
-                        }
-                      />
-                    </TableCell>
                     <TableCell align="right">
-                      <Button size="small" onClick={() => approveWithdrawal(student.student_id)} sx={{ mr: 1 }}>
-                        Approve Withdrawal
-                      </Button>
-                      <Button size="small" variant="outlined" onClick={() => approveProgramChange(student.student_id)}>
-                        Approve Program Change
-                      </Button>
+                      {student.withdrawal_requested_at ? (
+                        <>
+                          <Button
+                            size="small"
+                            onClick={() => handleWithdrawalDecision(student.student_id, true)}
+                            sx={{ mr: 1 }}
+                          >
+                            Approve Withdrawal
+                          </Button>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            color="error"
+                            onClick={() => handleWithdrawalDecision(student.student_id, false)}
+                          >
+                            Reject Withdrawal
+                          </Button>
+                        </>
+                      ) : (
+                        <Typography variant="caption" color="text.secondary">
+                          No withdrawal request
+                        </Typography>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
                 {students.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={7} align="center">
+                    <TableCell colSpan={6} align="center">
                       No students found in this department.
                     </TableCell>
                   </TableRow>

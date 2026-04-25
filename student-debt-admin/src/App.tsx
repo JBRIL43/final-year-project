@@ -114,7 +114,7 @@ function AppRoutes() {
         <Route
           path="cost-config"
           element={
-            <ProtectedRoute allowedRoles={['admin', 'finance', 'department_head']}>
+            <ProtectedRoute allowedRoles={['admin', 'finance']}>
               <CostManagement />
             </ProtectedRoute>
           }
