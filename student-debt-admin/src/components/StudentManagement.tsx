@@ -26,6 +26,7 @@ import { Student } from '../types/student';
 import AddStudentModal from './AddStudentModal';
 import DeleteStudentModal from './DeleteStudentModal';
 import StudentDebtDetail from './StudentDebtDetail';
+import { useAuth } from '../contexts/AuthContext';
 
 type ContractRecord = {
   contract_id?: number;
@@ -66,6 +67,8 @@ function toInputDateTime(value?: string) {
 }
 
 export default function StudentManagement() {
+  const { role } = useAuth();
+  const isFinanceView = role === 'finance';
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -540,72 +543,83 @@ export default function StudentManagement() {
       field: 'campus',
       headerName: 'Campus',
       width: 140,
-      renderCell: (params) => (
-        <TextField
-          size="small"
-          select
-          value={params.value || 'Main Campus'}
-          onChange={(e) => handleEdit(params.row.student_id, 'campus', e.target.value)}
-          sx={{ width: '100%' }}
-        >
-          <MenuItem value="Main Campus">Main Campus</MenuItem>
-          <MenuItem value="IoT Campus">IoT Campus</MenuItem>
-        </TextField>
-      ),
+      renderCell: (params) =>
+        isFinanceView ? (
+          <span>{params.value || 'Main Campus'}</span>
+        ) : (
+          <TextField
+            size="small"
+            select
+            value={params.value || 'Main Campus'}
+            onChange={(e) => handleEdit(params.row.student_id, 'campus', e.target.value)}
+            sx={{ width: '100%' }}
+          >
+            <MenuItem value="Main Campus">Main Campus</MenuItem>
+            <MenuItem value="IoT Campus">IoT Campus</MenuItem>
+          </TextField>
+        ),
     },
     { field: 'enrollment_year', headerName: 'Year', width: 80 },
     {
       field: 'living_arrangement',
       headerName: 'Living',
       width: 120,
-      renderCell: (params) => (
-        <TextField
-          size="small"
-          select
-          value={params.value || ''}
-          onChange={(e) => handleEdit(params.row.student_id, 'living_arrangement', e.target.value)}
-          sx={{ width: '100%' }}
-        >
-          <MenuItem value="On-Campus">On-Campus</MenuItem>
-          <MenuItem value="Off-Campus">Off-Campus</MenuItem>
-          <MenuItem value="With Family">With Family</MenuItem>
-        </TextField>
-      ),
+      renderCell: (params) =>
+        isFinanceView ? (
+          <span>{params.value || '-'}</span>
+        ) : (
+          <TextField
+            size="small"
+            select
+            value={params.value || ''}
+            onChange={(e) => handleEdit(params.row.student_id, 'living_arrangement', e.target.value)}
+            sx={{ width: '100%' }}
+          >
+            <MenuItem value="On-Campus">On-Campus</MenuItem>
+            <MenuItem value="Off-Campus">Off-Campus</MenuItem>
+            <MenuItem value="With Family">With Family</MenuItem>
+          </TextField>
+        ),
     },
     {
       field: 'enrollment_status',
       headerName: 'Status',
       width: 120,
-      renderCell: (params) => (
-        <TextField
-          size="small"
-          select
-          value={params.value || ''}
-          onChange={(e) => handleEdit(params.row.student_id, 'enrollment_status', e.target.value)}
-          sx={{ width: '100%' }}
-        >
-          <MenuItem value="Active">Active</MenuItem>
-          <MenuItem value="Graduated">Graduated</MenuItem>
-          <MenuItem value="Suspended">Suspended</MenuItem>
-          <MenuItem value="Withdrawn">Withdrawn</MenuItem>
-        </TextField>
-      ),
+      renderCell: (params) =>
+        isFinanceView ? (
+          <span>{params.value || '-'}</span>
+        ) : (
+          <TextField
+            size="small"
+            select
+            value={params.value || ''}
+            onChange={(e) => handleEdit(params.row.student_id, 'enrollment_status', e.target.value)}
+            sx={{ width: '100%' }}
+          >
+            <MenuItem value="Active">Active</MenuItem>
+            <MenuItem value="Graduated">Graduated</MenuItem>
+            <MenuItem value="Suspended">Suspended</MenuItem>
+            <MenuItem value="Withdrawn">Withdrawn</MenuItem>
+          </TextField>
+        ),
     },
     {
       field: 'actions',
       headerName: 'Actions',
-      width: 420,
+      width: isFinanceView ? 170 : 420,
       sortable: false,
       renderCell: (params) => (
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, alignItems: 'center' }}>
-          <Button
-            size="small"
-            startIcon={<DescriptionIcon />}
-            onClick={() => handleViewContract(params.row as Student)}
-            sx={{ whiteSpace: 'nowrap' }}
-          >
-            View Contract
-          </Button>
+          {!isFinanceView && (
+            <Button
+              size="small"
+              startIcon={<DescriptionIcon />}
+              onClick={() => handleViewContract(params.row as Student)}
+              sx={{ whiteSpace: 'nowrap' }}
+            >
+              View Contract
+            </Button>
+          )}
           <Button
             size="small"
             startIcon={<AccountBalanceWalletIcon />}
@@ -614,15 +628,17 @@ export default function StudentManagement() {
           >
             View Debt
           </Button>
-          <Button
-            color="error"
-            size="small"
-            startIcon={<DeleteIcon />}
-            onClick={() => handleDeleteClick(params.row.student_id, params.row.full_name)}
-            sx={{ whiteSpace: 'nowrap' }}
-          >
-            Delete
-          </Button>
+          {!isFinanceView && (
+            <Button
+              color="error"
+              size="small"
+              startIcon={<DeleteIcon />}
+              onClick={() => handleDeleteClick(params.row.student_id, params.row.full_name)}
+              sx={{ whiteSpace: 'nowrap' }}
+            >
+              Delete
+            </Button>
+          )}
         </Box>
       ),
     },
@@ -631,15 +647,17 @@ export default function StudentManagement() {
   return (
     <Box sx={{ p: 2 }}>
       <Typography variant="h4" gutterBottom>
-        Student Management
+        {isFinanceView ? 'Student Financial Data' : 'Student Management'}
       </Typography>
 
       <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => setIsAddStudentOpen(true)}>
-          Add Student
-        </Button>
+        {!isFinanceView && (
+          <Button variant="contained" startIcon={<AddIcon />} onClick={() => setIsAddStudentOpen(true)}>
+            Add Student
+          </Button>
+        )}
 
-        {selectedStudents.length > 0 && (
+        {!isFinanceView && selectedStudents.length > 0 && (
           <>
             <TextField
               select
@@ -702,9 +720,11 @@ export default function StudentManagement() {
           onChange={(e) => setSearchTerm(e.target.value)}
           sx={{ minWidth: 250, ml: 'auto' }}
         />
-        <Button variant="outlined" startIcon={<DownloadIcon />} onClick={exportToCSV}>
-          Export CSV
-        </Button>
+        {!isFinanceView && (
+          <Button variant="outlined" startIcon={<DownloadIcon />} onClick={exportToCSV}>
+            Export CSV
+          </Button>
+        )}
       </Box>
 
       <Paper sx={{ height: 'calc(100vh - 260px)', width: '100%' }}>
@@ -718,31 +738,34 @@ export default function StudentManagement() {
             pagination: { paginationModel: { pageSize: 25 } },
           }}
           disableRowSelectionOnClick
-          checkboxSelection
+          checkboxSelection={!isFinanceView}
           onRowSelectionModelChange={(newSelection) => {
+            if (isFinanceView) return;
             const normalizedSelection = normalizeSelectionModel(newSelection);
             setRowSelectionModel(normalizedSelection);
             setSelectedStudents(Array.from(normalizedSelection.ids).map((id) => Number(id)));
           }}
-          rowSelectionModel={rowSelectionModel}
+          rowSelectionModel={isFinanceView ? { type: 'include', ids: new Set() } : rowSelectionModel}
         />
       </Paper>
 
-      {/* Delete Student Modal */}
-      <DeleteStudentModal
-        open={deleteModal.open}
-        onClose={() => setDeleteModal({ open: false, studentId: null, studentName: '' })}
-        studentId={deleteModal.studentId}
-        studentName={deleteModal.studentName}
-        onStudentDeleted={loadStudents}
-      />
+      {!isFinanceView && (
+        <DeleteStudentModal
+          open={deleteModal.open}
+          onClose={() => setDeleteModal({ open: false, studentId: null, studentName: '' })}
+          studentId={deleteModal.studentId}
+          studentName={deleteModal.studentName}
+          onStudentDeleted={loadStudents}
+        />
+      )}
 
-      <Dialog
-        open={contractModal.open}
-        onClose={handleCloseContractModal}
-        maxWidth="sm"
-        fullWidth
-      >
+      {!isFinanceView && (
+        <Dialog
+          open={contractModal.open}
+          onClose={handleCloseContractModal}
+          maxWidth="sm"
+          fullWidth
+        >
         <DialogTitle>
           Student Contract{contractModal.studentName ? ` - ${contractModal.studentName}` : ''}
         </DialogTitle>
@@ -835,7 +858,8 @@ export default function StudentManagement() {
             Close
           </Button>
         </DialogActions>
-      </Dialog>
+        </Dialog>
+      )}
 
       <Dialog
         open={debtModal.open}
@@ -873,11 +897,13 @@ export default function StudentManagement() {
         </Alert>
       </Snackbar>
 
-      <AddStudentModal
-        open={isAddStudentOpen}
-        onClose={() => setIsAddStudentOpen(false)}
-        onStudentAdded={loadStudents}
-      />
+      {!isFinanceView && (
+        <AddStudentModal
+          open={isAddStudentOpen}
+          onClose={() => setIsAddStudentOpen(false)}
+          onStudentAdded={loadStudents}
+        />
+      )}
     </Box>
   );
 }

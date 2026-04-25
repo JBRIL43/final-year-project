@@ -233,6 +233,23 @@ async function ensureContractsTable(client) {
   `);
 }
 
+function requireAdminOnly(req, res) {
+  if (req.user?.role !== 'admin') {
+    res.status(403).json({ error: 'Forbidden: admin only operation' });
+    return false;
+  }
+
+  return true;
+}
+
+router.use(authenticateRequest, requireRoles(['admin', 'finance']));
+
+router.use((req, res, next) => {
+  const actor = req.user?.email || req.user?.user_id || 'unknown';
+  console.info(`[AUDIT] ${new Date().toISOString()} role=${req.user?.role || 'unknown'} actor=${actor} ${req.method} ${req.originalUrl}`);
+  next();
+});
+
 router.post('/users', authenticateRequest, requireRoles(['admin']), async (req, res) => {
   try {
     const email = String(req.body?.email || '').trim();
@@ -705,6 +722,8 @@ router.post('/graduates/:id/contacted', async (req, res) => {
 // PUT /api/admin/graduates/:id — update graduate fields
 router.put('/graduates/:id', async (req, res) => {
   try {
+    if (!requireAdminOnly(req, res)) return;
+
     const { id } = req.params;
     const { graduation_date, repayment_start_date, clearance_status } = req.body;
 
@@ -783,6 +802,8 @@ router.put('/graduates/:id', async (req, res) => {
 router.post('/students', async (req, res) => {
   let client;
   try {
+    if (!requireAdminOnly(req, res)) return;
+
     const {
       student_number,
       full_name,
@@ -986,6 +1007,8 @@ router.get('/students/:id/contract', async (req, res) => {
 // POST /api/admin/students/:id/contract — create or reactivate student's contract
 router.post('/students/:id/contract', async (req, res) => {
   try {
+    if (!requireAdminOnly(req, res)) return;
+
     const { id } = req.params;
     const {
       program,
@@ -1059,6 +1082,8 @@ router.post('/students/:id/contract', async (req, res) => {
 // PUT /api/admin/students/:id/contract — update student's active contract
 router.put('/students/:id/contract', async (req, res) => {
   try {
+    if (!requireAdminOnly(req, res)) return;
+
     const { id } = req.params;
     const {
       program,
@@ -1123,6 +1148,8 @@ router.put('/students/:id/contract', async (req, res) => {
 // DELETE /api/admin/students/:id/contract — deactivate student's active contract
 router.delete('/students/:id/contract', async (req, res) => {
   try {
+    if (!requireAdminOnly(req, res)) return;
+
     const { id } = req.params;
 
     const result = await pool.query(
@@ -1408,6 +1435,8 @@ router.get('/students/:id/debt', async (req, res) => {
 
 router.put('/students/:id', async (req, res) => {
   try {
+    if (!requireAdminOnly(req, res)) return;
+
     const { id } = req.params;
     const { living_arrangement, enrollment_status, department, campus } = req.body;
 
@@ -1469,6 +1498,8 @@ router.put('/students/:id', async (req, res) => {
 // POST /api/admin/students/batch-update — bulk update selected students
 router.post('/students/batch-update', async (req, res) => {
   try {
+    if (!requireAdminOnly(req, res)) return;
+
     const { studentIds, updates } = req.body;
 
     if (!Array.isArray(studentIds) || studentIds.length === 0) {
@@ -1592,6 +1623,8 @@ router.get('/cost-shares', async (req, res) => {
 // POST /api/admin/cost-shares — create a new cost configuration
 router.post('/cost-shares', async (req, res) => {
   try {
+    if (!requireAdminOnly(req, res)) return;
+
     const FIXED_FOOD_COST_PER_MONTH = 3000;
 
     const {
@@ -1660,6 +1693,8 @@ router.post('/cost-shares', async (req, res) => {
 // PUT /api/admin/cost-shares/:id — update a cost configuration
 router.put('/cost-shares/:id', async (req, res) => {
   try {
+    if (!requireAdminOnly(req, res)) return;
+
     const FIXED_FOOD_COST_PER_MONTH = 3000;
 
     const { id } = req.params;
@@ -1735,6 +1770,8 @@ router.put('/cost-shares/:id', async (req, res) => {
 // DELETE /api/admin/cost-shares/:id — delete a cost configuration
 router.delete('/cost-shares/:id', async (req, res) => {
   try {
+    if (!requireAdminOnly(req, res)) return;
+
     const { id } = req.params;
     const result = await pool.query(
       'DELETE FROM public.cost_shares WHERE cost_share_id = $1 RETURNING cost_share_id',
@@ -2055,6 +2092,45 @@ router.post('/debt/reconcile', async (req, res) => {
   }
 });
 
+// GET /api/admin/database/health — lightweight DB health monitoring
+router.get('/database/health', async (req, res) => {
+  try {
+    const startedAt = Date.now();
+    await pool.query('SELECT 1');
+    const latencyMs = Date.now() - startedAt;
+
+    const [studentsCountResult, debtCountResult, pendingPaymentsResult] = await Promise.all([
+      pool.query('SELECT COUNT(*)::int AS count FROM public.students'),
+      pool.query('SELECT COUNT(*)::int AS count FROM public.debt_records WHERE current_balance > 0'),
+      pool.query("SELECT COUNT(*)::int AS count FROM public.payment_history WHERE UPPER(COALESCE(status, '')) = 'PENDING'"),
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        status: 'healthy',
+        checked_at: new Date().toISOString(),
+        latency_ms: latencyMs,
+        totals: {
+          students: Number(studentsCountResult.rows[0]?.count || 0),
+          debtors: Number(debtCountResult.rows[0]?.count || 0),
+          pending_payments: Number(pendingPaymentsResult.rows[0]?.count || 0),
+        },
+      },
+    });
+  } catch (error) {
+    console.error('Database health check error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Database health check failed',
+      data: {
+        status: 'unhealthy',
+        checked_at: new Date().toISOString(),
+      },
+    });
+  }
+});
+
 // GET /api/admin/payments/pending — fetch all pending payments
 router.get('/payments/pending', async (req, res) => {
   try {
@@ -2326,6 +2402,8 @@ router.post('/payments/:id/reject', async (req, res) => {
 router.delete('/students/:id', async (req, res) => {
   let client;
   try {
+    if (!requireAdminOnly(req, res)) return;
+
     const { id } = req.params;
 
     client = await pool.connect();

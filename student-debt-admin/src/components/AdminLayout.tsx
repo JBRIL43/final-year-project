@@ -23,6 +23,8 @@ import {
   Apartment as ApartmentIcon,
   LockReset as LockResetIcon,
   Hub as HubIcon,
+  MonitorHeart as MonitorHeartIcon,
+  ManageAccounts as ManageAccountsIcon,
 } from '@mui/icons-material'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
@@ -47,13 +49,13 @@ function buildNavItems(role: string) {
   if (role === 'finance') {
     return [
       { label: 'Dashboard', to: '/', icon: <DashboardIcon /> },
-      { label: 'Manage Users', to: '/manage-users', icon: <SchoolIcon /> },
+      { label: 'Student Financial Data', to: '/manage-users', icon: <SchoolIcon /> },
       { label: 'Delinquent Graduates', to: '/graduates/delinquent', icon: <WarningIcon /> },
       { label: 'Payment Review', to: '/payment-review', icon: <ReceiptLongIcon /> },
-      { label: 'Cost Configuration', to: '/cost-config', icon: <ReceiptLongIcon /> },
       { label: 'Semester Amounts', to: '/semester-amounts', icon: <ReceiptLongIcon /> },
       { label: 'ERCA Export', to: '/erca-export', icon: <DescriptionIcon /> },
       { label: 'Fayda Integration', to: '/fayda', icon: <HubIcon /> },
+      { label: 'Database Health', to: '/database-health', icon: <MonitorHeartIcon /> },
       { label: 'Change Password', to: '/change-password', icon: <LockResetIcon /> },
     ]
   }
@@ -61,7 +63,8 @@ function buildNavItems(role: string) {
   return [
     { label: 'Dashboard', to: '/', icon: <DashboardIcon /> },
     { label: 'Graduate Management', to: '/graduates', icon: <SchoolIcon /> },
-    { label: 'Manage Users', to: '/manage-users', icon: <SchoolIcon /> },
+    { label: 'Student Management', to: '/manage-users', icon: <SchoolIcon /> },
+    { label: 'User Administration', to: '/admin-users', icon: <ManageAccountsIcon /> },
     { label: 'Delinquent Graduates', to: '/graduates/delinquent', icon: <WarningIcon /> },
     { label: 'Registrar Clearance', to: '/registrar', icon: <AccountBalanceIcon /> },
     { label: 'Department Dashboard', to: '/department', icon: <ApartmentIcon /> },
@@ -70,6 +73,7 @@ function buildNavItems(role: string) {
     { label: 'Payment Review', to: '/payment-review', icon: <ReceiptLongIcon /> },
     { label: 'ERCA Export', to: '/erca-export', icon: <DescriptionIcon /> },
     { label: 'Fayda Integration', to: '/fayda', icon: <HubIcon /> },
+    { label: 'Database Health', to: '/database-health', icon: <MonitorHeartIcon /> },
     { label: 'Change Password', to: '/change-password', icon: <LockResetIcon /> },
   ]
 }

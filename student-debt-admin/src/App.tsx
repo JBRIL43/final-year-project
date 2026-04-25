@@ -16,6 +16,8 @@ import DepartmentDashboard from './components/DepartmentDashboard'
 import ChangePassword from './components/ChangePassword'
 import FaydaIntegrationDashboard from './components/FaydaIntegrationDashboard'
 import SemesterAmountsDashboard from './components/SemesterAmountsDashboard'
+import DatabaseHealthDashboard from './components/DatabaseHealthDashboard'
+import AdminUserManagement from './components/AdminUserManagement'
 
 function AppRoutes() {
   const { loading, role } = useAuth()
@@ -88,6 +90,14 @@ function AppRoutes() {
           }
         />
         <Route
+          path="admin-users"
+          element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <AdminUserManagement />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="sis-import"
           element={
             <ProtectedRoute allowedRoles={['admin', 'finance']}>
@@ -114,7 +124,7 @@ function AppRoutes() {
         <Route
           path="cost-config"
           element={
-            <ProtectedRoute allowedRoles={['admin', 'finance']}>
+            <ProtectedRoute allowedRoles={['admin']}>
               <CostManagement />
             </ProtectedRoute>
           }
@@ -196,6 +206,14 @@ function AppRoutes() {
           element={
             <ProtectedRoute allowedRoles={['admin', 'finance']}>
               <FaydaIntegrationDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="database-health"
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'finance']}>
+              <DatabaseHealthDashboard />
             </ProtectedRoute>
           }
         />
