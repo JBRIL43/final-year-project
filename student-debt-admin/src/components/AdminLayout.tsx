@@ -67,7 +67,7 @@ function buildNavItems(role: string) {
     { label: 'User Administration', to: '/admin-users', icon: <ManageAccountsIcon /> },
     { label: 'Delinquent Graduates', to: '/graduates/delinquent', icon: <WarningIcon /> },
     { label: 'Registrar Clearance', to: '/registrar', icon: <AccountBalanceIcon /> },
-    { label: 'Department Dashboard', to: '/department', icon: <ApartmentIcon /> },
+    // { label: 'Department Dashboard', to: '/department', icon: <ApartmentIcon /> },
     { label: 'Cost Configuration', to: '/cost-config', icon: <ReceiptLongIcon /> },
     { label: 'Semester Amounts', to: '/semester-amounts', icon: <ReceiptLongIcon /> },
     { label: 'Payment Review', to: '/payment-review', icon: <ReceiptLongIcon /> },
