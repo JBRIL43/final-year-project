@@ -114,7 +114,7 @@ function AppRoutes() {
         <Route
           path="cost-config"
           element={
-            <ProtectedRoute allowedRoles={['admin', 'finance', 'registrar', 'department_head']}>
+            <ProtectedRoute allowedRoles={['admin', 'finance', 'department_head']}>
               <CostManagement />
             </ProtectedRoute>
           }
@@ -130,7 +130,7 @@ function AppRoutes() {
         <Route
           path="graduates"
           element={
-            <ProtectedRoute allowedRoles={['admin', 'registrar']}>
+            <ProtectedRoute allowedRoles={['admin']}>
               <GraduateManagement />
             </ProtectedRoute>
           }

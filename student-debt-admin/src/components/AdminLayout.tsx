@@ -32,9 +32,7 @@ const drawerWidth = 270
 function buildNavItems(role: string) {
   if (role === 'registrar') {
     return [
-      { label: 'Registrar Clearance', to: '/registrar', icon: <AccountBalanceIcon /> },
-      { label: 'Cost Configuration', to: '/cost-config', icon: <ReceiptLongIcon /> },
-      { label: 'Graduate Management', to: '/graduates', icon: <SchoolIcon /> },
+      { label: 'Student Clearance & Status', to: '/registrar', icon: <AccountBalanceIcon /> },
       { label: 'Change Password', to: '/change-password', icon: <LockResetIcon /> },
     ]
   }

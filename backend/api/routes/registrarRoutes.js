@@ -574,6 +574,55 @@ router.post('/students/:id/withdrawal/process', async (req, res) => {
   }
 });
 
+// PUT /api/registrar/students/:id/status — update student enrollment status
+router.put('/students/:id/status', async (req, res) => {
+  try {
+    const studentId = Number(req.params.id);
+    const enrollmentStatus = String(req.body?.enrollment_status || '').trim().toUpperCase();
+
+    if (!Number.isFinite(studentId) || studentId <= 0) {
+      return res.status(400).json({ error: 'Invalid student id' });
+    }
+
+    if (!['ACTIVE', 'WITHDRAWN', 'GRADUATED'].includes(enrollmentStatus)) {
+      return res.status(400).json({
+        error: 'enrollment_status must be one of: active, withdrawn, graduated',
+      });
+    }
+
+    const studentColumns = await getAvailableColumns('students', ['enrollment_status', 'updated_at']);
+
+    if (!studentColumns.has('enrollment_status')) {
+      return res.status(400).json({ error: 'students.enrollment_status column is missing' });
+    }
+
+    const updateSql = studentColumns.has('updated_at')
+      ? `UPDATE public.students
+         SET enrollment_status = $2, updated_at = NOW()
+         WHERE student_id = $1
+         RETURNING student_id, enrollment_status, updated_at`
+      : `UPDATE public.students
+         SET enrollment_status = $2
+         WHERE student_id = $1
+         RETURNING student_id, enrollment_status, NOW()::timestamp AS updated_at`;
+
+    const result = await pool.query(updateSql, [studentId, enrollmentStatus]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    res.json({
+      success: true,
+      message: 'Enrollment status updated',
+      student: result.rows[0],
+    });
+  } catch (error) {
+    console.error('Registrar enrollment status update error:', error);
+    res.status(500).json({ error: 'Failed to update enrollment status' });
+  }
+});
+
 // PUT /api/registrar/students/:id/credits — update credits and auto-calculate tuition share
 router.put('/students/:id/credits', async (req, res) => {
   try {

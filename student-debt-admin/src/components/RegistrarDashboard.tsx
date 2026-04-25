@@ -100,6 +100,21 @@ export default function RegistrarDashboard() {
     }
   };
 
+  const handleUpdateEnrollmentStatus = async (studentId: number, status: string) => {
+    try {
+      await api.put(`/api/registrar/students/${studentId}/status`, { enrollment_status: status });
+      setSnackbar({ open: true, message: 'Enrollment status updated', severity: 'success' });
+      loadStudents();
+    } catch (err: any) {
+      console.error('Enrollment status update error:', err);
+      setSnackbar({
+        open: true,
+        message: err.response?.data?.error || 'Update failed',
+        severity: 'error',
+      });
+    }
+  };
+
   const handleUpdateCredits = async (studentId: number, creditsStr: string) => {
     const credits = creditsStr === '' ? null : Number.parseInt(creditsStr, 10);
 
@@ -266,7 +281,7 @@ export default function RegistrarDashboard() {
                 <TableCell>Campus</TableCell>
                 <TableCell>Credits</TableCell>
                 <TableCell>Tuition Share</TableCell>
-                <TableCell>Status</TableCell>
+                <TableCell>Enrollment Status</TableCell>
                 <TableCell>Clearance</TableCell>
                 <TableCell>Actions</TableCell>
               </TableRow>
@@ -293,7 +308,20 @@ export default function RegistrarDashboard() {
                   <TableCell>
                     {s.tuition_share_percent != null ? `${s.tuition_share_percent}%` : '15%'}
                   </TableCell>
-                  <TableCell>{s.enrollment_status}</TableCell>
+                  <TableCell>
+                    <FormControl size="small" sx={{ minWidth: 140 }}>
+                      <InputLabel>Status</InputLabel>
+                      <Select
+                        value={String(s.enrollment_status || '').toUpperCase()}
+                        label="Status"
+                        onChange={(e) => handleUpdateEnrollmentStatus(s.student_id, e.target.value)}
+                      >
+                        <MenuItem value="ACTIVE">Active</MenuItem>
+                        <MenuItem value="WITHDRAWN">Withdrawn</MenuItem>
+                        <MenuItem value="GRADUATED">Graduated</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </TableCell>
                   <TableCell>
                     <FormControl size="small" sx={{ minWidth: 120 }}>
                       <InputLabel>Clearance</InputLabel>
