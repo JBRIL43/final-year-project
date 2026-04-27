@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { onAuthStateChanged, type User } from 'firebase/auth'
+import { onAuthStateChanged, signOut, type User } from 'firebase/auth'
 import { auth } from '../lib/firebase'
 import { API_BASE_URL } from '../services/api'
 
@@ -21,6 +21,7 @@ interface AuthContextType {
   role: UserRole
   department: string | null
   profile: UserProfile | null
+  logout: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -30,6 +31,7 @@ const AuthContext = createContext<AuthContextType>({
   role: 'student',
   department: null,
   profile: null,
+  logout: async () => {},
 })
 
 export function useAuth() {
@@ -43,6 +45,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<UserRole>('student')
   const [department, setDepartment] = useState<string | null>(null)
   const [profile, setProfile] = useState<UserProfile | null>(null)
+
+  const logout = async () => {
+    await signOut(auth)
+    localStorage.removeItem('firebase_id_token')
+    setUser(null)
+    setIsAdmin(false)
+    setRole('student')
+    setDepartment(null)
+    setProfile(null)
+  }
 
   const loadProfile = async (token: string) => {
     const response = await fetch(`${API_BASE_URL}/api/user/me`, {
@@ -98,7 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <AuthContext.Provider value={{ user, loading, isAdmin, role, department, profile }}>
+    <AuthContext.Provider value={{ user, loading, isAdmin, role, department, profile, logout }}>
       {children}
     </AuthContext.Provider>
   )

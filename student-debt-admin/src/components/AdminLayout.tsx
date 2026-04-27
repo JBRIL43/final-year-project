@@ -3,6 +3,7 @@ import {
   Avatar,
   Badge,
   Box,
+  Button,
   Divider,
   Drawer,
   List,
@@ -92,11 +93,19 @@ function getInitials(name: string) {
 }
 
 export default function AdminLayout({ children }: { children?: ReactNode }) {
-  const { user, role } = useAuth()
+  const { user, role, logout } = useAuth()
   const email = user?.email || 'adminstudent@hu.edu.et'
   const displayName = user?.displayName || email.split('@')[0] || 'Admin'
   const navItems = buildNavItems(role)
   const roleLabel = getRoleLabel(role)
+
+  const handleLogout = async () => {
+    try {
+      await logout()
+    } catch (error) {
+      console.error('Logout failed:', error)
+    }
+  }
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: '#f1f4f9' }}>
@@ -210,6 +219,15 @@ export default function AdminLayout({ children }: { children?: ReactNode }) {
               </Box>
             </Box>
           </Paper>
+          <Button
+            variant="outlined"
+            color="inherit"
+            fullWidth
+            onClick={handleLogout}
+            sx={{ mt: 1.5, borderColor: '#d6deea', textTransform: 'none', fontWeight: 700 }}
+          >
+            Logout
+          </Button>
         </Box>
       </Drawer>
 
@@ -242,6 +260,14 @@ export default function AdminLayout({ children }: { children?: ReactNode }) {
               </Typography>
             </Box>
             <NotificationsNoneIcon sx={{ color: '#f59e0b' }} />
+            <Button
+              size="small"
+              variant="text"
+              onClick={handleLogout}
+              sx={{ textTransform: 'none', fontWeight: 700 }}
+            >
+              Logout
+            </Button>
           </Paper>
         </Box>
 
