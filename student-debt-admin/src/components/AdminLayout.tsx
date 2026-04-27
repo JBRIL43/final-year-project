@@ -74,7 +74,7 @@ function buildNavItems(role: string) {
     { label: 'ERCA Export', to: '/erca-export', icon: <DescriptionIcon /> },
     { label: 'Fayda Integration', to: '/fayda', icon: <HubIcon /> },
     { label: 'Database Health', to: '/database-health', icon: <MonitorHeartIcon /> },
-    { label: 'Change Password', to: '/change-password', icon: <LockResetIcon /> },e1
+    { label: 'Change Password', to: '/change-password', icon: <LockResetIcon /> },
   ]
 }
 
