@@ -253,11 +253,37 @@ router.use((req, res, next) => {
 // GET /api/admin/users — list all admin users (not students)
 router.get('/users', authenticateRequest, requireRoles(['admin']), async (req, res) => {
   try {
+    const userColumns = await getAvailableColumns('users', [
+      'user_id',
+      'email',
+      'full_name',
+      'role',
+      'department',
+      'created_at',
+      'updated_at',
+    ]);
+
+    const selectColumns = [
+      userColumns.has('user_id') ? 'user_id' : 'NULL::integer AS user_id',
+      userColumns.has('email') ? 'email' : "''::text AS email",
+      userColumns.has('full_name') ? 'full_name' : "''::text AS full_name",
+      userColumns.has('role') ? 'role' : "''::text AS role",
+      userColumns.has('department') ? 'department' : 'NULL::text AS department',
+      userColumns.has('created_at') ? 'created_at' : 'NULL::timestamp AS created_at',
+      userColumns.has('updated_at') ? 'updated_at' : 'NULL::timestamp AS updated_at',
+    ];
+
+    const orderByExpr = userColumns.has('created_at')
+      ? 'created_at DESC NULLS LAST'
+      : userColumns.has('user_id')
+      ? 'user_id DESC'
+      : 'email ASC';
+
     const result = await pool.query(
-      `SELECT user_id, email, full_name, role, department, created_at, updated_at
+      `SELECT ${selectColumns.join(', ')}
        FROM public.users
-       WHERE role IN ('ADMIN', 'REGISTRAR', 'DEPARTMENT_HEAD', 'FINANCE_OFFICER')
-       ORDER BY created_at DESC`
+       WHERE UPPER(COALESCE(role, '')) IN ('ADMIN', 'REGISTRAR', 'DEPARTMENT_HEAD', 'FINANCE_OFFICER')
+       ORDER BY ${orderByExpr}`
     );
     res.json({ success: true, users: result.rows });
   } catch (error) {
