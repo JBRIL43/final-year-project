@@ -18,6 +18,7 @@ import FaydaIntegrationDashboard from './components/FaydaIntegrationDashboard'
 import SemesterAmountsDashboard from './components/SemesterAmountsDashboard'
 import DatabaseHealthDashboard from './components/DatabaseHealthDashboard'
 import AdminUserManagement from './components/AdminUserManagement'
+import FinanceReportsDashboard from './components/FinanceReportsDashboard'
 
 function AppRoutes() {
   const { loading, role } = useAuth()
@@ -182,6 +183,14 @@ function AppRoutes() {
           element={
             <ProtectedRoute allowedRoles={['admin', 'finance']}>
               <PaymentReviewQueue />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="finance-reports"
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'finance']}>
+              <FinanceReportsDashboard />
             </ProtectedRoute>
           }
         />
