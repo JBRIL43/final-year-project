@@ -25,6 +25,291 @@ async function getAvailableColumns(tableName, columns) {
   return new Set(result.rows.map((row) => row.column_name));
 }
 
+async function ensureDebtFinalSettlementColumn() {
+  const debtColumns = await getAvailableColumns('debt_records', ['is_final_settlement']);
+  if (debtColumns.has('is_final_settlement')) {
+    return;
+  }
+
+  await pool.query(`
+    ALTER TABLE public.debt_records
+    ADD COLUMN IF NOT EXISTS is_final_settlement BOOLEAN NOT NULL DEFAULT FALSE
+  `);
+}
+
+function computeDaysBetween(startDate, endDate) {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return 1;
+  }
+  const diffMs = Math.max(0, end.getTime() - start.getTime());
+  return Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+}
+
+async function calculateFinalWithdrawalSettlement(studentId) {
+  await ensureDebtFinalSettlementColumn();
+
+  const studentCols = await getAvailableColumns('students', [
+    'student_id',
+    'campus',
+    'department',
+    'enrollment_date',
+    'created_at',
+    'tuition_share_percent',
+    'payment_model',
+  ]);
+  const semesterCols = await getAvailableColumns('semester_amounts', [
+    'academic_year',
+    'campus',
+    'program_type',
+    'tuition_cost_per_year',
+    'boarding_cost_per_year',
+    'food_cost_per_month',
+    'effective_from',
+  ]);
+  const costShareCols = await getAvailableColumns('cost_shares', [
+    'program',
+    'academic_year',
+    'campus',
+    'tuition_cost_per_year',
+    'boarding_cost_per_year',
+    'food_cost_per_month',
+  ]);
+  const debtCols = await getAvailableColumns('debt_records', [
+    'debt_id',
+    'student_id',
+    'initial_amount',
+    'current_balance',
+    'academic_year',
+    'updated_at',
+    'last_updated',
+    'created_at',
+    'is_final_settlement',
+  ]);
+
+  const enrollmentDateExpr = studentCols.has('enrollment_date')
+    ? 's.enrollment_date'
+    : studentCols.has('created_at')
+    ? 's.created_at'
+    : 'NOW()::timestamp';
+
+  const studentRes = await pool.query(
+    `SELECT
+       s.student_id,
+       ${studentCols.has('campus') ? 's.campus' : "'Main Campus'::text"} AS campus,
+       ${studentCols.has('department') ? 's.department' : "''::text"} AS department,
+       ${enrollmentDateExpr} AS enrollment_date,
+       ${studentCols.has('tuition_share_percent') ? 's.tuition_share_percent' : '15.00::numeric'} AS tuition_share_percent,
+       ${studentCols.has('payment_model') ? "COALESCE(s.payment_model, 'post_graduation')" : "'post_graduation'::text"} AS payment_model
+     FROM public.students s
+     WHERE s.student_id = $1
+     LIMIT 1`,
+    [studentId]
+  );
+
+  if (studentRes.rows.length === 0) {
+    throw new Error('Student not found for settlement');
+  }
+
+  const student = studentRes.rows[0];
+  const normalizedPaymentModel = normalizePaymentModel(student.payment_model);
+
+  // Pre-payment students should not keep post-graduation debt accrual.
+  if (normalizedPaymentModel === 'pre_payment') {
+    await pool.query(
+      `UPDATE public.debt_records
+       SET is_final_settlement = TRUE,
+           current_balance = 0,
+           initial_amount = COALESCE(initial_amount, 0),
+           ${debtCols.has('updated_at') ? 'updated_at = NOW(),' : ''}
+           ${!debtCols.has('updated_at') && debtCols.has('last_updated') ? 'last_updated = NOW(),' : ''}
+           ${!debtCols.has('updated_at') && !debtCols.has('last_updated') && debtCols.has('created_at') ? 'created_at = COALESCE(created_at, NOW()),' : ''}
+           debt_id = debt_id
+       WHERE student_id = $1`,
+      [studentId]
+    );
+    return { finalBalance: 0, source: 'pre_payment' };
+  }
+
+  const daysEnrolled = computeDaysBetween(student.enrollment_date, new Date());
+  const academicYearDays = 300;
+  const monthsEnrolled = Math.max(1, Math.ceil(daysEnrolled / 30));
+
+  let tuitionCostPerYear = 0;
+  let boardingCostPerYear = 0;
+  let foodCostPerMonth = 0;
+  let selectedAcademicYear = null;
+
+  const hasSemesterTable = (
+    await pool.query(`SELECT to_regclass('public.semester_amounts') AS table_name`)
+  ).rows[0]?.table_name;
+
+  if (hasSemesterTable && semesterCols.has('tuition_cost_per_year') && semesterCols.has('boarding_cost_per_year')) {
+    const semesterResult = await pool.query(
+      `SELECT
+         ${semesterCols.has('academic_year') ? 'academic_year' : "NULL::text AS academic_year"},
+         tuition_cost_per_year,
+         boarding_cost_per_year,
+         ${semesterCols.has('food_cost_per_month') ? 'food_cost_per_month' : '0::numeric AS food_cost_per_month'}
+       FROM public.semester_amounts
+       WHERE LOWER(COALESCE(campus, 'main campus')) = LOWER($1)
+       ORDER BY ${semesterCols.has('effective_from') ? 'effective_from DESC,' : ''} id DESC
+       LIMIT 1`,
+      [student.campus || 'Main Campus']
+    );
+
+    if (semesterResult.rows.length > 0) {
+      tuitionCostPerYear = Number(semesterResult.rows[0].tuition_cost_per_year || 0);
+      boardingCostPerYear = Number(semesterResult.rows[0].boarding_cost_per_year || 0);
+      foodCostPerMonth = Number(semesterResult.rows[0].food_cost_per_month || 0);
+      selectedAcademicYear = semesterResult.rows[0].academic_year || null;
+    }
+  }
+
+  if (tuitionCostPerYear <= 0 && costShareCols.has('tuition_cost_per_year') && costShareCols.has('boarding_cost_per_year')) {
+    const costShareRes = await pool.query(
+      `SELECT
+         ${costShareCols.has('academic_year') ? 'academic_year' : "NULL::text AS academic_year"},
+         tuition_cost_per_year,
+         boarding_cost_per_year,
+         ${costShareCols.has('food_cost_per_month') ? 'food_cost_per_month' : '0::numeric AS food_cost_per_month'}
+       FROM public.cost_shares
+       WHERE LOWER(COALESCE(program, '')) = LOWER($1)
+         AND LOWER(COALESCE(${costShareCols.has('campus') ? 'campus' : "'Main Campus'"}, 'main campus')) = LOWER($2)
+       ORDER BY academic_year DESC NULLS LAST
+       LIMIT 1`,
+      [student.department || '', student.campus || 'Main Campus']
+    );
+
+    if (costShareRes.rows.length > 0) {
+      tuitionCostPerYear = Number(costShareRes.rows[0].tuition_cost_per_year || 0);
+      boardingCostPerYear = Number(costShareRes.rows[0].boarding_cost_per_year || 0);
+      foodCostPerMonth = Number(costShareRes.rows[0].food_cost_per_month || 0);
+      selectedAcademicYear = selectedAcademicYear || costShareRes.rows[0].academic_year || null;
+    }
+  }
+
+  const tuitionSharePercent = Number(student.tuition_share_percent || 15);
+  const proratedTuition = (tuitionCostPerYear * (tuitionSharePercent / 100)) * (daysEnrolled / academicYearDays);
+  const proratedBoarding = boardingCostPerYear * (daysEnrolled / academicYearDays);
+  const proratedFood = foodCostPerMonth * monthsEnrolled;
+  const finalBalance = Number((proratedTuition + proratedBoarding + proratedFood).toFixed(2));
+
+  const existingDebtRes = await pool.query(
+    `SELECT debt_id
+     FROM public.debt_records
+     WHERE student_id = $1
+     ORDER BY debt_id DESC
+     LIMIT 1`,
+    [studentId]
+  );
+
+  if (existingDebtRes.rows.length > 0) {
+    const setClauses = [
+      'initial_amount = $1',
+      'current_balance = $2',
+      'is_final_settlement = TRUE',
+    ];
+    if (debtCols.has('academic_year')) {
+      setClauses.push('academic_year = COALESCE($3, academic_year)');
+    }
+    if (debtCols.has('updated_at')) {
+      setClauses.push('updated_at = NOW()');
+    } else if (debtCols.has('last_updated')) {
+      setClauses.push('last_updated = NOW()');
+    }
+
+    await pool.query(
+      `UPDATE public.debt_records
+       SET ${setClauses.join(', ')}
+       WHERE debt_id = $4`,
+      [finalBalance, finalBalance, selectedAcademicYear, existingDebtRes.rows[0].debt_id]
+    );
+  } else {
+    const insertColumns = ['student_id'];
+    const insertValues = [studentId];
+    const addDebtColumn = (col, val) => {
+      if (debtCols.has(col)) {
+        insertColumns.push(col);
+        insertValues.push(val);
+      }
+    };
+
+    addDebtColumn('initial_amount', finalBalance);
+    addDebtColumn('current_balance', finalBalance);
+    addDebtColumn('academic_year', selectedAcademicYear);
+    addDebtColumn('is_final_settlement', true);
+    addDebtColumn('created_at', new Date());
+    addDebtColumn('updated_at', new Date());
+    addDebtColumn('last_updated', new Date());
+
+    const placeholders = insertValues.map((_, idx) => `$${idx + 1}`).join(', ');
+    await pool.query(
+      `INSERT INTO public.debt_records (${insertColumns.join(', ')})
+       VALUES (${placeholders})`,
+      insertValues
+    );
+  }
+
+  return { finalBalance, source: 'prorated' };
+}
+
+async function validateClearanceAllowed(studentId) {
+  const studentColumns = await getAvailableColumns('students', ['enrollment_status']);
+  const debtColumns = await getAvailableColumns('debt_records', ['student_id', 'current_balance', 'is_final_settlement']);
+
+  const studentRes = await pool.query(
+    `SELECT ${studentColumns.has('enrollment_status') ? 'enrollment_status' : "'ACTIVE'::text AS enrollment_status"}
+     FROM public.students
+     WHERE student_id = $1
+     LIMIT 1`,
+    [studentId]
+  );
+
+  if (studentRes.rows.length === 0) {
+    return { allowed: false, notFound: true };
+  }
+
+  const enrollmentStatus = String(studentRes.rows[0].enrollment_status || '').toUpperCase();
+  if (enrollmentStatus !== 'WITHDRAWN') {
+    return { allowed: true };
+  }
+
+  if (!debtColumns.has('student_id') || !debtColumns.has('current_balance')) {
+    return {
+      allowed: false,
+      message: 'Debt records schema is missing required columns for withdrawal clearance validation',
+    };
+  }
+
+  const debtRes = await pool.query(
+    `SELECT
+       current_balance,
+       ${debtColumns.has('is_final_settlement') ? 'is_final_settlement' : 'FALSE::boolean AS is_final_settlement'}
+     FROM public.debt_records
+     WHERE student_id = $1
+     ORDER BY debt_id DESC
+     LIMIT 1`,
+    [studentId]
+  );
+
+  if (debtRes.rows.length === 0) {
+    return { allowed: true };
+  }
+
+  const balance = Number(debtRes.rows[0].current_balance || 0);
+  const isFinalSettlement = Boolean(debtRes.rows[0].is_final_settlement);
+  if (isFinalSettlement && balance > 0) {
+    return {
+      allowed: false,
+      message: 'Student must settle final withdrawal balance before clearance',
+    };
+  }
+
+  return { allowed: true };
+}
+
 router.use(authenticateRequest, requireRoles(['registrar', 'finance']));
 
 router.get('/students', async (req, res) => {
@@ -564,9 +849,15 @@ router.post('/students/:id/withdrawal/process', async (req, res) => {
       [studentId]
     );
 
+    const settlement = await calculateFinalWithdrawalSettlement(studentId);
+
     return res.json({
       success: true,
       message: `Withdrawal processed for ${student.full_name || 'the student'}. Student marked as WITHDRAWN.`,
+      settlement: {
+        final_balance: settlement.finalBalance,
+        calculation_mode: settlement.source,
+      },
     });
   } catch (error) {
     console.error('Registrar withdrawal processing error:', error);
@@ -707,6 +998,16 @@ router.put('/students/:id/clearance', async (req, res) => {
       return res.status(400).json({ error: 'clearance_status must be one of: pending, cleared, waived' });
     }
 
+    if (clearanceStatus === 'CLEARED') {
+      const clearanceValidation = await validateClearanceAllowed(studentId);
+      if (clearanceValidation.notFound) {
+        return res.status(404).json({ error: 'Student not found' });
+      }
+      if (!clearanceValidation.allowed) {
+        return res.status(400).json({ error: clearanceValidation.message });
+      }
+    }
+
     const studentColumns = await getAvailableColumns('students', ['clearance_status', 'updated_at', 'payment_model', 'pre_payment_clearance']);
     if (!studentColumns.has('clearance_status')) {
       return res.status(400).json({ error: 'students.clearance_status column is missing' });
@@ -766,6 +1067,14 @@ router.post('/students/:id/clear', async (req, res) => {
     const studentId = Number(req.params.id);
     if (!Number.isFinite(studentId) || studentId <= 0) {
       return res.status(400).json({ error: 'Invalid student id' });
+    }
+
+    const clearanceValidation = await validateClearanceAllowed(studentId);
+    if (clearanceValidation.notFound) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+    if (!clearanceValidation.allowed) {
+      return res.status(400).json({ error: clearanceValidation.message });
     }
 
     const studentColumns = await getAvailableColumns('students', ['clearance_status', 'updated_at']);
