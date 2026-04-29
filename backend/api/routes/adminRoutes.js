@@ -1,3 +1,11 @@
+const express = require('express');
+const pool = require('../config/db');
+const firebaseAdmin = require('../config/firebaseAdmin');
+const { authenticateRequest, requireRoles } = require('../middleware/auth');
+const { sendPaymentNotification } = require('../utils/notifications');
+
+const router = express.Router();
+
 // GET /api/admin/users — list all admin users (not students)
 router.get('/users', authenticateRequest, requireRoles(['admin']), async (req, res) => {
   try {
@@ -64,13 +72,6 @@ router.delete('/users/:id', authenticateRequest, requireRoles(['admin']), async 
     res.status(500).json({ error: 'Failed to delete admin user' });
   }
 });
-const express = require('express');
-const pool = require('../config/db');
-const firebaseAdmin = require('../config/firebaseAdmin');
-const { authenticateRequest, requireRoles } = require('../middleware/auth');
-const { sendPaymentNotification } = require('../utils/notifications');
-
-const router = express.Router();
 
 function normalizeLivingArrangement(value) {
   const normalized = String(value || '').trim().toUpperCase();
