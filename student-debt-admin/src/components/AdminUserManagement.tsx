@@ -32,6 +32,8 @@ type CreateUserResponse = {
   }
 }
 
+export default function AdminUserManagement() {
+
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<AdminRole>('registrar')
   const [department, setDepartment] = useState('')
@@ -69,6 +71,46 @@ type CreateUserResponse = {
     fetchUsers()
   }, [])
 
+  const handleEditClick = (user: AdminUser) => {
+    setEditUser(user)
+    setEditRole(
+      user.role === 'REGISTRAR' ? 'registrar' :
+      user.role === 'DEPARTMENT_HEAD' ? 'department_head' :
+      user.role === 'FINANCE_OFFICER' ? 'finance' :
+      'admin'
+    )
+    setEditDepartment(user.department || '')
+  }
+
+  const handleEditSave = async () => {
+    if (!editUser) return
+    setEditSubmitting(true)
+    try {
+      await api.put(`/api/admin/users/${editUser.user_id}`, {
+        role: editRole,
+        department: editRole === 'department_head' ? editDepartment : null,
+      })
+      setSnackbar({ open: true, message: 'User updated', severity: 'success' })
+      setEditUser(null)
+      fetchUsers()
+    } catch (err: any) {
+      setSnackbar({ open: true, message: err?.response?.data?.error || 'Failed to update user', severity: 'error' })
+    } finally {
+      setEditSubmitting(false)
+    }
+  }
+
+  const handleDeleteUser = async (user: AdminUser) => {
+    if (!window.confirm(`Delete user ${user.email}?`)) return
+    try {
+      await api.delete(`/api/admin/users/${user.user_id}`)
+      setSnackbar({ open: true, message: 'User deleted', severity: 'success' })
+      fetchUsers()
+    } catch (err: any) {
+      setSnackbar({ open: true, message: err?.response?.data?.error || 'Failed to delete user', severity: 'error' })
+    }
+  }
+
   const handleCreateUser = async (event: FormEvent) => {
     event.preventDefault()
 
@@ -96,45 +138,6 @@ type CreateUserResponse = {
       setRole('registrar')
       setDepartment('')
       fetchUsers()
-      const handleEditClick = (user: AdminUser) => {
-        setEditUser(user)
-        setEditRole(
-          user.role === 'REGISTRAR' ? 'registrar' :
-          user.role === 'DEPARTMENT_HEAD' ? 'department_head' :
-          user.role === 'FINANCE_OFFICER' ? 'finance' :
-          'admin'
-        )
-        setEditDepartment(user.department || '')
-      }
-
-      const handleEditSave = async () => {
-        if (!editUser) return
-        setEditSubmitting(true)
-        try {
-          await api.put(`/api/admin/users/${editUser.user_id}`, {
-            role: editRole,
-            department: editRole === 'department_head' ? editDepartment : null,
-          })
-          setSnackbar({ open: true, message: 'User updated', severity: 'success' })
-          setEditUser(null)
-          fetchUsers()
-        } catch (err: any) {
-          setSnackbar({ open: true, message: err?.response?.data?.error || 'Failed to update user', severity: 'error' })
-        } finally {
-          setEditSubmitting(false)
-        }
-      }
-
-      const handleDeleteUser = async (user: AdminUser) => {
-        if (!window.confirm(`Delete user ${user.email}?`)) return
-        try {
-          await api.delete(`/api/admin/users/${user.user_id}`)
-          setSnackbar({ open: true, message: 'User deleted', severity: 'success' })
-          fetchUsers()
-        } catch (err: any) {
-          setSnackbar({ open: true, message: err?.response?.data?.error || 'Failed to delete user', severity: 'error' })
-        }
-      }
     } catch (error: any) {
       setSnackbar({
         open: true,
