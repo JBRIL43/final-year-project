@@ -1,3 +1,9 @@
+const express = require('express');
+const pool = require('../config/db');
+const { authenticateRequest, requireRoles } = require('../middleware/auth');
+
+const router = express.Router();
+
 // POST /api/department/students/:id/withdrawal/approve-academic
 router.post('/students/:id/withdrawal/approve-academic', async (req, res) => {
   try {
@@ -87,11 +93,6 @@ router.get('/withdrawal-requests', async (req, res) => {
     res.status(500).json({ error: 'Failed to load withdrawal requests' });
   }
 });
-const express = require('express');
-const pool = require('../config/db');
-const { authenticateRequest, requireRoles } = require('../middleware/auth');
-
-const router = express.Router();
 
 async function getAvailableColumns(tableName, columns) {
   const result = await pool.query(
