@@ -80,26 +80,6 @@ export default function Dashboard() {
           </Paper>
         ))}
       </Box>
-
-      <Box sx={{ mt: 3.5 }}>
-        <Typography variant="h5" fontWeight={800} gutterBottom>
-          Quick Actions
-        </Typography>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ maxWidth: 1120 }}>
-          <Button component={Link} to="/reports" variant="contained" size="large" sx={{ flex: 1, borderRadius: 2, textTransform: 'none', fontWeight: 700, py: 1.25 }}>
-            Generate Reports
-          </Button>
-          <Button component={Link} to="/manage-users" variant="contained" size="large" sx={{ flex: 1, borderRadius: 2, textTransform: 'none', fontWeight: 700, py: 1.25 }}>
-            Manage Students
-          </Button>
-          <Button component={Link} to="/graduates/delinquent" variant="contained" size="large" sx={{ flex: 1, borderRadius: 2, textTransform: 'none', fontWeight: 700, py: 1.25 }}>
-            Delinquent Follow-up
-          </Button>
-          <Button component={Link} to="/payment-review" variant="contained" size="large" sx={{ flex: 1, borderRadius: 2, textTransform: 'none', fontWeight: 700, py: 1.25 }}>
-            Review Payments
-          </Button>
-        </Stack>
-      </Box>
     </Box>
   )
 }

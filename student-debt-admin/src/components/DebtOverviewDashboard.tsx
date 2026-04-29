@@ -245,12 +245,12 @@ export default function DebtOverviewDashboard() {
           color="primary"
           onClick={handleReconcileDebt}
           disabled={reconciling}
-          sx={{ minWidth: 220 }}
+          sx={{ minWidth: 260 }}
         >
-          {reconciling ? 'Recalculating...' : 'Recalculate Annual Debt'}
+          {reconciling ? 'Recalculating...' : 'Recalculate Semester Debt'}
         </Button>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-          Run at start of each academic year to apply official semester amount configurations.
+          Run at start of each semester to apply official semester amount configurations.
         </Typography>
       </Box>
 
