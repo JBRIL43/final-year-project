@@ -493,8 +493,9 @@ router.delete('/withdrawal/request', authenticateToken, async (req, res) => {
     if (existing.rows.length === 0) {
       return res.status(404).json({ error: 'Student not found' });
     }
+
     if (existing.rows[0].withdrawal_status !== 'requested') {
-      return res.status(400).json({ error: 'No active withdrawal request to cancel' });
+      return res.status(400).json({ error: 'Request cannot be cancelled at this stage' });
     }
 
     const setParts = [

@@ -1,3 +1,62 @@
+// POST /api/department/students/:id/withdrawal/approve-academic
+router.post('/students/:id/withdrawal/approve-academic', async (req, res) => {
+  try {
+    if (req.user.role !== 'department_head') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const { id } = req.params;
+    const studentId = parseInt(id);
+
+    // Verify student is in department
+    const userRes = await pool.query(
+      'SELECT department FROM users WHERE user_id = $1',
+      [req.user.user_id]
+    );
+    const dept = userRes.rows[0].department;
+
+    const studentRes = await pool.query(
+      'SELECT full_name FROM students WHERE student_id = $1 AND department = $2 AND withdrawal_status = $3',
+      [studentId, dept, 'requested']
+    );
+
+    if (studentRes.rows.length === 0) {
+      return res.status(400).json({ error: 'Student not found or not eligible for approval' });
+    }
+
+    // Approve academic standing
+    await pool.query(
+      `UPDATE students 
+       SET withdrawal_status = 'academic_approved'
+       WHERE student_id = $1`,
+      [studentId]
+    );
+
+    // Notify Finance Officer(s)
+    const financeOfficers = await pool.query(
+      'SELECT user_id FROM users WHERE role = $1',
+      ['finance']
+    );
+
+    for (const officer of financeOfficers.rows) {
+      await pool.query(
+        `INSERT INTO notifications (user_id, type, message, data)
+         VALUES ($1, $2, $3, $4)`,
+        [
+          officer.user_id,
+          'finance_review_needed',
+          `Student ${studentRes.rows[0].full_name} approved for withdrawal. Please calculate final settlement.`,
+          JSON.stringify({ student_id: studentId })
+        ]
+      );
+    }
+
+    res.json({ success: true, message: 'Academic approval granted. Finance notified.' });
+  } catch (error) {
+    console.error('Academic approval error:', error);
+    res.status(500).json({ error: 'Failed to approve withdrawal' });
+  }
+});
 // GET /api/department/withdrawal-requests
 router.get('/withdrawal-requests', async (req, res) => {
   try {
