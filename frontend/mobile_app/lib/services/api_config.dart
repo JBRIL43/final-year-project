@@ -5,8 +5,6 @@ class ApiConfig {
   );
 
   static const List<String> _fallbackBaseUrls = [
-    'http://10.0.2.2:3000',
-    'http://localhost:3000',
     'https://final-year-project-r2h8.onrender.com',
   ];
 
