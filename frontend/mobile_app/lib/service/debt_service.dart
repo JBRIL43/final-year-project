@@ -37,7 +37,13 @@ class DebtService {
           return jsonDecode(response.body);
         }
 
-        errors.add('API Error ${response.statusCode} on $baseUrl');
+        String errorBody = response.body;
+        try {
+          final decoded = jsonDecode(response.body);
+          if (decoded['error'] != null) errorBody = decoded['error'];
+        } catch (_) {}
+        
+        errors.add('API Error ${response.statusCode} on $baseUrl: $errorBody');
       } catch (e) {
         errors.add('Request failed on $baseUrl: $e');
       }

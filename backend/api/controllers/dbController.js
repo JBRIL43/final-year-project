@@ -130,17 +130,17 @@ exports.getDebtBalance = async (req, res) => {
           FROM public.payment_history ph
           WHERE ph.debt_id = dr.debt_id
         ) as payment_history
-       FROM public.debt_records dr
-       JOIN public.students s ON dr.student_id = s.student_id
+       FROM public.students s
        JOIN public.users u ON s.user_id = u.user_id
+       LEFT JOIN public.debt_records dr ON dr.student_id = s.student_id
        WHERE s.student_id = $1`,
       [studentId]
     );
 
     if (result.rows.length === 0) {
       return res.status(404).json({ 
-        error: 'Student debt record not found',
-        code: 'DEBT_NOT_FOUND'
+        error: 'Student record not found',
+        code: 'STUDENT_NOT_FOUND'
       });
     }
 
