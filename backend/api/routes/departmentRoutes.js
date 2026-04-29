@@ -1,3 +1,33 @@
+// GET /api/department/withdrawal-requests
+router.get('/withdrawal-requests', async (req, res) => {
+  try {
+    if (req.user.role !== 'department_head') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const userRes = await pool.query(
+      'SELECT department FROM users WHERE user_id = $1',
+      [req.user.user_id]
+    );
+    const department = userRes.rows[0]?.department;
+    if (!department) {
+      return res.status(400).json({ error: 'No department found for user' });
+    }
+
+    const requests = await pool.query(
+      `SELECT s.student_id, s.full_name
+       FROM students s
+       WHERE s.department = $1 
+       AND s.withdrawal_status = 'requested'`,
+      [department]
+    );
+
+    res.json({ requests: requests.rows });
+  } catch (err) {
+    console.error('Failed to load withdrawal requests', err);
+    res.status(500).json({ error: 'Failed to load withdrawal requests' });
+  }
+});
 const express = require('express');
 const pool = require('../config/db');
 const { authenticateRequest, requireRoles } = require('../middleware/auth');

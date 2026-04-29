@@ -1,3 +1,20 @@
+// Get unread notification count for the logged-in user
+const { authenticateToken } = require('./studentRoutes');
+
+router.get('/unread-count', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user?.user_id;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    const count = await pool.query(
+      'SELECT COUNT(*) FROM notifications WHERE user_id = $1 AND is_read = false',
+      [userId]
+    );
+    res.json({ count: parseInt(count.rows[0].count) });
+  } catch (err) {
+    console.error('Failed to load notifications', err);
+    res.status(500).json({ error: 'Failed to load notifications' });
+  }
+});
 const express = require('express');
 const pool = require('../config/db');
 const {

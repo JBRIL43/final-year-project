@@ -1,3 +1,37 @@
+// Notify department head when a student requests withdrawal
+async function notifyDepartmentHead(studentId) {
+  try {
+    // Get student's department
+    const studentRes = await pool.query(
+      'SELECT department FROM students WHERE student_id = $1',
+      [studentId]
+    );
+    if (studentRes.rows.length === 0) return;
+    const department = studentRes.rows[0].department;
+
+    // Get Department Head user ID
+    const deptHeadRes = await pool.query(
+      'SELECT user_id FROM users WHERE role = $1 AND department = $2',
+      ['department_head', department]
+    );
+    if (deptHeadRes.rows.length === 0) return;
+    const deptHeadId = deptHeadRes.rows[0].user_id;
+
+    // Insert notification
+    await pool.query(
+      `INSERT INTO notifications (user_id, type, message, data)
+       VALUES ($1, $2, $3, $4)`,
+      [
+        deptHeadId,
+        'withdrawal_request',
+        'A student has requested withdrawal. Please review their academic standing.',
+        JSON.stringify({ student_id: studentId })
+      ]
+    );
+  } catch (error) {
+    console.error('Failed to notify Department Head:', error);
+  }
+}
 const express = require('express');
 const pool = require('../config/db');
 const firebaseAdmin = require('../config/firebaseAdmin');
@@ -421,6 +455,9 @@ router.post('/withdrawal/request', authenticateToken, async (req, res) => {
       `UPDATE public.students SET ${setParts.join(', ')} WHERE student_id = $1`,
       [studentId]
     );
+
+    // Notify department head after status update
+    await notifyDepartmentHead(studentId);
 
     return res.json({
       success: true,
