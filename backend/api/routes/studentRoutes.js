@@ -372,41 +372,41 @@ router.get('/payments', authenticateToken, async (req, res) => {
   }
 });
 
-// POST /api/student/withdrawal/request — submit student withdrawal request
+
+// POST /api/student/withdrawal/request — submit student withdrawal request (Step 1)
 router.post('/withdrawal/request', authenticateToken, async (req, res) => {
   try {
     const studentId = req.user.student_id;
 
     const studentColumns = await getAvailableColumns('students', [
+      'withdrawal_status',
       'withdrawal_requested_at',
       'department_withdrawal_approved',
       'registrar_withdrawal_processed',
       'updated_at',
     ]);
 
-    if (!studentColumns.has('withdrawal_requested_at')) {
+    if (!studentColumns.has('withdrawal_status') || !studentColumns.has('withdrawal_requested_at')) {
       return res.status(400).json({
-        error: 'students.withdrawal_requested_at column is missing. Run withdrawal workflow migration first.',
+        error: 'students.withdrawal_status or withdrawal_requested_at column is missing. Run withdrawal workflow migration first.',
       });
     }
 
     const existing = await pool.query(
-      `SELECT withdrawal_requested_at
-       FROM public.students
-       WHERE student_id = $1
-       LIMIT 1`,
+      `SELECT withdrawal_status FROM public.students WHERE student_id = $1 LIMIT 1`,
       [studentId]
     );
-
     if (existing.rows.length === 0) {
       return res.status(404).json({ error: 'Student not found' });
     }
-
-    if (existing.rows[0].withdrawal_requested_at) {
+    if (existing.rows[0].withdrawal_status === 'requested') {
       return res.status(409).json({ error: 'Withdrawal already requested' });
     }
 
-    const setParts = ['withdrawal_requested_at = NOW()'];
+    const setParts = [
+      "withdrawal_status = 'requested'",
+      'withdrawal_requested_at = NOW()'
+    ];
     if (studentColumns.has('department_withdrawal_approved')) {
       setParts.push('department_withdrawal_approved = NULL');
     }
@@ -418,19 +418,68 @@ router.post('/withdrawal/request', authenticateToken, async (req, res) => {
     }
 
     await pool.query(
-      `UPDATE public.students
-       SET ${setParts.join(', ')}
-       WHERE student_id = $1`,
+      `UPDATE public.students SET ${setParts.join(', ')} WHERE student_id = $1`,
       [studentId]
     );
 
     return res.json({
       success: true,
-      message: 'Withdrawal request submitted successfully. Awaiting department approval.',
+      message: 'Withdrawal request submitted',
     });
   } catch (error) {
     console.error('Withdrawal request error:', error);
     return res.status(500).json({ error: 'Failed to submit withdrawal request' });
+  }
+});
+
+// DELETE /api/student/withdrawal/request — cancel student withdrawal request (Step 1)
+router.delete('/withdrawal/request', authenticateToken, async (req, res) => {
+  try {
+    const studentId = req.user.student_id;
+
+    const studentColumns = await getAvailableColumns('students', [
+      'withdrawal_status',
+      'withdrawal_requested_at',
+      'updated_at',
+    ]);
+
+    if (!studentColumns.has('withdrawal_status') || !studentColumns.has('withdrawal_requested_at')) {
+      return res.status(400).json({
+        error: 'students.withdrawal_status or withdrawal_requested_at column is missing. Run withdrawal workflow migration first.',
+      });
+    }
+
+    const existing = await pool.query(
+      `SELECT withdrawal_status FROM public.students WHERE student_id = $1 LIMIT 1`,
+      [studentId]
+    );
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+    if (existing.rows[0].withdrawal_status !== 'requested') {
+      return res.status(400).json({ error: 'No active withdrawal request to cancel' });
+    }
+
+    const setParts = [
+      'withdrawal_status = NULL',
+      'withdrawal_requested_at = NULL'
+    ];
+    if (studentColumns.has('updated_at')) {
+      setParts.push('updated_at = NOW()');
+    }
+
+    await pool.query(
+      `UPDATE public.students SET ${setParts.join(', ')} WHERE student_id = $1`,
+      [studentId]
+    );
+
+    return res.json({
+      success: true,
+      message: 'Withdrawal request cancelled',
+    });
+  } catch (error) {
+    console.error('Withdrawal cancel error:', error);
+    return res.status(500).json({ error: 'Failed to cancel withdrawal request' });
   }
 });
 
