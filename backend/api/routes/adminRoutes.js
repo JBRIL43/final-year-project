@@ -1,3 +1,69 @@
+// GET /api/admin/users — list all admin users (not students)
+router.get('/users', authenticateRequest, requireRoles(['admin']), async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT user_id, email, full_name, role, department, created_at, updated_at
+       FROM public.users
+       WHERE role IN ('ADMIN', 'REGISTRAR', 'DEPARTMENT_HEAD', 'FINANCE_OFFICER')
+       ORDER BY created_at DESC`
+    );
+    res.json({ success: true, users: result.rows });
+  } catch (error) {
+    console.error('Failed to fetch admin users:', error);
+    res.status(500).json({ error: 'Failed to fetch admin users' });
+  }
+});
+
+// PUT /api/admin/users/:id — update admin user (role, department)
+router.put('/users/:id', authenticateRequest, requireRoles(['admin']), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { role, department } = req.body;
+    if (!role) return res.status(400).json({ error: 'role is required' });
+    const normalizedRole = normalizeAdminRole(role);
+    if (!normalizedRole) return res.status(400).json({ error: 'Invalid role' });
+    const updateFields = ['role = $1'];
+    const values = [normalizedRole, id];
+    if (normalizedRole === 'DEPARTMENT_HEAD') {
+      if (!department) return res.status(400).json({ error: 'department is required for department_head' });
+      updateFields.push('department = $2');
+      values[1] = department;
+      values[2] = id;
+    } else {
+      updateFields.push('department = NULL');
+    }
+    const query = `UPDATE public.users SET ${updateFields.join(', ')}, updated_at = NOW() WHERE user_id = $${values.length} RETURNING user_id, email, role, department, updated_at`;
+    const result = await pool.query(query, values);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    res.json({ success: true, user: result.rows[0] });
+  } catch (error) {
+    console.error('Failed to update admin user:', error);
+    res.status(500).json({ error: 'Failed to update admin user' });
+  }
+});
+
+// DELETE /api/admin/users/:id — delete admin user
+router.delete('/users/:id', authenticateRequest, requireRoles(['admin']), async (req, res) => {
+  try {
+    const { id } = req.params;
+    // Get firebase_uid for cleanup
+    const userRes = await pool.query('SELECT firebase_uid FROM public.users WHERE user_id = $1', [id]);
+    if (userRes.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    const firebaseUid = userRes.rows[0].firebase_uid;
+    await pool.query('DELETE FROM public.users WHERE user_id = $1', [id]);
+    if (firebaseUid && firebaseAdmin && firebaseAdmin.apps.length > 0) {
+      try {
+        await firebaseAdmin.auth().deleteUser(firebaseUid);
+      } catch (err) {
+        console.warn('Failed to delete Firebase user:', err.message);
+      }
+    }
+    res.json({ success: true, message: 'Admin user deleted' });
+  } catch (error) {
+    console.error('Failed to delete admin user:', error);
+    res.status(500).json({ error: 'Failed to delete admin user' });
+  }
+});
 const express = require('express');
 const pool = require('../config/db');
 const firebaseAdmin = require('../config/firebaseAdmin');
@@ -248,99 +314,6 @@ router.use((req, res, next) => {
   const actor = req.user?.email || req.user?.user_id || 'unknown';
   console.info(`[AUDIT] ${new Date().toISOString()} role=${req.user?.role || 'unknown'} actor=${actor} ${req.method} ${req.originalUrl}`);
   next();
-});
-
-// GET /api/admin/users — list all admin users (not students)
-router.get('/users', authenticateRequest, requireRoles(['admin']), async (req, res) => {
-  try {
-    const userColumns = await getAvailableColumns('users', [
-      'user_id',
-      'email',
-      'full_name',
-      'role',
-      'department',
-      'created_at',
-      'updated_at',
-    ]);
-
-    const selectColumns = [
-      userColumns.has('user_id') ? 'user_id' : 'NULL::integer AS user_id',
-      userColumns.has('email') ? 'email' : "''::text AS email",
-      userColumns.has('full_name') ? 'full_name' : "''::text AS full_name",
-      userColumns.has('role') ? 'role' : "''::text AS role",
-      userColumns.has('department') ? 'department' : 'NULL::text AS department',
-      userColumns.has('created_at') ? 'created_at' : 'NULL::timestamp AS created_at',
-      userColumns.has('updated_at') ? 'updated_at' : 'NULL::timestamp AS updated_at',
-    ];
-
-    const orderByExpr = userColumns.has('created_at')
-      ? 'created_at DESC NULLS LAST'
-      : userColumns.has('user_id')
-      ? 'user_id DESC'
-      : 'email ASC';
-
-    const result = await pool.query(
-      `SELECT ${selectColumns.join(', ')}
-       FROM public.users
-       WHERE UPPER(COALESCE(role, '')) IN ('ADMIN', 'REGISTRAR', 'DEPARTMENT_HEAD', 'FINANCE_OFFICER')
-       ORDER BY ${orderByExpr}`
-    );
-    res.json({ success: true, users: result.rows });
-  } catch (error) {
-    console.error('Failed to fetch admin users:', error);
-    res.status(500).json({ error: 'Failed to fetch admin users' });
-  }
-});
-
-// PUT /api/admin/users/:id — update admin user (role, department)
-router.put('/users/:id', authenticateRequest, requireRoles(['admin']), async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { role, department } = req.body;
-    if (!role) return res.status(400).json({ error: 'role is required' });
-    const normalizedRole = normalizeAdminRole(role);
-    if (!normalizedRole) return res.status(400).json({ error: 'Invalid role' });
-    const updateFields = ['role = $1'];
-    const values = [normalizedRole, id];
-    if (normalizedRole === 'DEPARTMENT_HEAD') {
-      if (!department) return res.status(400).json({ error: 'department is required for department_head' });
-      updateFields.push('department = $2');
-      values[1] = department;
-      values[2] = id;
-    } else {
-      updateFields.push('department = NULL');
-    }
-    const query = `UPDATE public.users SET ${updateFields.join(', ')}, updated_at = NOW() WHERE user_id = $${values.length} RETURNING user_id, email, role, department, updated_at`;
-    const result = await pool.query(query, values);
-    if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
-    res.json({ success: true, user: result.rows[0] });
-  } catch (error) {
-    console.error('Failed to update admin user:', error);
-    res.status(500).json({ error: 'Failed to update admin user' });
-  }
-});
-
-// DELETE /api/admin/users/:id — delete admin user
-router.delete('/users/:id', authenticateRequest, requireRoles(['admin']), async (req, res) => {
-  try {
-    const { id } = req.params;
-    // Get firebase_uid for cleanup
-    const userRes = await pool.query('SELECT firebase_uid FROM public.users WHERE user_id = $1', [id]);
-    if (userRes.rows.length === 0) return res.status(404).json({ error: 'User not found' });
-    const firebaseUid = userRes.rows[0].firebase_uid;
-    await pool.query('DELETE FROM public.users WHERE user_id = $1', [id]);
-    if (firebaseUid && firebaseAdmin && firebaseAdmin.apps.length > 0) {
-      try {
-        await firebaseAdmin.auth().deleteUser(firebaseUid);
-      } catch (err) {
-        console.warn('Failed to delete Firebase user:', err.message);
-      }
-    }
-    res.json({ success: true, message: 'Admin user deleted' });
-  } catch (error) {
-    console.error('Failed to delete admin user:', error);
-    res.status(500).json({ error: 'Failed to delete admin user' });
-  }
 });
 
 router.post('/users', authenticateRequest, requireRoles(['admin']), async (req, res) => {
@@ -702,121 +675,6 @@ router.get('/erca/debtors', async (req, res) => {
   } catch (error) {
     console.error('ERCA debtor list error:', error);
     res.status(500).json({ error: 'Failed to generate ERCA debtor list' });
-  }
-});
-
-// GET /api/admin/erca/debtors.csv — export debtor list for ERCA (CSV)
-router.get('/erca/debtors.csv', async (req, res) => {
-  try {
-    const studentCols = await getAvailableColumns('students', [
-      'full_name',
-      'student_number',
-      'email',
-      'phone',
-      'tin',
-      'department',
-      'campus',
-      'graduation_date',
-      'repayment_start_date',
-      'clearance_status',
-      'payment_model',
-    ]);
-
-    const debtCols = await getAvailableColumns('debt_records', ['student_id', 'current_balance']);
-
-    const hasStudentFullName = studentCols.has('full_name');
-    const hasStudentEmail = studentCols.has('email');
-    const hasStudentPhone = studentCols.has('phone');
-    const hasStudentTin = studentCols.has('tin');
-    const hasStudentNumber = studentCols.has('student_number');
-    const hasDepartment = studentCols.has('department');
-    const hasCampus = studentCols.has('campus');
-    const hasGraduationDate = studentCols.has('graduation_date');
-    const hasRepaymentStartDate = studentCols.has('repayment_start_date');
-    const hasClearanceStatus = studentCols.has('clearance_status');
-    const hasPaymentModel = studentCols.has('payment_model');
-    const hasCurrentBalance = debtCols.has('current_balance');
-
-    if (!hasStudentNumber || !hasGraduationDate || !hasRepaymentStartDate || !hasClearanceStatus || !hasCurrentBalance) {
-      return res.status(400).json({
-        error: 'students/debt_records schema is missing ERCA export columns. Run graduate and debt migrations first.',
-      });
-    }
-
-    const fullNameExpr = hasStudentFullName ? 's.full_name' : 'u.full_name';
-    const emailExpr = hasStudentEmail ? 's.email' : 'u.email';
-    const phoneExpr = hasStudentPhone ? 's.phone' : "''::text";
-    const tinExpr = hasStudentTin ? "COALESCE(s.tin, '')" : "''::text";
-    const departmentExpr = hasDepartment ? 's.department' : "''::text";
-    const campusExpr = hasCampus ? 's.campus' : "'Main Campus'::text";
-    const needsUsersJoin = !hasStudentFullName || !hasStudentEmail;
-
-    const result = await pool.query(
-      `SELECT
-         ${fullNameExpr} AS full_name,
-         s.student_number,
-         ${emailExpr} AS email,
-         ${phoneExpr} AS phone,
-         ${tinExpr} AS tin,
-         SUM(dr.current_balance) AS total_debt,
-         ${departmentExpr} AS program,
-         ${campusExpr} AS campus,
-         s.graduation_date,
-         s.repayment_start_date
-       FROM public.students s
-       JOIN public.debt_records dr ON s.student_id = dr.student_id
-       ${needsUsersJoin ? 'LEFT JOIN public.users u ON s.user_id = u.user_id' : ''}
-       WHERE UPPER(COALESCE(s.clearance_status, '')) = 'PENDING'
-         AND dr.current_balance > 0
-         AND s.graduation_date IS NOT NULL
-         AND s.repayment_start_date IS NOT NULL
-         AND s.repayment_start_date <= NOW()
-        ${hasPaymentModel ? "AND LOWER(COALESCE(s.payment_model, 'post_graduation')) = 'post_graduation'" : ''}
-       GROUP BY
-         s.student_id,
-         s.student_number,
-         ${fullNameExpr},
-         ${emailExpr},
-         ${phoneExpr},
-         ${tinExpr},
-         ${departmentExpr},
-         ${campusExpr},
-         s.graduation_date,
-         s.repayment_start_date
-       ORDER BY s.repayment_start_date ASC, s.student_id ASC`
-    );
-
-    sendCsv(
-      res,
-      `ERCA_Debtors_${new Date().toISOString().slice(0, 10)}.csv`,
-      [
-        'full_name',
-        'student_number',
-        'email',
-        'phone',
-        'tin',
-        'total_debt',
-        'program',
-        'campus',
-        'graduation_date',
-        'repayment_start_date',
-      ],
-      result.rows.map((row) => [
-        row.full_name,
-        row.student_number,
-        row.email,
-        row.phone,
-        row.tin,
-        row.total_debt,
-        row.program,
-        row.campus,
-        row.graduation_date,
-        row.repayment_start_date,
-      ])
-    );
-  } catch (error) {
-    console.error('ERCA debtor list CSV error:', error);
-    res.status(500).json({ error: 'Failed to export ERCA debtor list' });
   }
 });
 
@@ -2024,416 +1882,6 @@ router.get('/analytics/debt-overview', async (req, res) => {
   } catch (error) {
     console.error('Debt analytics error:', error);
     res.status(500).json({ error: 'Failed to fetch debt analytics' });
-  }
-});
-
-function escapeCsvValue(value) {
-  if (value == null) return '';
-  const text = String(value);
-  const needsQuotes = /[",\n\r]/.test(text);
-  const escaped = text.replace(/"/g, '""');
-  return needsQuotes ? `"${escaped}"` : escaped;
-}
-
-function sendCsv(res, filename, headers, rows) {
-  const content = [headers.join(','), ...rows.map((row) => row.map(escapeCsvValue).join(','))].join('\n');
-  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-  res.send(content);
-}
-
-async function getPaymentDateExpression() {
-  const paymentCols = await getAvailableColumns('payment_history', [
-    'submitted_at',
-    'payment_date',
-    'reviewed_at',
-    'created_at',
-  ]);
-
-  if (paymentCols.has('submitted_at')) return 'submitted_at';
-  if (paymentCols.has('payment_date')) return 'payment_date';
-  if (paymentCols.has('reviewed_at')) return 'reviewed_at';
-  if (paymentCols.has('created_at')) return 'created_at';
-  return null;
-}
-
-// GET /api/admin/reports/monthly-collections — finance monthly summary (JSON)
-router.get('/reports/monthly-collections', async (req, res) => {
-  try {
-    const dateExpr = await getPaymentDateExpression();
-    if (!dateExpr) {
-      return res.status(400).json({ error: 'payment_history schema missing a usable date column' });
-    }
-
-    const months = Math.min(36, Math.max(1, Number(req.query?.months || 12)));
-    const result = await pool.query(
-      `
-      SELECT
-        TO_CHAR(DATE_TRUNC('month', ${dateExpr}), 'YYYY-MM') AS month,
-        COUNT(*)::int AS payments_count,
-        COALESCE(SUM(amount), 0) AS total_collections
-      FROM public.payment_history
-      WHERE UPPER(COALESCE(status, '')) IN ('APPROVED', 'SUCCESS')
-        AND ${dateExpr} >= (DATE_TRUNC('month', NOW()) - ($1::int || ' months')::interval)
-      GROUP BY 1
-      ORDER BY 1 DESC
-      `,
-      [months]
-    );
-
-    res.json({
-      success: true,
-      generatedAt: new Date().toISOString(),
-      months,
-      rows: result.rows.map((row) => ({
-        month: row.month,
-        payments_count: Number(row.payments_count || 0),
-        total_collections: Number(row.total_collections || 0),
-      })),
-    });
-  } catch (error) {
-    console.error('Monthly collections report error:', error);
-    res.status(500).json({ error: 'Failed to generate monthly collections report' });
-  }
-});
-
-// GET /api/admin/reports/monthly-collections.csv — finance monthly summary (CSV)
-router.get('/reports/monthly-collections.csv', async (req, res) => {
-  try {
-    const dateExpr = await getPaymentDateExpression();
-    if (!dateExpr) {
-      return res.status(400).json({ error: 'payment_history schema missing a usable date column' });
-    }
-
-    const months = Math.min(36, Math.max(1, Number(req.query?.months || 12)));
-    const result = await pool.query(
-      `
-      SELECT
-        TO_CHAR(DATE_TRUNC('month', ${dateExpr}), 'YYYY-MM') AS month,
-        COUNT(*)::int AS payments_count,
-        COALESCE(SUM(amount), 0) AS total_collections
-      FROM public.payment_history
-      WHERE UPPER(COALESCE(status, '')) IN ('APPROVED', 'SUCCESS')
-        AND ${dateExpr} >= (DATE_TRUNC('month', NOW()) - ($1::int || ' months')::interval)
-      GROUP BY 1
-      ORDER BY 1 DESC
-      `,
-      [months]
-    );
-
-    sendCsv(
-      res,
-      `monthly_collections_${new Date().toISOString().slice(0, 10)}.csv`,
-      ['month', 'payments_count', 'total_collections'],
-      result.rows.map((row) => [row.month, row.payments_count, row.total_collections])
-    );
-  } catch (error) {
-    console.error('Monthly collections CSV error:', error);
-    res.status(500).json({ error: 'Failed to export monthly collections report' });
-  }
-});
-
-// GET /api/admin/reports/outstanding-debt — by campus/program (JSON)
-router.get('/reports/outstanding-debt', async (req, res) => {
-  try {
-    const studentCols = await getAvailableColumns('students', ['student_id', 'campus', 'department']);
-    const debtCols = await getAvailableColumns('debt_records', ['student_id', 'current_balance']);
-
-    if (!studentCols.has('student_id') || !debtCols.has('student_id') || !debtCols.has('current_balance')) {
-      return res.status(400).json({ error: 'students/debt_records schema missing required columns' });
-    }
-
-    const campusExpr = studentCols.has('campus') ? 's.campus' : "'Main Campus'::text";
-    const programExpr = studentCols.has('department') ? 's.department' : "'Unknown'::text";
-
-    const result = await pool.query(
-      `
-      SELECT
-        ${campusExpr} AS campus,
-        ${programExpr} AS program,
-        COUNT(DISTINCT s.student_id)::int AS students_count,
-        COALESCE(SUM(dr.current_balance), 0) AS total_outstanding_debt
-      FROM public.debt_records dr
-      JOIN public.students s ON s.student_id = dr.student_id
-      WHERE dr.current_balance > 0
-      GROUP BY 1, 2
-      ORDER BY total_outstanding_debt DESC
-      `
-    );
-
-    res.json({
-      success: true,
-      generatedAt: new Date().toISOString(),
-      rows: result.rows.map((row) => ({
-        campus: row.campus,
-        program: row.program,
-        students_count: Number(row.students_count || 0),
-        total_outstanding_debt: Number(row.total_outstanding_debt || 0),
-      })),
-    });
-  } catch (error) {
-    console.error('Outstanding debt report error:', error);
-    res.status(500).json({ error: 'Failed to generate outstanding debt report' });
-  }
-});
-
-// GET /api/admin/reports/outstanding-debt.csv — by campus/program (CSV)
-router.get('/reports/outstanding-debt.csv', async (req, res) => {
-  try {
-    const studentCols = await getAvailableColumns('students', ['student_id', 'campus', 'department']);
-    const debtCols = await getAvailableColumns('debt_records', ['student_id', 'current_balance']);
-
-    if (!studentCols.has('student_id') || !debtCols.has('student_id') || !debtCols.has('current_balance')) {
-      return res.status(400).json({ error: 'students/debt_records schema missing required columns' });
-    }
-
-    const campusExpr = studentCols.has('campus') ? 's.campus' : "'Main Campus'::text";
-    const programExpr = studentCols.has('department') ? 's.department' : "'Unknown'::text";
-
-    const result = await pool.query(
-      `
-      SELECT
-        ${campusExpr} AS campus,
-        ${programExpr} AS program,
-        COUNT(DISTINCT s.student_id)::int AS students_count,
-        COALESCE(SUM(dr.current_balance), 0) AS total_outstanding_debt
-      FROM public.debt_records dr
-      JOIN public.students s ON s.student_id = dr.student_id
-      WHERE dr.current_balance > 0
-      GROUP BY 1, 2
-      ORDER BY total_outstanding_debt DESC
-      `
-    );
-
-    sendCsv(
-      res,
-      `outstanding_debt_${new Date().toISOString().slice(0, 10)}.csv`,
-      ['campus', 'program', 'students_count', 'total_outstanding_debt'],
-      result.rows.map((row) => [row.campus, row.program, row.students_count, row.total_outstanding_debt])
-    );
-  } catch (error) {
-    console.error('Outstanding debt CSV error:', error);
-    res.status(500).json({ error: 'Failed to export outstanding debt report' });
-  }
-});
-
-// GET /api/admin/reports/default-rate — delinquent vs total graduates (JSON)
-router.get('/reports/default-rate', async (req, res) => {
-  try {
-    const studentCols = await getAvailableColumns('students', ['student_id', 'graduation_date', 'repayment_start_date', 'clearance_status']);
-    const debtCols = await getAvailableColumns('debt_records', ['student_id', 'current_balance']);
-
-    if (!studentCols.has('student_id') || !studentCols.has('graduation_date') || !debtCols.has('student_id') || !debtCols.has('current_balance')) {
-      return res.status(400).json({ error: 'students/debt_records schema missing required graduate columns' });
-    }
-
-    const totalGraduatesRes = await pool.query(
-      `SELECT COUNT(*)::int AS total_graduates FROM public.students WHERE graduation_date IS NOT NULL`
-    );
-
-    const hasRepaymentStartDate = studentCols.has('repayment_start_date');
-    const hasClearanceStatus = studentCols.has('clearance_status');
-
-    if (!hasRepaymentStartDate || !hasClearanceStatus) {
-      return res.status(400).json({
-        error: 'students schema missing repayment_start_date or clearance_status for default rate calculation',
-      });
-    }
-
-    const delinquentRes = await pool.query(
-      `
-      SELECT COUNT(DISTINCT s.student_id)::int AS delinquent_graduates
-      FROM public.students s
-      JOIN public.debt_records dr ON dr.student_id = s.student_id
-      WHERE s.graduation_date IS NOT NULL
-        AND s.repayment_start_date IS NOT NULL
-        AND s.repayment_start_date <= NOW()
-        AND UPPER(COALESCE(s.clearance_status, '')) = 'PENDING'
-        AND dr.current_balance > 0
-      `
-    );
-
-    const totalGraduates = Number(totalGraduatesRes.rows[0]?.total_graduates || 0);
-    const delinquentGraduates = Number(delinquentRes.rows[0]?.delinquent_graduates || 0);
-    const defaultRate = totalGraduates > 0 ? delinquentGraduates / totalGraduates : 0;
-
-    res.json({
-      success: true,
-      generatedAt: new Date().toISOString(),
-      totals: {
-        total_graduates: totalGraduates,
-        delinquent_graduates: delinquentGraduates,
-        default_rate: Number(defaultRate.toFixed(4)),
-      },
-    });
-  } catch (error) {
-    console.error('Default rate report error:', error);
-    res.status(500).json({ error: 'Failed to generate default rate report' });
-  }
-});
-
-// GET /api/admin/reports/default-rate.csv — delinquent vs total graduates (CSV)
-router.get('/reports/default-rate.csv', async (req, res) => {
-  try {
-    const studentCols = await getAvailableColumns('students', ['student_id', 'graduation_date', 'repayment_start_date', 'clearance_status']);
-    const debtCols = await getAvailableColumns('debt_records', ['student_id', 'current_balance']);
-
-    if (!studentCols.has('student_id') || !studentCols.has('graduation_date') || !debtCols.has('student_id') || !debtCols.has('current_balance')) {
-      return res.status(400).json({ error: 'students/debt_records schema missing required graduate columns' });
-    }
-
-    if (!studentCols.has('repayment_start_date') || !studentCols.has('clearance_status')) {
-      return res.status(400).json({
-        error: 'students schema missing repayment_start_date or clearance_status for default rate calculation',
-      });
-    }
-
-    const totalGraduatesRes = await pool.query(
-      `SELECT COUNT(*)::int AS total_graduates FROM public.students WHERE graduation_date IS NOT NULL`
-    );
-
-    const delinquentRes = await pool.query(
-      `
-      SELECT COUNT(DISTINCT s.student_id)::int AS delinquent_graduates
-      FROM public.students s
-      JOIN public.debt_records dr ON dr.student_id = s.student_id
-      WHERE s.graduation_date IS NOT NULL
-        AND s.repayment_start_date IS NOT NULL
-        AND s.repayment_start_date <= NOW()
-        AND UPPER(COALESCE(s.clearance_status, '')) = 'PENDING'
-        AND dr.current_balance > 0
-      `
-    );
-
-    const totalGraduates = Number(totalGraduatesRes.rows[0]?.total_graduates || 0);
-    const delinquentGraduates = Number(delinquentRes.rows[0]?.delinquent_graduates || 0);
-    const defaultRate = totalGraduates > 0 ? delinquentGraduates / totalGraduates : 0;
-
-    sendCsv(
-      res,
-      `default_rate_${new Date().toISOString().slice(0, 10)}.csv`,
-      ['total_graduates', 'delinquent_graduates', 'default_rate'],
-      [[totalGraduates, delinquentGraduates, Number(defaultRate.toFixed(4))]]
-    );
-  } catch (error) {
-    console.error('Default rate CSV error:', error);
-    res.status(500).json({ error: 'Failed to export default rate report' });
-  }
-});
-
-// GET /api/admin/reports/semester-costs — semester/cost configuration summary (JSON)
-router.get('/reports/semester-costs', async (req, res) => {
-  try {
-    const tableExists = (await pool.query(`SELECT to_regclass('public.cost_shares') AS table_name`)).rows[0]
-      ?.table_name;
-    if (!tableExists) {
-      return res.status(400).json({ error: 'cost_shares table is not available' });
-    }
-
-    const cols = await getAvailableColumns('cost_shares', [
-      'cost_share_id',
-      'program',
-      'campus',
-      'academic_year',
-      'tuition_cost_per_year',
-      'boarding_cost_per_year',
-      'food_cost_per_month',
-      'created_at',
-    ]);
-
-    const campusExpr = cols.has('campus') ? 'campus' : "'Main Campus'::text AS campus";
-    const foodExpr = cols.has('food_cost_per_month') ? 'food_cost_per_month' : '0::numeric AS food_cost_per_month';
-
-    const result = await pool.query(
-      `
-      SELECT
-        cost_share_id,
-        program,
-        ${campusExpr},
-        academic_year,
-        tuition_cost_per_year,
-        boarding_cost_per_year,
-        ${foodExpr},
-        ${cols.has('created_at') ? 'created_at' : 'NULL::timestamp AS created_at'}
-      FROM public.cost_shares
-      ORDER BY academic_year DESC, program ASC
-      `
-    );
-
-    res.json({
-      success: true,
-      generatedAt: new Date().toISOString(),
-      rows: result.rows,
-    });
-  } catch (error) {
-    console.error('Semester costs report error:', error);
-    res.status(500).json({ error: 'Failed to generate semester cost configuration summary' });
-  }
-});
-
-// GET /api/admin/reports/semester-costs.csv — semester/cost configuration summary (CSV)
-router.get('/reports/semester-costs.csv', async (req, res) => {
-  try {
-    const tableExists = (await pool.query(`SELECT to_regclass('public.cost_shares') AS table_name`)).rows[0]
-      ?.table_name;
-    if (!tableExists) {
-      return res.status(400).json({ error: 'cost_shares table is not available' });
-    }
-
-    const cols = await getAvailableColumns('cost_shares', [
-      'cost_share_id',
-      'program',
-      'campus',
-      'academic_year',
-      'tuition_cost_per_year',
-      'boarding_cost_per_year',
-      'food_cost_per_month',
-      'created_at',
-    ]);
-
-    const campusExpr = cols.has('campus') ? 'campus' : "'Main Campus'::text AS campus";
-    const foodExpr = cols.has('food_cost_per_month') ? 'food_cost_per_month' : '0::numeric AS food_cost_per_month';
-
-    const result = await pool.query(
-      `
-      SELECT
-        cost_share_id,
-        program,
-        ${campusExpr},
-        academic_year,
-        tuition_cost_per_year,
-        boarding_cost_per_year,
-        ${foodExpr}
-      FROM public.cost_shares
-      ORDER BY academic_year DESC, program ASC
-      `
-    );
-
-    sendCsv(
-      res,
-      `semester_costs_${new Date().toISOString().slice(0, 10)}.csv`,
-      [
-        'cost_share_id',
-        'program',
-        'campus',
-        'academic_year',
-        'tuition_cost_per_year',
-        'boarding_cost_per_year',
-        'food_cost_per_month',
-      ],
-      result.rows.map((row) => [
-        row.cost_share_id,
-        row.program,
-        row.campus,
-        row.academic_year,
-        row.tuition_cost_per_year,
-        row.boarding_cost_per_year,
-        row.food_cost_per_month,
-      ])
-    );
-  } catch (error) {
-    console.error('Semester costs CSV error:', error);
-    res.status(500).json({ error: 'Failed to export semester cost configuration summary' });
   }
 });
 
