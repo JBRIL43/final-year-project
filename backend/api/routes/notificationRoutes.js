@@ -23,13 +23,7 @@ router.get('/unread-count', authenticateRequest, async (req, res) => {
     res.status(500).json({ error: 'Failed to load notifications' });
   }
 });
-const express = require('express');
-const pool = require('../config/db');
-const {
-  ensureNotificationsTable,
-} = require('../utils/notifications');
-
-const router = express.Router();
+ 
 
 router.get('/', async (req, res) => {
   try {
