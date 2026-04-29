@@ -17,6 +17,18 @@ async function getAvailableColumns(tableName, columns) {
   return new Set(result.rows.map((row) => row.column_name));
 }
 
+async function ensureDepartmentClearanceColumn() {
+  const studentColumns = await getAvailableColumns('students', ['department_clearance']);
+  if (studentColumns.has('department_clearance')) {
+    return;
+  }
+
+  await pool.query(`
+    ALTER TABLE public.students
+    ADD COLUMN IF NOT EXISTS department_clearance VARCHAR(20) NOT NULL DEFAULT 'PENDING'
+  `);
+}
+
 router.use(authenticateRequest, requireRoles(['department_head']));
 
 router.get('/students', async (req, res) => {
@@ -105,17 +117,13 @@ router.put('/students/:id/clearance', async (req, res) => {
       });
     }
 
+    await ensureDepartmentClearanceColumn();
+
     const studentColumns = await getAvailableColumns('students', [
       'department',
       'department_clearance',
       'updated_at',
     ]);
-
-    if (!studentColumns.has('department_clearance')) {
-      return res.status(400).json({
-        error: 'students.department_clearance column is missing. Run department clearance migration first.',
-      });
-    }
 
     const department = req.user?.role === 'admin'
       ? String(req.body?.department || '').trim()
