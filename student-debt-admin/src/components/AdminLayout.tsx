@@ -36,6 +36,7 @@ function buildNavItems(role: string) {
   if (role === 'registrar') {
     return [
       { label: 'Student Clearance & Status', to: '/registrar', icon: <AccountBalanceIcon /> },
+      { label: 'Graduate Management', to: '/graduates', icon: <SchoolIcon /> },
       { label: 'Change Password', to: '/change-password', icon: <LockResetIcon /> },
     ]
   }
@@ -56,8 +57,8 @@ function buildNavItems(role: string) {
       { label: 'Semester Amounts', to: '/semester-amounts', icon: <ReceiptLongIcon /> },
       { label: 'ERCA Export', to: '/erca-export', icon: <DescriptionIcon /> },
       { label: 'Finance Reports', to: '/finance-reports', icon: <DescriptionIcon /> },
-      { label: 'Fayda Integration', to: '/fayda', icon: <HubIcon /> },
-      { label: 'Database Health', to: '/database-health', icon: <MonitorHeartIcon /> },
+      // { label: 'Fayda Integration', to: '/fayda', icon: <HubIcon /> },
+      // { label: 'Database Health', to: '/database-health', icon: <MonitorHeartIcon /> },
       { label: 'Change Password', to: '/change-password', icon: <LockResetIcon /> },
     ]
   }

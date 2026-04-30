@@ -256,11 +256,13 @@ async function calculateFinalWithdrawalSettlement(studentId) {
 }
 
 async function validateClearanceAllowed(studentId) {
-  const studentColumns = await getAvailableColumns('students', ['enrollment_status']);
+  const studentColumns = await getAvailableColumns('students', ['enrollment_status', 'department_withdrawal_approved']);
   const debtColumns = await getAvailableColumns('debt_records', ['student_id', 'current_balance', 'is_final_settlement']);
 
   const studentRes = await pool.query(
-    `SELECT ${studentColumns.has('enrollment_status') ? 'enrollment_status' : "'ACTIVE'::text AS enrollment_status"}
+    `SELECT 
+       ${studentColumns.has('enrollment_status') ? 'enrollment_status' : "'ACTIVE'::text AS enrollment_status"},
+       ${studentColumns.has('department_withdrawal_approved') ? 'department_withdrawal_approved' : 'NULL::boolean AS department_withdrawal_approved'}
      FROM public.students
      WHERE student_id = $1
      LIMIT 1`,
@@ -272,14 +274,16 @@ async function validateClearanceAllowed(studentId) {
   }
 
   const enrollmentStatus = String(studentRes.rows[0].enrollment_status || '').toUpperCase();
-  if (enrollmentStatus !== 'WITHDRAWN') {
-    return { allowed: true };
+  const deptApproved = studentRes.rows[0].department_withdrawal_approved;
+
+  if (enrollmentStatus === 'ACTIVE') {
+    return { allowed: false, message: 'Active students cannot be cleared. Must be withdrawn or graduated.' };
   }
 
   if (!debtColumns.has('student_id') || !debtColumns.has('current_balance')) {
     return {
       allowed: false,
-      message: 'Debt records schema is missing required columns for withdrawal clearance validation',
+      message: 'Debt records schema is missing required columns for clearance validation',
     };
   }
 
@@ -294,17 +298,25 @@ async function validateClearanceAllowed(studentId) {
     [studentId]
   );
 
-  if (debtRes.rows.length === 0) {
-    return { allowed: true };
+  const balance = debtRes.rows.length > 0 ? Number(debtRes.rows[0].current_balance || 0) : 0;
+  const isFinalSettlement = debtRes.rows.length > 0 ? Boolean(debtRes.rows[0].is_final_settlement) : false;
+
+  if (enrollmentStatus === 'WITHDRAWN') {
+    if (deptApproved !== true) {
+      return { allowed: false, message: 'Academic withdrawal must be approved by Department Head first' };
+    }
+    if (!isFinalSettlement) {
+      return { allowed: false, message: 'Finance must process the final withdrawal settlement before clearance' };
+    }
+    if (balance > 0) {
+      return { allowed: false, message: 'Student must settle final withdrawal balance (balance = 0) before clearance' };
+    }
   }
 
-  const balance = Number(debtRes.rows[0].current_balance || 0);
-  const isFinalSettlement = Boolean(debtRes.rows[0].is_final_settlement);
-  if (isFinalSettlement && balance > 0) {
-    return {
-      allowed: false,
-      message: 'Student must settle final withdrawal balance before clearance',
-    };
+  if (enrollmentStatus === 'GRADUATED') {
+    if (balance > 0) {
+      return { allowed: false, message: 'Graduating students must have a zero balance before clearance' };
+    }
   }
 
   return { allowed: true };
@@ -914,77 +926,6 @@ router.put('/students/:id/status', async (req, res) => {
   }
 });
 
-// PUT /api/registrar/students/:id/credits — update credits and auto-calculate tuition share
-router.put('/students/:id/credits', async (req, res) => {
-  try {
-    const studentId = Number(req.params.id);
-    let { credits_registered } = req.body || {};
-
-    if (!Number.isFinite(studentId) || studentId <= 0) {
-      return res.status(400).json({ error: 'Invalid student id' });
-    }
-
-    const studentColumns = await getAvailableColumns('students', [
-      'credits_registered',
-      'tuition_share_percent',
-      'updated_at',
-    ]);
-
-    if (!studentColumns.has('credits_registered') || !studentColumns.has('tuition_share_percent')) {
-      return res.status(400).json({
-        error: 'students credit columns are missing. Run the credit load migration first.',
-      });
-    }
-
-    if (credits_registered === '') {
-      credits_registered = null;
-    }
-
-    if (credits_registered !== null && credits_registered !== undefined) {
-      credits_registered = Number.parseInt(credits_registered, 10);
-      if (!Number.isFinite(credits_registered) || credits_registered < 0) {
-        return res.status(400).json({ error: 'Invalid credits' });
-      }
-    }
-
-    let tuitionSharePercent = 15.0;
-    if (credits_registered !== null && credits_registered !== undefined) {
-      if (credits_registered >= 15) tuitionSharePercent = 15.0;
-      else if (credits_registered >= 12) tuitionSharePercent = 11.25;
-      else if (credits_registered >= 8) tuitionSharePercent = 7.5;
-      else tuitionSharePercent = 3.75;
-    }
-
-    const updateSql = studentColumns.has('updated_at')
-      ? `UPDATE public.students
-         SET credits_registered = $1,
-             tuition_share_percent = $2,
-             updated_at = NOW()
-         WHERE student_id = $3
-         RETURNING student_id, credits_registered, tuition_share_percent, updated_at`
-      : `UPDATE public.students
-         SET credits_registered = $1,
-             tuition_share_percent = $2
-         WHERE student_id = $3
-         RETURNING student_id, credits_registered, tuition_share_percent, NOW()::timestamp AS updated_at`;
-
-    const result = await pool.query(updateSql, [credits_registered, tuitionSharePercent, studentId]);
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Student not found' });
-    }
-
-    return res.json({
-      success: true,
-      message: 'Credits and tuition share updated',
-      student: result.rows[0],
-    });
-  } catch (error) {
-    console.error('Credits update error:', error);
-    return res.status(500).json({ error: 'Failed to update credits' });
-  }
-});
-
 router.put('/students/:id/clearance', async (req, res) => {
   try {
     const studentId = Number(req.params.id);
@@ -994,8 +935,8 @@ router.put('/students/:id/clearance', async (req, res) => {
       return res.status(400).json({ error: 'Invalid student id' });
     }
 
-    if (!['PENDING', 'CLEARED', 'WAIVED'].includes(clearanceStatus)) {
-      return res.status(400).json({ error: 'clearance_status must be one of: pending, cleared, waived' });
+    if (!['PENDING', 'CLEARED'].includes(clearanceStatus)) {
+      return res.status(400).json({ error: 'clearance_status must be one of: pending, cleared' });
     }
 
     if (clearanceStatus === 'CLEARED') {
@@ -1043,7 +984,7 @@ router.put('/students/:id/clearance', async (req, res) => {
     const result = await pool.query(
       updateSql,
       shouldUpdatePrePaymentClearance
-        ? [studentId, clearanceStatus, clearanceStatus === 'CLEARED' || clearanceStatus === 'WAIVED']
+        ? [studentId, clearanceStatus, clearanceStatus === 'CLEARED']
         : [studentId, clearanceStatus]
     );
 

@@ -115,30 +115,7 @@ export default function RegistrarDashboard() {
     }
   };
 
-  const handleUpdateCredits = async (studentId: number, creditsStr: string) => {
-    const credits = creditsStr === '' ? null : Number.parseInt(creditsStr, 10);
 
-    if (credits !== null && (!Number.isFinite(credits) || credits < 0)) {
-      setSnackbar({
-        open: true,
-        message: 'Invalid credits value',
-        severity: 'error',
-      });
-      return;
-    }
-
-    try {
-      await api.put(`/api/registrar/students/${studentId}/credits`, { credits_registered: credits });
-      setSnackbar({ open: true, message: 'Credits updated', severity: 'success' });
-      loadStudents();
-    } catch (err: any) {
-      setSnackbar({
-        open: true,
-        message: err.response?.data?.error || 'Update failed',
-        severity: 'error',
-      });
-    }
-  };
 
   const handleGenerateCertificate = async (studentId: number) => {
     try {
@@ -297,13 +274,7 @@ export default function RegistrarDashboard() {
                   <TableCell>{s.department}</TableCell>
                   <TableCell>{s.campus}</TableCell>
                   <TableCell>
-                    <TextField
-                      size="small"
-                      type="number"
-                      value={s.credits_registered ?? ''}
-                      onChange={(e) => handleUpdateCredits(s.student_id, e.target.value)}
-                      sx={{ width: 80 }}
-                    />
+                    {s.credits_registered ?? 'N/A'}
                   </TableCell>
                   <TableCell>
                     {s.tuition_share_percent != null ? `${s.tuition_share_percent}%` : '15%'}
@@ -332,7 +303,6 @@ export default function RegistrarDashboard() {
                       >
                         <MenuItem value="pending">Pending</MenuItem>
                         <MenuItem value="cleared">Cleared</MenuItem>
-                        <MenuItem value="waived">Waived</MenuItem>
                       </Select>
                     </FormControl>
                   </TableCell>
@@ -353,7 +323,7 @@ export default function RegistrarDashboard() {
                       <Button
                         size="small"
                         variant="outlined"
-                        disabled={!['CLEARED', 'WAIVED'].includes(String(s.clearance_status || '').toUpperCase())}
+                        disabled={String(s.clearance_status || '').toUpperCase() !== 'CLEARED'}
                         onClick={() => handleGenerateCertificate(s.student_id)}
                       >
                         Certificate
