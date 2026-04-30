@@ -44,6 +44,7 @@ function buildNavItems(role: string) {
   if (role === 'department_head') {
     return [
       { label: 'Department Dashboard', to: '/department', icon: <ApartmentIcon /> },
+      { label: 'Cost Configuration', to: '/cost-config', icon: <ReceiptLongIcon /> },
       { label: 'Change Password', to: '/change-password', icon: <LockResetIcon /> },
     ]
   }

@@ -4,10 +4,10 @@ const { authenticateRequest, requireRoles } = require('../middleware/auth');
 
 const router = express.Router();
 
-router.use(authenticateRequest, requireRoles(['admin', 'finance']));
+router.use(authenticateRequest);
 
 // GET /api/admin/semester-amounts — list all semester amount configurations
-router.get('/', async (req, res) => {
+router.get('/', requireRoles(['admin', 'finance', 'department_head']), async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT
@@ -35,7 +35,7 @@ router.get('/', async (req, res) => {
 });
 
 // POST /api/admin/semester-amounts — create a new semester amount configuration
-router.post('/', async (req, res) => {
+router.post('/', requireRoles(['admin', 'finance']), async (req, res) => {
   try {
     const {
       academic_year,
@@ -114,7 +114,7 @@ router.post('/', async (req, res) => {
 });
 
 // PUT /api/admin/semester-amounts/:id — update an existing semester amount configuration
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireRoles(['admin', 'finance']), async (req, res) => {
   try {
     const id = Number(req.params.id);
 
@@ -203,7 +203,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE /api/admin/semester-amounts/:id — remove a semester amount configuration
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireRoles(['admin', 'finance']), async (req, res) => {
   try {
     const id = Number(req.params.id);
 

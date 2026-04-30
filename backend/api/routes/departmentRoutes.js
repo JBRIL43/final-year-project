@@ -4,95 +4,7 @@ const { authenticateRequest, requireRoles } = require('../middleware/auth');
 
 const router = express.Router();
 
-// POST /api/department/students/:id/withdrawal/approve-academic
-router.post('/students/:id/withdrawal/approve-academic', async (req, res) => {
-  try {
-    if (req.user.role !== 'department_head') {
-      return res.status(403).json({ error: 'Access denied' });
-    }
 
-    const { id } = req.params;
-    const studentId = parseInt(id);
-
-    // Verify student is in department
-    const userRes = await pool.query(
-      'SELECT department FROM users WHERE user_id = $1',
-      [req.user.user_id]
-    );
-    const dept = userRes.rows[0].department;
-
-    const studentRes = await pool.query(
-      'SELECT full_name FROM students WHERE student_id = $1 AND department = $2 AND withdrawal_status = $3',
-      [studentId, dept, 'requested']
-    );
-
-    if (studentRes.rows.length === 0) {
-      return res.status(400).json({ error: 'Student not found or not eligible for approval' });
-    }
-
-    // Approve academic standing
-    await pool.query(
-      `UPDATE students 
-       SET withdrawal_status = 'academic_approved'
-       WHERE student_id = $1`,
-      [studentId]
-    );
-
-    // Notify Finance Officer(s)
-    const financeOfficers = await pool.query(
-      'SELECT user_id FROM users WHERE role = $1',
-      ['finance']
-    );
-
-    for (const officer of financeOfficers.rows) {
-      await pool.query(
-        `INSERT INTO notifications (user_id, type, message, data)
-         VALUES ($1, $2, $3, $4)`,
-        [
-          officer.user_id,
-          'finance_review_needed',
-          `Student ${studentRes.rows[0].full_name} approved for withdrawal. Please calculate final settlement.`,
-          JSON.stringify({ student_id: studentId })
-        ]
-      );
-    }
-
-    res.json({ success: true, message: 'Academic approval granted. Finance notified.' });
-  } catch (error) {
-    console.error('Academic approval error:', error);
-    res.status(500).json({ error: 'Failed to approve withdrawal' });
-  }
-});
-// GET /api/department/withdrawal-requests
-router.get('/withdrawal-requests', async (req, res) => {
-  try {
-    if (req.user.role !== 'department_head') {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-
-    const userRes = await pool.query(
-      'SELECT department FROM users WHERE user_id = $1',
-      [req.user.user_id]
-    );
-    const department = userRes.rows[0]?.department;
-    if (!department) {
-      return res.status(400).json({ error: 'No department found for user' });
-    }
-
-    const requests = await pool.query(
-      `SELECT s.student_id, s.full_name
-       FROM students s
-       WHERE s.department = $1 
-       AND s.withdrawal_status = 'requested'`,
-      [department]
-    );
-
-    res.json({ requests: requests.rows });
-  } catch (err) {
-    console.error('Failed to load withdrawal requests', err);
-    res.status(500).json({ error: 'Failed to load withdrawal requests' });
-  }
-});
 
 async function getAvailableColumns(tableName, columns) {
   const result = await pool.query(
@@ -132,7 +44,7 @@ router.get('/students', async (req, res) => {
       'campus',
       'enrollment_status',
       'withdrawal_requested_at',
-      'credit_load',
+      'credits_registered',
       'department_clearance',
       'updated_at',
     ]);
@@ -156,7 +68,7 @@ router.get('/students', async (req, res) => {
     const withdrawalRequestedAtExpr = studentColumns.has('withdrawal_requested_at')
       ? 's.withdrawal_requested_at'
       : 'NULL::timestamp';
-    const creditLoadExpr = studentColumns.has('credit_load') ? 's.credit_load' : 'NULL::numeric';
+    const creditsRegisteredExpr = studentColumns.has('credits_registered') ? 's.credits_registered' : 'NULL::integer';
     const departmentClearanceExpr = studentColumns.has('department_clearance')
       ? 's.department_clearance'
       : "'PENDING'::text";
@@ -170,7 +82,7 @@ router.get('/students', async (req, res) => {
          ${emailExpr} AS email,
          s.department,
          ${campusExpr} AS campus,
-         ${creditLoadExpr} AS credit_load,
+         ${creditsRegisteredExpr} AS credits_registered,
          ${enrollmentExpr} AS enrollment_status,
          ${withdrawalRequestedAtExpr} AS withdrawal_requested_at,
          ${departmentClearanceExpr} AS department_clearance,
@@ -253,6 +165,88 @@ router.put('/students/:id/clearance', async (req, res) => {
   }
 });
 
+// PUT /api/department/students/:id/credits — update credits and auto-calculate tuition share
+router.put('/students/:id/credits', async (req, res) => {
+  try {
+    const studentId = Number(req.params.id);
+    let { credits_registered } = req.body || {};
+
+    if (!Number.isFinite(studentId) || studentId <= 0) {
+      return res.status(400).json({ error: 'Invalid student id' });
+    }
+
+    const studentColumns = await getAvailableColumns('students', [
+      'credits_registered',
+      'tuition_share_percent',
+      'department',
+      'updated_at',
+    ]);
+
+    if (!studentColumns.has('credits_registered') || !studentColumns.has('tuition_share_percent')) {
+      return res.status(400).json({
+        error: 'students credit columns are missing. Run the credit load migration first.',
+      });
+    }
+
+    const department = req.user?.role === 'admin'
+      ? String(req.body?.department || '').trim()
+      : String(req.user?.department || '').trim();
+
+    if (req.user?.role !== 'admin' && !department) {
+      return res.status(400).json({ error: 'No department is configured for this user' });
+    }
+
+    if (credits_registered === '') {
+      credits_registered = null;
+    }
+
+    if (credits_registered !== null && credits_registered !== undefined) {
+      credits_registered = Number.parseInt(credits_registered, 10);
+      if (!Number.isFinite(credits_registered) || credits_registered < 0) {
+        return res.status(400).json({ error: 'Invalid credits' });
+      }
+    }
+
+    let tuitionSharePercent = 15.0;
+    if (credits_registered !== null && credits_registered !== undefined) {
+      if (credits_registered >= 15) tuitionSharePercent = 15.0;
+      else if (credits_registered >= 12) tuitionSharePercent = 11.25;
+      else if (credits_registered >= 8) tuitionSharePercent = 7.5;
+      else tuitionSharePercent = 3.75;
+    }
+
+    const updateSql = studentColumns.has('updated_at')
+      ? `UPDATE public.students
+         SET credits_registered = $1,
+             tuition_share_percent = $2,
+             updated_at = NOW()
+         WHERE student_id = $3
+           AND ($4::text IS NULL OR LOWER(COALESCE(department, '')) = LOWER($4))
+         RETURNING student_id, credits_registered, tuition_share_percent, updated_at`
+      : `UPDATE public.students
+         SET credits_registered = $1,
+             tuition_share_percent = $2
+         WHERE student_id = $3
+           AND ($4::text IS NULL OR LOWER(COALESCE(department, '')) = LOWER($4))
+         RETURNING student_id, credits_registered, tuition_share_percent, NOW()::timestamp AS updated_at`;
+
+    const result = await pool.query(updateSql, [credits_registered, tuitionSharePercent, studentId, department || null]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Student not found in your department' });
+    }
+
+    return res.json({
+      success: true,
+      message: 'Credits and tuition share updated',
+      student: result.rows[0],
+    });
+  } catch (error) {
+    console.error('Credits update error:', error);
+    return res.status(500).json({ error: 'Failed to update credits' });
+  }
+});
+
 // POST /api/department/students/:id/withdrawal/approve — approve or reject withdrawal request
 router.post('/students/:id/withdrawal/approve', async (req, res) => {
   try {
@@ -314,6 +308,30 @@ router.post('/students/:id/withdrawal/approve', async (req, res) => {
     }
 
     const action = approved ? 'approved' : 'rejected';
+    
+    if (approved) {
+      try {
+        const studentQuery = await pool.query('SELECT full_name FROM public.students WHERE student_id = $1', [studentId]);
+        const studentName = studentQuery.rows[0]?.full_name || 'A student';
+        const financeOfficers = await pool.query("SELECT user_id FROM users WHERE role = 'finance'");
+        
+        for (const officer of financeOfficers.rows) {
+          await pool.query(
+            `INSERT INTO notifications (user_id, type, message, data)
+             VALUES ($1, $2, $3, $4)`,
+            [
+              officer.user_id,
+              'finance_review_needed',
+              `${studentName} was academically approved for withdrawal. Please calculate final settlement.`,
+              JSON.stringify({ student_id: studentId })
+            ]
+          );
+        }
+      } catch (err) {
+        console.error('Failed to notify finance officers:', err);
+      }
+    }
+
     return res.json({
       success: true,
       message: `Withdrawal request ${action} successfully.`,

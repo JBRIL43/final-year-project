@@ -16,6 +16,7 @@ import {
   TableHead,
   TableRow,
   Typography,
+  TextField,
 } from '@mui/material'
 import api from '../services/api'
 
@@ -26,7 +27,7 @@ interface DepartmentStudent {
   email: string
   department: string
   campus: string
-  credit_load: number | null
+  credits_registered: number | null
   enrollment_status: string
   withdrawal_requested_at: string | null
   department_clearance: string
@@ -106,6 +107,31 @@ export default function DepartmentDashboard() {
     }
   }
 
+  const handleUpdateCredits = async (studentId: number, creditsStr: string) => {
+    const credits = creditsStr === '' ? null : Number.parseInt(creditsStr, 10)
+
+    if (credits !== null && (!Number.isFinite(credits) || credits < 0)) {
+      setSnackbar({
+        open: true,
+        message: 'Invalid credits value',
+        severity: 'error',
+      })
+      return
+    }
+
+    try {
+      await api.put(`/api/department/students/${studentId}/credits`, { credits_registered: credits })
+      setSnackbar({ open: true, message: 'Credits updated', severity: 'success' })
+      loadStudents()
+    } catch (err: any) {
+      setSnackbar({
+        open: true,
+        message: err.response?.data?.error || 'Failed to update credits',
+        severity: 'error',
+      })
+    }
+  }
+
   return (
     <Box sx={{ p: { xs: 2, md: 3 } }}>
       <Typography variant="h4" sx={{ fontWeight: 800 }}>
@@ -140,7 +166,15 @@ export default function DepartmentDashboard() {
                       <small>{student.email || student.student_number}</small>
                     </TableCell>
                     <TableCell>{student.campus || '-'}</TableCell>
-                    <TableCell>{student.credit_load ?? '-'}</TableCell>
+                    <TableCell>
+                      <TextField
+                        size="small"
+                        type="number"
+                        value={student.credits_registered ?? ''}
+                        onChange={(e) => handleUpdateCredits(student.student_id, e.target.value)}
+                        sx={{ width: 80 }}
+                      />
+                    </TableCell>
                     <TableCell>
                       {student.withdrawal_requested_at ? 'Withdrawal Requested' : student.enrollment_status || '-'}
                     </TableCell>
