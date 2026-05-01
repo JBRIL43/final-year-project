@@ -272,11 +272,14 @@ class _HomeScreenState extends State<HomeScreen> {
                       children: [
                         Icon(Icons.attach_money, color: Colors.green[300]),
                         const SizedBox(width: 4),
-                        Text(
-                          'Total Paid: ${formatter.format(_debtData!['totalPaid'])}',
-                          style: TextStyle(
-                            color: Colors.green[100],
-                            fontSize: 16,
+                        Flexible(
+                          child: Text(
+                            'Total Paid: ${formatter.format(_debtData!['totalPaid'])}',
+                            style: TextStyle(
+                              color: Colors.green[100],
+                              fontSize: 16,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],
@@ -338,6 +341,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ),
+              const SizedBox(width: 8),
               Expanded(
                 child: Card(
                   elevation: 0,
