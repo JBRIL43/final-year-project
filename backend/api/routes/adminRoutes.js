@@ -9,28 +9,11 @@ const router = express.Router();
 // GET /api/admin/users — list all admin users (not students)
 router.get('/users', authenticateRequest, requireRoles(['admin']), async (req, res) => {
   try {
-    const userCols = await getAvailableColumns('users', [
-      'user_id', 'email', 'full_name', 'role', 'department', 'created_at', 'updated_at',
-    ]);
-
-    const selectFields = ['user_id', 'email'];
-    if (userCols.has('full_name')) selectFields.push('full_name');
-    else selectFields.push("''::text AS full_name");
-    selectFields.push('role');
-    if (userCols.has('department')) selectFields.push('department');
-    else selectFields.push("NULL::text AS department");
-    if (userCols.has('created_at')) selectFields.push('created_at');
-    else selectFields.push('NULL::timestamp AS created_at');
-    if (userCols.has('updated_at')) selectFields.push('updated_at');
-    else selectFields.push('NULL::timestamp AS updated_at');
-
-    const orderBy = userCols.has('created_at') ? 'ORDER BY created_at DESC' : 'ORDER BY user_id DESC';
-
     const result = await pool.query(
-      `SELECT ${selectFields.join(', ')}
+      `SELECT user_id, email, full_name, role, department, created_at, updated_at
        FROM public.users
-       WHERE UPPER(role) IN ('ADMIN', 'REGISTRAR', 'DEPARTMENT_HEAD', 'FINANCE_OFFICER')
-       ${orderBy}`
+       WHERE role IN ('ADMIN', 'REGISTRAR', 'DEPARTMENT_HEAD', 'FINANCE_OFFICER')
+       ORDER BY created_at DESC`
     );
     res.json({ success: true, users: result.rows });
   } catch (error) {
@@ -897,10 +880,6 @@ router.post('/students', async (req, res) => {
       campus = 'Main Campus',
       living_arrangement = 'On-Campus',
       enrollment_status = 'Active',
-      payment_model = 'post_graduation',
-      pre_payment_amount = 0,
-      pre_payment_date,
-      pre_payment_clearance,
     } = req.body;
 
     if (!student_number || !full_name || !email || !department || !enrollment_year) {
@@ -998,8 +977,6 @@ router.post('/students', async (req, res) => {
     };
 
     const normalizedCampus = normalizeCampus(campus);
-    const normalizedPaymentModel = normalizePaymentModel(payment_model);
-    const normalizedPrePaymentAmount = Number(pre_payment_amount) || 0;
 
     addStudentColumn('user_id', userId);
     addStudentColumn('student_number', student_number);

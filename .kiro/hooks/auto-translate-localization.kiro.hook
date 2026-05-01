@@ -1,0 +1,19 @@
+{
+  "enabled": true,
+  "name": "Auto-Translate Localization Files",
+  "description": "Monitors changes to localization and text content files (JSON, YAML, ARB). When the primary language file is updated, automatically identifies new or modified strings and generates translations for all configured target languages, respecting locale-specific conventions and context.",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "**/*.json",
+      "**/*.yaml",
+      "**/*.yml",
+      "**/*.arb"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "A localization or text content file has been modified. Please:\n1. Identify which file was changed and determine if it is the primary/source language file.\n2. Diff the changes to find any new or modified user-facing strings.\n3. For each changed string, generate accurate translations for all other configured target languages found in the same localization directory.\n4. Write the translated strings into the corresponding target language files, preserving file structure, key names, and formatting.\n5. Ensure translations maintain the original meaning and context, and follow locale-specific conventions (date formats, pluralization rules, gender agreements, etc.).\n6. Report a summary of which strings were translated and which target language files were updated."
+  }
+}

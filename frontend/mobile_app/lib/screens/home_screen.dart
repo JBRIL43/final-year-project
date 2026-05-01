@@ -26,6 +26,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   String? _debtError;
   String? _statementError;
+  String? _withdrawalStatus;
 
   int _selectedIndex = 0;
 
@@ -45,6 +46,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final data = await DebtService().getDebtBalance();
       setState(() {
         _debtData = data['data'];
+        _withdrawalStatus = (_debtData?['withdrawalStatus'] as String?);
         _debtError = null;
       });
     } catch (e) {
@@ -113,6 +115,7 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final message = await DebtService().requestWithdrawal();
       if (!mounted) return;
+      setState(() => _withdrawalStatus = 'requested');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message), backgroundColor: Colors.green),
       );
@@ -127,9 +130,7 @@ class _HomeScreenState extends State<HomeScreen> {
         setState(() => _isSubmittingWithdrawal = false);
       }
     }
-  }
-
-  Widget _buildDashboard(BuildContext context, NumberFormat formatter) {
+  }(BuildContext context, NumberFormat formatter) {
     if (_isLoadingDebt) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -352,13 +353,21 @@ class _HomeScreenState extends State<HomeScreen> {
             child: ListTile(
               leading: Icon(Icons.exit_to_app, color: Colors.orange[800]),
               title: const Text('Request Withdrawal'),
-              subtitle: const Text(
-                'Start department and registrar withdrawal processing',
+              subtitle: Text(
+                _withdrawalStatus == 'requested'
+                    ? 'Withdrawal request pending department review'
+                    : _withdrawalStatus != null
+                        ? 'Withdrawal status: $_withdrawalStatus'
+                        : 'Start department and registrar withdrawal processing',
               ),
               trailing: FilledButton(
-                onPressed: _isSubmittingWithdrawal ? null : _requestWithdrawal,
+                onPressed: (_isSubmittingWithdrawal || _withdrawalStatus != null)
+                    ? null
+                    : _requestWithdrawal,
                 style: FilledButton.styleFrom(
-                  backgroundColor: Colors.orange[700],
+                  backgroundColor: _withdrawalStatus != null
+                      ? Colors.grey[400]
+                      : Colors.orange[700],
                 ),
                 child: _isSubmittingWithdrawal
                     ? const SizedBox(
@@ -369,7 +378,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           color: Colors.white,
                         ),
                       )
-                    : const Text('Request'),
+                    : Text(_withdrawalStatus != null ? 'Requested' : 'Request'),
               ),
             ),
           ),

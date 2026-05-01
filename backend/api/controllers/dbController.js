@@ -116,6 +116,8 @@ exports.getDebtBalance = async (req, res) => {
         s.pre_payment_clearance,
         s.living_arrangement,
         s.enrollment_status,
+        s.withdrawal_status,
+        s.withdrawal_requested_at,
         (
           SELECT json_agg(
             json_build_object(
@@ -174,6 +176,8 @@ exports.getDebtBalance = async (req, res) => {
         prePaymentClearance: prePaymentCleared,
         livingArrangement: debt.living_arrangement,
         enrollmentStatus: debt.enrollment_status,
+        withdrawalStatus: debt.withdrawal_status || null,
+        withdrawalRequestedAt: debt.withdrawal_requested_at || null,
         debtId: debt.debt_id,
         initialAmount: parseFloat(initialAmount.toFixed(2)),
         currentBalance: parseFloat(displayedBalance.toFixed(2)),
