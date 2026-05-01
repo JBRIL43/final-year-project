@@ -132,6 +132,51 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _cancelWithdrawal() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cancel Withdrawal Request'),
+        content: const Text(
+          'Are you sure you want to cancel your withdrawal request?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('No'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Yes, Cancel'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isSubmittingWithdrawal = true);
+    try {
+      await DebtService().cancelWithdrawal();
+      if (!mounted) return;
+      setState(() => _withdrawalStatus = null);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Withdrawal request cancelled.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _isSubmittingWithdrawal = false);
+    }
+  }
+
   Widget _buildDashboard(BuildContext context, NumberFormat formatter) {
     if (_isLoadingDebt) {
       return const Center(child: CircularProgressIndicator());
@@ -362,26 +407,39 @@ class _HomeScreenState extends State<HomeScreen> {
                         ? 'Withdrawal status: $_withdrawalStatus'
                         : 'Start department and registrar withdrawal processing',
               ),
-              trailing: FilledButton(
-                onPressed: (_isSubmittingWithdrawal || _withdrawalStatus != null)
-                    ? null
-                    : _requestWithdrawal,
-                style: FilledButton.styleFrom(
-                  backgroundColor: _withdrawalStatus != null
-                      ? Colors.grey[400]
-                      : Colors.orange[700],
-                ),
-                child: _isSubmittingWithdrawal
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
+              trailing: _isSubmittingWithdrawal
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : _withdrawalStatus == 'requested'
+                      ? Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            OutlinedButton(
+                              onPressed: _cancelWithdrawal,
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.red,
+                                side: const BorderSide(color: Colors.red),
+                              ),
+                              child: const Text('Cancel'),
+                            ),
+                          ],
+                        )
+                      : FilledButton(
+                          onPressed: _withdrawalStatus != null
+                              ? null
+                              : _requestWithdrawal,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: _withdrawalStatus != null
+                                ? Colors.grey[400]
+                                : Colors.orange[700],
+                          ),
+                          child: Text(
+                            _withdrawalStatus != null ? 'Requested' : 'Request',
+                          ),
                         ),
-                      )
-                    : Text(_withdrawalStatus != null ? 'Requested' : 'Request'),
-              ),
             ),
           ),
           const SizedBox(height: 10),

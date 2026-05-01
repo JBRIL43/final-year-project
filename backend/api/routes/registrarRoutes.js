@@ -257,14 +257,18 @@ async function calculateFinalWithdrawalSettlement(studentId) {
 }
 
 async function validateClearanceAllowed(studentId) {
-  const studentColumns = await getAvailableColumns('students', ['enrollment_status', 'department_withdrawal_approved', 'withdrawal_status']);
+  const studentColumns = await getAvailableColumns('students', [
+    'enrollment_status', 'department_withdrawal_approved',
+    'withdrawal_status', 'finance_withdrawal_approved',
+  ]);
   const debtColumns = await getAvailableColumns('debt_records', ['student_id', 'current_balance', 'is_final_settlement']);
 
   const studentRes = await pool.query(
     `SELECT 
        ${studentColumns.has('enrollment_status') ? 'enrollment_status' : "'ACTIVE'::text AS enrollment_status"},
        ${studentColumns.has('department_withdrawal_approved') ? 'department_withdrawal_approved' : 'NULL::boolean AS department_withdrawal_approved'},
-       ${studentColumns.has('withdrawal_status') ? 'withdrawal_status' : "NULL::text AS withdrawal_status"}
+       ${studentColumns.has('withdrawal_status') ? 'withdrawal_status' : "NULL::text AS withdrawal_status"},
+       ${studentColumns.has('finance_withdrawal_approved') ? 'finance_withdrawal_approved' : 'NULL::boolean AS finance_withdrawal_approved'}
      FROM public.students
      WHERE student_id = $1
      LIMIT 1`,
@@ -280,6 +284,8 @@ async function validateClearanceAllowed(studentId) {
   // Accept both the boolean flag and the legacy withdrawal_status field
   const withdrawalStatus = String(studentRes.rows[0].withdrawal_status || '').toLowerCase();
   const isDeptApproved = deptApproved === true || withdrawalStatus === 'academic_approved';
+  const isFinanceApproved = studentRes.rows[0].finance_withdrawal_approved === true
+    || withdrawalStatus === 'finance_approved';
 
   if (enrollmentStatus === 'ACTIVE') {
     return { allowed: false, message: 'Active students cannot be cleared. Must be withdrawn or graduated.' };
@@ -309,6 +315,9 @@ async function validateClearanceAllowed(studentId) {
   if (enrollmentStatus === 'WITHDRAWN') {
     if (!isDeptApproved) {
       return { allowed: false, message: 'Academic withdrawal must be approved by Department Head first' };
+    }
+    if (!isFinanceApproved) {
+      return { allowed: false, message: 'Finance must approve the withdrawal after confirming full payment before clearance' };
     }
     // Auto-run settlement if not yet calculated — avoids requiring a separate /withdrawal/process step
     if (!isFinalSettlement) {
@@ -831,6 +840,7 @@ router.post('/students/:id/withdrawal/process', async (req, res) => {
       'full_name',
       'department_withdrawal_approved',
       'withdrawal_status',
+      'finance_withdrawal_approved',
       'registrar_withdrawal_processed',
       'enrollment_status',
       'updated_at',
@@ -847,6 +857,7 @@ router.post('/students/:id/withdrawal/process', async (req, res) => {
     const selectCols = [fullNameExpr];
     if (studentColumns.has('department_withdrawal_approved')) selectCols.push('department_withdrawal_approved');
     if (studentColumns.has('withdrawal_status')) selectCols.push('withdrawal_status');
+    if (studentColumns.has('finance_withdrawal_approved')) selectCols.push('finance_withdrawal_approved');
     selectCols.push('registrar_withdrawal_processed');
 
     const studentRes = await pool.query(
@@ -873,6 +884,13 @@ router.post('/students/:id/withdrawal/process', async (req, res) => {
 
     if (!isDeptApproved) {
       return res.status(400).json({ error: 'Department approval required first' });
+    }
+
+    const isFinanceApproved = student.finance_withdrawal_approved === true
+      || withdrawalStatus === 'finance_approved';
+
+    if (!isFinanceApproved) {
+      return res.status(400).json({ error: 'Finance approval required before registrar can process withdrawal' });
     }
 
     const setParts = [
@@ -1100,6 +1118,369 @@ router.post('/students/:id/clear', async (req, res) => {
   } catch (error) {
     console.error('Registrar clear student error:', error);
     res.status(500).json({ error: 'Failed to mark student as cleared' });
+  }
+});
+
+// GET /api/registrar/students/:id/financial-statement
+// Returns a financial statement: semester breakdown OR withdrawal settlement
+// Query param: type = 'semester' | 'withdrawal' (default: 'semester')
+router.get('/students/:id/financial-statement', async (req, res) => {
+  try {
+    const studentId = Number(req.params.id);
+    const type = String(req.query.type || 'semester').toLowerCase();
+
+    if (!Number.isFinite(studentId) || studentId <= 0) {
+      return res.status(400).json({ error: 'Invalid student id' });
+    }
+
+    const studentCols = await getAvailableColumns('students', [
+      'full_name', 'student_number', 'department', 'campus',
+      'enrollment_status', 'withdrawal_requested_at', 'tuition_share_percent',
+      'payment_model', 'enrollment_date', 'created_at',
+    ]);
+    const debtCols = await getAvailableColumns('debt_records', [
+      'debt_id', 'initial_amount', 'current_balance', 'academic_year', 'is_final_settlement',
+    ]);
+
+    const enrollmentDateExpr = studentCols.has('enrollment_date')
+      ? 's.enrollment_date'
+      : studentCols.has('created_at') ? 's.created_at' : 'NOW()::timestamp';
+
+    const studentRes = await pool.query(
+      `SELECT
+         s.student_id,
+         s.student_number,
+         ${studentCols.has('full_name') ? 's.full_name' : 'u.full_name'} AS full_name,
+         ${studentCols.has('department') ? 's.department' : "''::text"} AS department,
+         ${studentCols.has('campus') ? 's.campus' : "'Main Campus'::text"} AS campus,
+         ${studentCols.has('enrollment_status') ? 's.enrollment_status' : "'ACTIVE'::text"} AS enrollment_status,
+         ${studentCols.has('withdrawal_requested_at') ? 's.withdrawal_requested_at' : 'NULL::timestamp'} AS withdrawal_requested_at,
+         ${studentCols.has('tuition_share_percent') ? 's.tuition_share_percent' : '15.00::numeric'} AS tuition_share_percent,
+         ${studentCols.has('payment_model') ? "COALESCE(s.payment_model,'post_graduation')" : "'post_graduation'::text"} AS payment_model,
+         ${enrollmentDateExpr} AS enrollment_date
+       FROM public.students s
+       LEFT JOIN public.users u ON s.user_id = u.user_id
+       WHERE s.student_id = $1
+       LIMIT 1`,
+      [studentId]
+    );
+
+    if (studentRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    const student = studentRes.rows[0];
+
+    // Fetch debt record
+    const debtRes = await pool.query(
+      `SELECT
+         ${debtCols.has('debt_id') ? 'debt_id' : 'NULL::integer AS debt_id'},
+         ${debtCols.has('initial_amount') ? 'initial_amount' : '0::numeric AS initial_amount'},
+         ${debtCols.has('current_balance') ? 'current_balance' : '0::numeric AS current_balance'},
+         ${debtCols.has('academic_year') ? 'academic_year' : "NULL::text AS academic_year"},
+         ${debtCols.has('is_final_settlement') ? 'is_final_settlement' : 'FALSE::boolean AS is_final_settlement'}
+       FROM public.debt_records
+       WHERE student_id = $1
+       ORDER BY debt_id DESC LIMIT 1`,
+      [studentId]
+    );
+    const debt = debtRes.rows[0] || null;
+
+    // Fetch payment history
+    const paymentsRes = await pool.query(
+      `SELECT ph.payment_id, ph.amount, ph.payment_method, ph.transaction_ref,
+              ph.status, ph.payment_date
+       FROM public.payment_history ph
+       JOIN public.debt_records dr ON dr.debt_id = ph.debt_id
+       WHERE dr.student_id = $1
+       ORDER BY ph.payment_date DESC`,
+      [studentId]
+    );
+    const payments = paymentsRes.rows;
+
+    // Fetch cost breakdown from semester_amounts or cost_shares
+    let tuitionCostPerYear = 0;
+    let boardingCostPerYear = 0;
+    let foodCostPerMonth = 0;
+    let academicYear = debt?.academic_year || null;
+    const tuitionSharePercent = Number(student.tuition_share_percent || 15);
+
+    const hasSemesterTable = (
+      await pool.query(`SELECT to_regclass('public.semester_amounts') AS t`)
+    ).rows[0]?.t;
+
+    if (hasSemesterTable) {
+      const semRes = await pool.query(
+        `SELECT tuition_cost_per_year, boarding_cost_per_year, food_cost_per_month, academic_year
+         FROM public.semester_amounts
+         WHERE LOWER(COALESCE(campus,'main campus')) = LOWER($1)
+         ORDER BY effective_from DESC NULLS LAST, id DESC LIMIT 1`,
+        [student.campus || 'Main Campus']
+      );
+      if (semRes.rows.length > 0) {
+        tuitionCostPerYear = Number(semRes.rows[0].tuition_cost_per_year || 0);
+        boardingCostPerYear = Number(semRes.rows[0].boarding_cost_per_year || 0);
+        foodCostPerMonth = Number(semRes.rows[0].food_cost_per_month || 0);
+        academicYear = academicYear || semRes.rows[0].academic_year;
+      }
+    }
+
+    const tuitionShare = tuitionCostPerYear * (tuitionSharePercent / 100);
+    const foodAnnual = foodCostPerMonth * 10;
+    const totalAnnualObligation = tuitionShare + boardingCostPerYear + foodAnnual;
+
+    const totalPaid = payments
+      .filter(p => ['SUCCESS', 'APPROVED', 'success', 'approved'].includes(String(p.status)))
+      .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+
+    const currentBalance = Number(debt?.current_balance || 0);
+
+    let statementData;
+
+    if (type === 'withdrawal') {
+      // Prorated settlement up to withdrawal request date
+      const cutoffDate = student.withdrawal_requested_at
+        ? new Date(student.withdrawal_requested_at)
+        : new Date();
+      const enrollmentDate = student.enrollment_date
+        ? new Date(student.enrollment_date)
+        : new Date();
+
+      const daysEnrolled = Math.max(1, Math.ceil(
+        (cutoffDate.getTime() - enrollmentDate.getTime()) / (1000 * 60 * 60 * 24)
+      ));
+      const monthsEnrolled = Math.max(1, Math.ceil(daysEnrolled / 30));
+      const academicYearDays = 300;
+
+      const proratedTuition = tuitionShare * (daysEnrolled / academicYearDays);
+      const proratedBoarding = boardingCostPerYear * (daysEnrolled / academicYearDays);
+      const proratedFood = foodCostPerMonth * monthsEnrolled;
+      const settlementAmount = Number((proratedTuition + proratedBoarding + proratedFood).toFixed(2));
+      const settlementBalance = Math.max(0, settlementAmount - totalPaid);
+
+      statementData = {
+        type: 'withdrawal',
+        withdrawalRequestedAt: student.withdrawal_requested_at,
+        enrollmentDate: student.enrollment_date,
+        daysEnrolled,
+        monthsEnrolled,
+        proratedTuition: Number(proratedTuition.toFixed(2)),
+        proratedBoarding: Number(proratedBoarding.toFixed(2)),
+        proratedFood: Number(proratedFood.toFixed(2)),
+        settlementAmount,
+        totalPaid: Number(totalPaid.toFixed(2)),
+        settlementBalance,
+        isSettled: settlementBalance <= 0,
+      };
+    } else {
+      // Semester statement
+      statementData = {
+        type: 'semester',
+        academicYear,
+        tuitionFullCost: tuitionCostPerYear,
+        tuitionSharePercent,
+        tuitionStudentShare: Number(tuitionShare.toFixed(2)),
+        boardingCost: boardingCostPerYear,
+        foodCostMonthly: foodCostPerMonth,
+        foodCostAnnual: Number(foodAnnual.toFixed(2)),
+        totalObligation: Number(totalAnnualObligation.toFixed(2)),
+        totalPaid: Number(totalPaid.toFixed(2)),
+        currentBalance,
+        isCleared: currentBalance <= 0,
+      };
+    }
+
+    res.json({
+      success: true,
+      student: {
+        studentId: student.student_id,
+        studentNumber: student.student_number,
+        fullName: student.full_name,
+        department: student.department,
+        campus: student.campus,
+        enrollmentStatus: student.enrollment_status,
+        paymentModel: normalizePaymentModel(student.payment_model),
+      },
+      statement: statementData,
+      payments,
+      generatedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('Financial statement error:', error);
+    res.status(500).json({ error: 'Failed to generate financial statement' });
+  }
+});
+
+// GET /api/registrar/withdrawals/pending-finance — list withdrawals awaiting finance approval
+router.get('/withdrawals/pending-finance', async (req, res) => {
+  try {
+    const studentCols = await getAvailableColumns('students', [
+      'full_name', 'student_number', 'department', 'campus',
+      'withdrawal_requested_at', 'withdrawal_status', 'department_withdrawal_approved',
+      'finance_withdrawal_approved',
+    ]);
+
+    const fullNameExpr = studentCols.has('full_name') ? 's.full_name' : 'u.full_name';
+    const financeApprovedExpr = studentCols.has('finance_withdrawal_approved')
+      ? 's.finance_withdrawal_approved'
+      : 'NULL::boolean AS finance_withdrawal_approved';
+
+    // Students where dept approved but finance hasn't approved yet
+    const result = await pool.query(
+      `SELECT
+         s.student_id,
+         s.student_number,
+         ${fullNameExpr} AS full_name,
+         ${studentCols.has('department') ? 's.department' : "''::text"} AS department,
+         ${studentCols.has('campus') ? 's.campus' : "'Main Campus'::text"} AS campus,
+         ${studentCols.has('withdrawal_requested_at') ? 's.withdrawal_requested_at' : 'NULL::timestamp'} AS withdrawal_requested_at,
+         ${studentCols.has('withdrawal_status') ? 's.withdrawal_status' : "NULL::text"} AS withdrawal_status,
+         ${financeApprovedExpr},
+         dr.current_balance
+       FROM public.students s
+       LEFT JOIN public.users u ON s.user_id = u.user_id
+       LEFT JOIN public.debt_records dr ON dr.student_id = s.student_id
+       WHERE (
+         s.department_withdrawal_approved = TRUE
+         OR ${studentCols.has('withdrawal_status') ? "s.withdrawal_status = 'academic_approved'" : 'FALSE'}
+       )
+       AND (
+         ${studentCols.has('finance_withdrawal_approved')
+           ? 's.finance_withdrawal_approved IS NOT TRUE'
+           : 'TRUE'}
+       )
+       ORDER BY s.student_id DESC`,
+      []
+    );
+
+    res.json({ success: true, withdrawals: result.rows });
+  } catch (error) {
+    console.error('Pending finance withdrawals error:', error);
+    res.status(500).json({ error: 'Failed to load pending withdrawals' });
+  }
+});
+
+// POST /api/registrar/students/:id/withdrawal/finance-approve
+// Finance approves withdrawal after confirming full payment
+router.post('/students/:id/withdrawal/finance-approve', async (req, res) => {
+  try {
+    const studentId = Number(req.params.id);
+    if (!Number.isFinite(studentId) || studentId <= 0) {
+      return res.status(400).json({ error: 'Invalid student id' });
+    }
+
+    // Ensure finance_withdrawal_approved column exists
+    await pool.query(`
+      ALTER TABLE public.students
+      ADD COLUMN IF NOT EXISTS finance_withdrawal_approved BOOLEAN DEFAULT NULL
+    `);
+
+    const studentCols = await getAvailableColumns('students', [
+      'full_name', 'department_withdrawal_approved', 'withdrawal_status',
+      'finance_withdrawal_approved', 'updated_at',
+    ]);
+
+    const studentRes = await pool.query(
+      `SELECT
+         ${studentCols.has('full_name') ? 'full_name' : "''::text AS full_name"},
+         ${studentCols.has('department_withdrawal_approved') ? 'department_withdrawal_approved' : 'NULL::boolean AS department_withdrawal_approved'},
+         ${studentCols.has('withdrawal_status') ? 'withdrawal_status' : "NULL::text AS withdrawal_status"},
+         ${studentCols.has('finance_withdrawal_approved') ? 'finance_withdrawal_approved' : 'NULL::boolean AS finance_withdrawal_approved'}
+       FROM public.students
+       WHERE student_id = $1 LIMIT 1`,
+      [studentId]
+    );
+
+    if (studentRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    const student = studentRes.rows[0];
+    const withdrawalStatus = String(student.withdrawal_status || '').toLowerCase();
+    const isDeptApproved = student.department_withdrawal_approved === true
+      || withdrawalStatus === 'academic_approved';
+
+    if (!isDeptApproved) {
+      return res.status(400).json({ error: 'Department approval required before finance can approve' });
+    }
+
+    if (student.finance_withdrawal_approved === true) {
+      return res.status(409).json({ error: 'Finance has already approved this withdrawal' });
+    }
+
+    // Verify the student has zero outstanding balance
+    const debtRes = await pool.query(
+      `SELECT current_balance FROM public.debt_records
+       WHERE student_id = $1 ORDER BY debt_id DESC LIMIT 1`,
+      [studentId]
+    );
+    const balance = debtRes.rows.length > 0 ? Number(debtRes.rows[0].current_balance || 0) : 0;
+
+    if (balance > 0) {
+      return res.status(400).json({
+        error: `Student still has an outstanding balance of ${balance} ETB. Full payment required before finance approval.`,
+        outstandingBalance: balance,
+      });
+    }
+
+    // Mark finance approved and update withdrawal_status
+    const setParts = ['finance_withdrawal_approved = TRUE'];
+    if (studentCols.has('withdrawal_status')) {
+      setParts.push("withdrawal_status = 'finance_approved'");
+    }
+    if (studentCols.has('updated_at')) {
+      setParts.push('updated_at = NOW()');
+    }
+
+    await pool.query(
+      `UPDATE public.students SET ${setParts.join(', ')} WHERE student_id = $1`,
+      [studentId]
+    );
+
+    // Notify student
+    try {
+      const userRes = await pool.query(
+        `SELECT u.user_id FROM public.students s
+         JOIN public.users u ON s.user_id = u.user_id
+         WHERE s.student_id = $1 LIMIT 1`,
+        [studentId]
+      );
+      if (userRes.rows.length > 0) {
+        await sendPaymentNotification(
+          userRes.rows[0].user_id,
+          'Finance Approved Your Withdrawal',
+          'Your payment has been confirmed and your withdrawal has been approved by finance. The registrar will finalize your withdrawal shortly.',
+          { type: 'WITHDRAWAL_FINANCE_APPROVED', studentId: String(studentId) }
+        );
+      }
+    } catch (notifErr) {
+      console.error('Notification failed:', notifErr);
+    }
+
+    // Notify registrar(s)
+    try {
+      const registrars = await pool.query(
+        `SELECT user_id FROM public.users WHERE UPPER(role) IN ('REGISTRAR', 'REGISTRY')`
+      );
+      for (const reg of registrars.rows) {
+        await sendPaymentNotification(
+          reg.user_id,
+          'Withdrawal Ready for Processing',
+          `Student ${student.full_name || ''} has been finance-approved for withdrawal. Please finalize.`,
+          { type: 'WITHDRAWAL_READY_FOR_REGISTRAR', studentId: String(studentId) }
+        );
+      }
+    } catch (notifErr) {
+      console.error('Registrar notification failed:', notifErr);
+    }
+
+    res.json({
+      success: true,
+      message: `Finance approval granted for ${student.full_name || 'student'}. Registrar can now finalize.`,
+    });
+  } catch (error) {
+    console.error('Finance withdrawal approval error:', error);
+    res.status(500).json({ error: 'Failed to approve withdrawal' });
   }
 });
 
