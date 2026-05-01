@@ -1070,6 +1070,28 @@ router.put('/students/:id/clearance', async (req, res) => {
       return res.status(404).json({ error: 'Student not found' });
     }
 
+    // Notify student when clearance is granted
+    if (clearanceStatus === 'CLEARED') {
+      try {
+        const userRes = await pool.query(
+          `SELECT u.user_id FROM public.students s
+           JOIN public.users u ON s.user_id = u.user_id
+           WHERE s.student_id = $1 LIMIT 1`,
+          [studentId]
+        );
+        if (userRes.rows.length > 0) {
+          await sendPaymentNotification(
+            userRes.rows[0].user_id,
+            'Withdrawal Cleared by Registrar ✅',
+            'Your withdrawal has been fully processed and you have been granted clearance by the registrar. Your withdrawal is now complete.',
+            { type: 'WITHDRAWAL_CLEARED', studentId: String(studentId) }
+          );
+        }
+      } catch (notifErr) {
+        console.error('Clearance notification failed:', notifErr);
+      }
+    }
+
     res.json({
       success: true,
       message: 'Clearance updated',
@@ -1115,6 +1137,26 @@ router.post('/students/:id/clear', async (req, res) => {
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Student not found' });
+    }
+
+    // Notify student that clearance is granted
+    try {
+      const userRes = await pool.query(
+        `SELECT u.user_id FROM public.students s
+         JOIN public.users u ON s.user_id = u.user_id
+         WHERE s.student_id = $1 LIMIT 1`,
+        [studentId]
+      );
+      if (userRes.rows.length > 0) {
+        await sendPaymentNotification(
+          userRes.rows[0].user_id,
+          'Withdrawal Cleared by Registrar ✅',
+          'Your withdrawal has been fully processed and you have been granted clearance by the registrar. Your withdrawal is now complete.',
+          { type: 'WITHDRAWAL_CLEARED', studentId: String(studentId) }
+        );
+      }
+    } catch (notifErr) {
+      console.error('Clearance notification failed:', notifErr);
     }
 
     res.json({

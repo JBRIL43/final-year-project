@@ -20,7 +20,7 @@ A student debt management platform for Hawassa University (Ethiopia). It tracks 
 - **Debt overview** — current balance, payment history, repayment progress
 - **Cost-sharing statement** — per-year breakdown of tuition share (15%), boarding, and food costs; exportable as PDF
 - **Payment submission** — Chapa online payment or manual receipt upload
-- **Push notifications** — Firebase Cloud Messaging alerts for payment status changes
+- **Push notifications** — Firebase Cloud Messaging alerts for payment status changes and withdrawal clearance
 - **Withdrawal request** — students can submit, track, and cancel a formal withdrawal request through a multi-stage approval workflow
 
 ### Admin Web Dashboard (React)
@@ -45,7 +45,7 @@ The withdrawal feature follows a four-stage approval process:
 | 1. Student Request | Student | Submits withdrawal request via mobile app |
 | 2. Department Review | Department Head | Reviews academic standing and approves/rejects |
 | 3. Finance Review | Finance Officer | Confirms payment settlement, approves, sets enrollment to `WITHDRAWN`, and triggers final debt settlement calculation |
-| 4. Registrar Finalization | Registrar | Performs final clearance check and closes the withdrawal record |
+| 4. Registrar Finalization | Registrar | Performs final clearance check, closes the withdrawal record, and sends a push notification to the student when clearance is granted |
 
 **Status values**: `requested` → `academic_approved` → `finance_approved` → `rejected`
 
