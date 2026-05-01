@@ -33,6 +33,13 @@ _StatusInfo _statusInfo(String? raw) {
         Colors.teal,
         Icons.account_balance,
       );
+    case 'completed':
+      return const _StatusInfo(
+        'Withdrawal Complete ✅',
+        'Your withdrawal has been fully processed and clearance has been granted by the registrar.',
+        Colors.green,
+        Icons.check_circle,
+      );
     case 'rejected':
       return const _StatusInfo(
         'Rejected',
@@ -66,6 +73,8 @@ int _currentStep(String? status) {
       return 2;
     case 'finance_approved':
       return 3;
+    case 'completed':
+      return 4; // all steps done
     default:
       return 0;
   }

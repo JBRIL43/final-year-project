@@ -20,6 +20,8 @@ class MoreScreen extends StatelessWidget {
         return 'Department approved — awaiting finance';
       case 'finance_approved':
         return 'Finance approved — awaiting registrar';
+      case 'completed':
+        return 'Withdrawal complete — clearance granted';
       case 'rejected':
         return 'Rejected';
       default:
@@ -35,6 +37,8 @@ class MoreScreen extends StatelessWidget {
         return Colors.blue;
       case 'finance_approved':
         return Colors.teal;
+      case 'completed':
+        return Colors.green;
       case 'rejected':
         return Colors.red;
       default:

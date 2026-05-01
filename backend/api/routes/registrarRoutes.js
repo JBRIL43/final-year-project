@@ -1072,6 +1072,19 @@ router.put('/students/:id/clearance', async (req, res) => {
 
     // Notify student when clearance is granted
     if (clearanceStatus === 'CLEARED') {
+      // Mark withdrawal as completed
+      try {
+        const wsCols = await getAvailableColumns('students', ['withdrawal_status', 'updated_at']);
+        if (wsCols.has('withdrawal_status')) {
+          await pool.query(
+            `UPDATE public.students SET withdrawal_status = 'completed'${wsCols.has('updated_at') ? ', updated_at = NOW()' : ''} WHERE student_id = $1`,
+            [studentId]
+          );
+        }
+      } catch (wsErr) {
+        console.error('Failed to set withdrawal_status=completed:', wsErr);
+      }
+
       try {
         const userRes = await pool.query(
           `SELECT u.user_id FROM public.students s
@@ -1140,6 +1153,19 @@ router.post('/students/:id/clear', async (req, res) => {
     }
 
     // Notify student that clearance is granted
+    try {
+      // Mark withdrawal as completed
+      const wsCols = await getAvailableColumns('students', ['withdrawal_status', 'updated_at']);
+      if (wsCols.has('withdrawal_status')) {
+        await pool.query(
+          `UPDATE public.students SET withdrawal_status = 'completed'${wsCols.has('updated_at') ? ', updated_at = NOW()' : ''} WHERE student_id = $1`,
+          [studentId]
+        );
+      }
+    } catch (wsErr) {
+      console.error('Failed to set withdrawal_status=completed:', wsErr);
+    }
+
     try {
       const userRes = await pool.query(
         `SELECT u.user_id FROM public.students s
