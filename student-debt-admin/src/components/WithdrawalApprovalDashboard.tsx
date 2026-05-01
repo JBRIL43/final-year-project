@@ -23,7 +23,7 @@ import {
   Tabs,
   Typography,
 } from '@mui/material'
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
+import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined'
 import ExitToAppIcon from '@mui/icons-material/ExitToApp'
 import api from '../services/api'
@@ -298,7 +298,7 @@ function StatementDialog({
           variant="contained"
           color="success"
           disabled={!canApprove}
-          startIcon={<CheckCircleOutlineIcon />}
+          startIcon={<CheckCircleIcon />}
         >
           Approve Withdrawal
         </Button>
@@ -500,7 +500,7 @@ export default function WithdrawalApprovalDashboard() {
                           variant="contained"
                           color="success"
                           disabled={!isPaid || isApproving}
-                          startIcon={isApproving ? <CircularProgress size={14} color="inherit" /> : <CheckCircleOutlineIcon />}
+                          startIcon={isApproving ? <CircularProgress size={14} color="inherit" /> : <CheckCircleIcon />}
                           onClick={() => handleApprove(w.student_id, w.full_name)}
                         >
                           Approve
