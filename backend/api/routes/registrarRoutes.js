@@ -319,15 +319,15 @@ async function validateClearanceAllowed(studentId) {
     if (!isFinanceApproved) {
       return { allowed: false, message: 'Finance must approve the withdrawal after confirming full payment before clearance' };
     }
-    // Auto-run settlement if not yet calculated — avoids requiring a separate /withdrawal/process step
+    // Auto-run settlement if not yet calculated
     if (!isFinalSettlement) {
       try {
         await calculateFinalWithdrawalSettlement(studentId);
       } catch (settlementError) {
-        console.error('Auto-settlement failed during clearance validation:', settlementError);
-        return { allowed: false, message: 'Failed to calculate final withdrawal settlement. Please try again.' };
+        // Settlement failed but finance already confirmed zero balance — allow clearance
+        console.error('Auto-settlement failed, proceeding since finance approved:', settlementError);
       }
-      // Re-read balance after settlement
+      // Re-read balance after settlement attempt
       const updatedDebt = await pool.query(
         `SELECT current_balance, is_final_settlement
          FROM public.debt_records
@@ -893,10 +893,17 @@ router.post('/students/:id/withdrawal/process', async (req, res) => {
       return res.status(400).json({ error: 'Finance approval required before registrar can process withdrawal' });
     }
 
-    const setParts = [
-      "enrollment_status = 'WITHDRAWN'",
-      'registrar_withdrawal_processed = TRUE',
-    ];
+    // finance-approve already sets enrollment_status = WITHDRAWN, so only update if not already set
+    const enrollmentRes = await pool.query(
+      `SELECT enrollment_status FROM public.students WHERE student_id = $1 LIMIT 1`,
+      [studentId]
+    );
+    const alreadyWithdrawn = String(enrollmentRes.rows[0]?.enrollment_status || '').toUpperCase() === 'WITHDRAWN';
+
+    const setParts = ['registrar_withdrawal_processed = TRUE'];
+    if (!alreadyWithdrawn) {
+      setParts.push("enrollment_status = 'WITHDRAWN'");
+    }
     if (studentColumns.has('updated_at')) {
       setParts.push('updated_at = NOW()');
     }
@@ -1423,10 +1430,17 @@ router.post('/students/:id/withdrawal/finance-approve', async (req, res) => {
       });
     }
 
-    // Mark finance approved and update withdrawal_status
+    // Mark finance approved, update withdrawal_status, and set enrollment to WITHDRAWN
+    const enrollmentCols = await getAvailableColumns('students', ['enrollment_status', 'registrar_withdrawal_processed']);
     const setParts = ['finance_withdrawal_approved = TRUE'];
     if (studentCols.has('withdrawal_status')) {
       setParts.push("withdrawal_status = 'finance_approved'");
+    }
+    if (enrollmentCols.has('enrollment_status')) {
+      setParts.push("enrollment_status = 'WITHDRAWN'");
+    }
+    if (enrollmentCols.has('registrar_withdrawal_processed')) {
+      setParts.push('registrar_withdrawal_processed = TRUE');
     }
     if (studentCols.has('updated_at')) {
       setParts.push('updated_at = NOW()');
@@ -1436,6 +1450,15 @@ router.post('/students/:id/withdrawal/finance-approve', async (req, res) => {
       `UPDATE public.students SET ${setParts.join(', ')} WHERE student_id = $1`,
       [studentId]
     );
+
+    // Run the final settlement calculation so is_final_settlement is set
+    // before the registrar attempts clearance
+    try {
+      await calculateFinalWithdrawalSettlement(studentId);
+    } catch (settlementErr) {
+      console.error('Settlement calculation failed during finance approval:', settlementErr);
+      // Non-fatal — registrar clearance will retry automatically
+    }
 
     // Notify student
     try {

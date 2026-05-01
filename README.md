@@ -44,12 +44,14 @@ The withdrawal feature follows a four-stage approval process:
 |-------|-------|-------------|
 | 1. Student Request | Student | Submits withdrawal request via mobile app |
 | 2. Department Review | Department Head | Reviews academic standing and approves/rejects |
-| 3. Finance Review | Finance Officer | Confirms payment settlement and approves |
-| 4. Registrar Finalization | Registrar | Marks student as officially withdrawn |
+| 3. Finance Review | Finance Officer | Confirms payment settlement, approves, sets enrollment to `WITHDRAWN`, and triggers final debt settlement calculation |
+| 4. Registrar Finalization | Registrar | Performs final clearance check and closes the withdrawal record |
 
 **Status values**: `requested` → `academic_approved` → `finance_approved` → `rejected`
 
 Students can cancel their request only while it is in the `requested` (pending department review) state.
+
+> **Note**: Enrollment status is set to `WITHDRAWN` and the final settlement amount is calculated during the Finance Review step (stage 3). The registrar clearance in stage 4 operates on an already-settled record; if the settlement calculation failed at stage 3, the registrar step will retry it automatically.
 
 ## User Roles
 
