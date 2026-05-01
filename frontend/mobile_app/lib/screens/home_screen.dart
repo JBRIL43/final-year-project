@@ -432,7 +432,67 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ),
-          if (hasPending) const SizedBox(height: 16),
+          if (hasPending) const SizedBox(height: 8),
+          // Withdrawal payment reminder banner
+          if (_withdrawalStatus == 'academic_approved' && currentBalance > 0)
+            Card(
+              color: Colors.orange[50],
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: Colors.orange.shade300),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.payment, color: Colors.orange[800]),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Payment Required for Withdrawal',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.orange[900],
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Your withdrawal has been approved by your department. '
+                            'Please pay your outstanding balance of '
+                            '${formatter.format(currentBalance)} to proceed.',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.orange[900],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          FilledButton.icon(
+                            onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const PaymentScreen(),
+                              ),
+                            ),
+                            icon: const Icon(Icons.add, size: 16),
+                            label: const Text('Make Payment'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: Colors.orange[700],
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          if (_withdrawalStatus == 'academic_approved' && currentBalance > 0)
+            const SizedBox(height: 8),
           const Align(
             alignment: Alignment.centerLeft,
             child: Text(

@@ -1484,4 +1484,76 @@ router.post('/students/:id/withdrawal/finance-approve', async (req, res) => {
   }
 });
 
+// POST /api/registrar/students/:id/withdrawal/notify-payment
+// Finance sends a payment reminder to the student
+router.post('/students/:id/withdrawal/notify-payment', async (req, res) => {
+  try {
+    const studentId = Number(req.params.id);
+    if (!Number.isFinite(studentId) || studentId <= 0) {
+      return res.status(400).json({ error: 'Invalid student id' });
+    }
+
+    // Get student name and current balance
+    const studentRes = await pool.query(
+      `SELECT
+         ${(await getAvailableColumns('students', ['full_name'])).has('full_name') ? 's.full_name' : 'u.full_name'} AS full_name,
+         dr.current_balance
+       FROM public.students s
+       LEFT JOIN public.users u ON s.user_id = u.user_id
+       LEFT JOIN public.debt_records dr ON dr.student_id = s.student_id
+       WHERE s.student_id = $1
+       ORDER BY dr.debt_id DESC
+       LIMIT 1`,
+      [studentId]
+    );
+
+    if (studentRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    const balance = Number(studentRes.rows[0].current_balance || 0);
+    const name = studentRes.rows[0].full_name || 'Student';
+
+    // Look up the student's user_id
+    const userRes = await pool.query(
+      `SELECT u.user_id FROM public.students s
+       JOIN public.users u ON s.user_id = u.user_id
+       WHERE s.student_id = $1 LIMIT 1`,
+      [studentId]
+    );
+
+    if (userRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Student user account not found' });
+    }
+
+    const balanceFormatted = new Intl.NumberFormat('en-ET', {
+      style: 'currency',
+      currency: 'ETB',
+      minimumFractionDigits: 2,
+    }).format(balance);
+
+    await sendPaymentNotification(
+      userRes.rows[0].user_id,
+      'Payment Required for Withdrawal',
+      balance > 0
+        ? `Your withdrawal has been reviewed. Please pay your outstanding balance of ${balanceFormatted} to proceed with your withdrawal.`
+        : 'Your withdrawal has been reviewed by finance. Please check your account status.',
+      {
+        type: 'WITHDRAWAL_PAYMENT_REMINDER',
+        studentId: String(studentId),
+        outstandingBalance: String(balance),
+      }
+    );
+
+    res.json({
+      success: true,
+      message: `Payment reminder sent to ${name}`,
+      outstandingBalance: balance,
+    });
+  } catch (error) {
+    console.error('Withdrawal payment notification error:', error);
+    res.status(500).json({ error: 'Failed to send payment reminder' });
+  }
+});
+
 module.exports = router;

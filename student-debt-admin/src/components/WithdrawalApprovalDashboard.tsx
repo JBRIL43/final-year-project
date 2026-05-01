@@ -21,11 +21,13 @@ import {
   TableHead,
   TableRow,
   Tabs,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined'
 import ExitToAppIcon from '@mui/icons-material/ExitToApp'
+import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive'
 import api from '../services/api'
 
 const fmt = new Intl.NumberFormat('en-ET', {
@@ -358,6 +360,7 @@ export default function WithdrawalApprovalDashboard() {
   const [error, setError] = useState<string | null>(null)
   const [statementFor, setStatementFor] = useState<PendingWithdrawal | null>(null)
   const [approving, setApproving] = useState<number | null>(null)
+  const [notifying, setNotifying] = useState<number | null>(null)
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
     open: false,
     message: '',
@@ -396,6 +399,26 @@ export default function WithdrawalApprovalDashboard() {
       })
     } finally {
       setApproving(null)
+    }
+  }
+
+  const handleNotify = async (studentId: number, name: string) => {
+    setNotifying(studentId)
+    try {
+      await api.post(`/api/registrar/students/${studentId}/withdrawal/notify-payment`)
+      setSnackbar({
+        open: true,
+        message: `Payment reminder sent to ${name}`,
+        severity: 'success',
+      })
+    } catch (e: any) {
+      setSnackbar({
+        open: true,
+        message: e?.response?.data?.error || 'Failed to send notification',
+        severity: 'error',
+      })
+    } finally {
+      setNotifying(null)
     }
   }
 
@@ -495,6 +518,26 @@ export default function WithdrawalApprovalDashboard() {
                         >
                           Statement
                         </Button>
+                        {!isPaid && (
+                          <Tooltip title="Send payment reminder notification to student">
+                            <span>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                color="warning"
+                                disabled={notifying === w.student_id}
+                                startIcon={
+                                  notifying === w.student_id
+                                    ? <CircularProgress size={14} color="inherit" />
+                                    : <NotificationsActiveIcon />
+                                }
+                                onClick={() => handleNotify(w.student_id, w.full_name)}
+                              >
+                                Notify
+                              </Button>
+                            </span>
+                          </Tooltip>
+                        )}
                         <Button
                           size="small"
                           variant="contained"
