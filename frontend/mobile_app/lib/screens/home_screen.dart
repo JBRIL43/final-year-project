@@ -130,7 +130,9 @@ class _HomeScreenState extends State<HomeScreen> {
         setState(() => _isSubmittingWithdrawal = false);
       }
     }
-  }(BuildContext context, NumberFormat formatter) {
+  }
+
+  Widget _buildDashboard(BuildContext context, NumberFormat formatter) {
     if (_isLoadingDebt) {
       return const Center(child: CircularProgressIndicator());
     }

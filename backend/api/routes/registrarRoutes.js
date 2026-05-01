@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../config/db');
 const { authenticateRequest, requireRoles } = require('../middleware/auth');
+const { sendPaymentNotification } = require('../utils/notifications');
 
 const router = express.Router();
 
@@ -862,6 +863,30 @@ router.post('/students/:id/withdrawal/process', async (req, res) => {
     );
 
     const settlement = await calculateFinalWithdrawalSettlement(studentId);
+
+    // Notify the student that their withdrawal has been fully processed
+    try {
+      const studentUserRes = await pool.query(
+        `SELECT u.user_id FROM public.students s
+         JOIN public.users u ON s.user_id = u.user_id
+         WHERE s.student_id = $1 LIMIT 1`,
+        [studentId]
+      );
+      if (studentUserRes.rows.length > 0) {
+        await sendPaymentNotification(
+          studentUserRes.rows[0].user_id,
+          'Withdrawal Processed',
+          `Your withdrawal has been fully processed by the registrar. Final settlement balance: ${settlement.finalBalance} ETB.`,
+          {
+            type: 'WITHDRAWAL_PROCESSED',
+            studentId: String(studentId),
+            finalBalance: String(settlement.finalBalance),
+          }
+        );
+      }
+    } catch (notifError) {
+      console.error('Failed to send withdrawal processed notification to student:', notifError);
+    }
 
     return res.json({
       success: true,

@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../config/db');
 const { authenticateRequest, requireRoles } = require('../middleware/auth');
+const { sendPaymentNotification } = require('../utils/notifications');
 
 const router = express.Router();
 
@@ -314,6 +315,37 @@ router.post('/students/:id/withdrawal/approve', async (req, res) => {
     }
 
     const action = approved ? 'approved' : 'rejected';
+
+    // Notify the student about the department decision
+    try {
+      const studentUserRes = await pool.query(
+        `SELECT u.user_id FROM public.students s
+         JOIN public.users u ON s.user_id = u.user_id
+         WHERE s.student_id = $1 LIMIT 1`,
+        [studentId]
+      );
+      if (studentUserRes.rows.length > 0) {
+        const studentUserId = studentUserRes.rows[0].user_id;
+        if (approved) {
+          await sendPaymentNotification(
+            studentUserId,
+            'Withdrawal Approved by Department',
+            'Your withdrawal request has been approved by the department head and forwarded to the registrar.',
+            { type: 'WITHDRAWAL_DEPARTMENT_APPROVED', studentId: String(studentId) }
+          );
+        } else {
+          await sendPaymentNotification(
+            studentUserId,
+            'Withdrawal Rejected by Department',
+            'Your withdrawal request has been rejected by the department head. Please contact your department for more information.',
+            { type: 'WITHDRAWAL_DEPARTMENT_REJECTED', studentId: String(studentId) }
+          );
+        }
+      }
+    } catch (notifError) {
+      console.error('Failed to send withdrawal notification to student:', notifError);
+    }
+
     return res.json({
       success: true,
       message: `Withdrawal request ${action} successfully.`,
