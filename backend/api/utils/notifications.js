@@ -83,7 +83,7 @@ async function getRecipientFromDatabase(userId) {
   await ensureUsersFcmTokenColumn();
 
   const result = await pool.query(
-    'SELECT firebase_uid, fcm_token FROM public.users WHERE user_id = $1 LIMIT 1',
+    'SELECT firebase_uid, fcm_token, email FROM public.users WHERE user_id = $1 LIMIT 1',
     [userId]
   );
 
@@ -91,7 +91,27 @@ async function getRecipientFromDatabase(userId) {
     return null;
   }
 
-  return result.rows[0];
+  const row = result.rows[0];
+
+  // If the stored UID is a local fallback, try to resolve the real Firebase UID by email
+  if (row.firebase_uid && String(row.firebase_uid).startsWith('local-') && row.email) {
+    try {
+      const firebaseUser = await admin.auth().getUserByEmail(row.email);
+      if (firebaseUser && firebaseUser.uid) {
+        // Update the stored UID so future lookups are correct
+        await pool.query(
+          'UPDATE public.users SET firebase_uid = $1 WHERE user_id = $2',
+          [firebaseUser.uid, userId]
+        );
+        return { firebase_uid: firebaseUser.uid, fcm_token: row.fcm_token };
+      }
+    } catch (lookupError) {
+      // Firebase lookup failed — proceed with the stored UID as-is
+      console.warn(`Could not resolve real Firebase UID for user ${userId}:`, lookupError.message);
+    }
+  }
+
+  return { firebase_uid: row.firebase_uid, fcm_token: row.fcm_token };
 }
 
 module.exports = {

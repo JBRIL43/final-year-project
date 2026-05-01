@@ -310,10 +310,27 @@ async function validateClearanceAllowed(studentId) {
     if (!isDeptApproved) {
       return { allowed: false, message: 'Academic withdrawal must be approved by Department Head first' };
     }
+    // Auto-run settlement if not yet calculated — avoids requiring a separate /withdrawal/process step
     if (!isFinalSettlement) {
-      return { allowed: false, message: 'Finance must process the final withdrawal settlement before clearance' };
-    }
-    if (balance > 0) {
+      try {
+        await calculateFinalWithdrawalSettlement(studentId);
+      } catch (settlementError) {
+        console.error('Auto-settlement failed during clearance validation:', settlementError);
+        return { allowed: false, message: 'Failed to calculate final withdrawal settlement. Please try again.' };
+      }
+      // Re-read balance after settlement
+      const updatedDebt = await pool.query(
+        `SELECT current_balance, is_final_settlement
+         FROM public.debt_records
+         WHERE student_id = $1
+         ORDER BY debt_id DESC LIMIT 1`,
+        [studentId]
+      );
+      const updatedBalance = updatedDebt.rows.length > 0 ? Number(updatedDebt.rows[0].current_balance || 0) : 0;
+      if (updatedBalance > 0) {
+        return { allowed: false, message: `Student must settle final withdrawal balance (balance = ${updatedBalance} ETB) before clearance` };
+      }
+    } else if (balance > 0) {
       return { allowed: false, message: 'Student must settle final withdrawal balance (balance = 0) before clearance' };
     }
   }
