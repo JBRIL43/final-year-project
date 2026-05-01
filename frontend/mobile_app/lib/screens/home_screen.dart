@@ -7,6 +7,7 @@ import 'notifications_screen.dart';
 import '../services/student_statement_service.dart';
 import '../utils/cost_statement_pdf.dart';
 import 'account_screen.dart';
+import 'more_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -393,53 +394,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 onPressed: () => setState(() => _selectedIndex = 1),
                 child: const Text('Open'),
               ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Card(
-            child: ListTile(
-              leading: Icon(Icons.exit_to_app, color: Colors.orange[800]),
-              title: const Text('Request Withdrawal'),
-              subtitle: Text(
-                _withdrawalStatus == 'requested'
-                    ? 'Withdrawal request pending department review'
-                    : _withdrawalStatus != null
-                        ? 'Withdrawal status: $_withdrawalStatus'
-                        : 'Start department and registrar withdrawal processing',
-              ),
-              trailing: _isSubmittingWithdrawal
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : _withdrawalStatus == 'requested'
-                      ? Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            OutlinedButton(
-                              onPressed: _cancelWithdrawal,
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: Colors.red,
-                                side: const BorderSide(color: Colors.red),
-                              ),
-                              child: const Text('Cancel'),
-                            ),
-                          ],
-                        )
-                      : FilledButton(
-                          onPressed: _withdrawalStatus != null
-                              ? null
-                              : _requestWithdrawal,
-                          style: FilledButton.styleFrom(
-                            backgroundColor: _withdrawalStatus != null
-                                ? Colors.grey[400]
-                                : Colors.orange[700],
-                          ),
-                          child: Text(
-                            _withdrawalStatus != null ? 'Requested' : 'Request',
-                          ),
-                        ),
             ),
           ),
           const SizedBox(height: 10),
@@ -866,7 +820,9 @@ class _HomeScreenState extends State<HomeScreen> {
               ? 'Cost Statement'
               : _selectedIndex == 2
               ? 'Notifications'
-              : 'Account',
+              : _selectedIndex == 3
+              ? 'Account'
+              : 'More',
         ),
         actions: [
           if (_selectedIndex == 0 || _selectedIndex == 1)
@@ -878,20 +834,69 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _selectedIndex == 0
-            ? () {
+      floatingActionButton: _selectedIndex == 0
+          ? FloatingActionButton(
+              onPressed: () {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (context) => const PaymentScreen(),
                   ),
                 );
-              }
-            : null,
-        backgroundColor: Colors.green[700],
-        child: const Icon(Icons.add),
+              },
+              backgroundColor: Colors.green[700],
+              child: const Icon(Icons.add),
+            )
+          : null,
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: [
+          _buildDashboard(context, formatter),
+          _buildStatement(context, formatter),
+          const NotificationsScreen(),
+          const AccountScreen(),
+          MoreScreen(
+            withdrawalStatus: _withdrawalStatus,
+            onWithdrawalStatusChanged: _loadDebtBalance,
+          ),
+        ],
       ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _selectedIndex,
+        onDestinationSelected: (index) {
+          setState(() => _selectedIndex = index);
+        },
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.dashboard_outlined),
+            selectedIcon: Icon(Icons.dashboard),
+            label: 'Dashboard',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.receipt_long_outlined),
+            selectedIcon: Icon(Icons.receipt_long),
+            label: 'Statement',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.notifications_none),
+            selectedIcon: Icon(Icons.notifications),
+            label: 'Notifications',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.lock_outline),
+            selectedIcon: Icon(Icons.lock),
+            label: 'Account',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.more_horiz_outlined),
+            selectedIcon: Icon(Icons.more_horiz),
+            label: 'More',
+          ),
+        ],
+      ),
+    );
+  }
+}
       body: IndexedStack(
         index: _selectedIndex,
         children: [
