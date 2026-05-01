@@ -18,6 +18,7 @@ import FaydaIntegrationDashboard from './components/FaydaIntegrationDashboard'
 import SemesterAmountsDashboard from './components/SemesterAmountsDashboard'
 import DatabaseHealthDashboard from './components/DatabaseHealthDashboard'
 import AdminUserManagement from './components/AdminUserManagement'
+import WithdrawalApprovalDashboard from './components/WithdrawalApprovalDashboard'
 import FinanceReportsDashboard from './components/FinanceReportsDashboard'
 
 function AppRoutes() {
@@ -191,6 +192,14 @@ function AppRoutes() {
           element={
             <ProtectedRoute allowedRoles={['admin', 'finance']}>
               <FinanceReportsDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="withdrawal-approvals"
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'finance']}>
+              <WithdrawalApprovalDashboard />
             </ProtectedRoute>
           }
         />

@@ -26,6 +26,7 @@ import {
   Hub as HubIcon,
   MonitorHeart as MonitorHeartIcon,
   ManageAccounts as ManageAccountsIcon,
+  ExitToApp as ExitToAppIcon,
 } from '@mui/icons-material'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
@@ -55,11 +56,10 @@ function buildNavItems(role: string) {
       { label: 'Student Financial Data', to: '/manage-users', icon: <SchoolIcon /> },
       { label: 'Delinquent Graduates', to: '/graduates/delinquent', icon: <WarningIcon /> },
       { label: 'Payment Review', to: '/payment-review', icon: <ReceiptLongIcon /> },
+      { label: 'Withdrawal Approvals', to: '/withdrawal-approvals', icon: <ExitToAppIcon /> },
       { label: 'Semester Amounts', to: '/semester-amounts', icon: <ReceiptLongIcon /> },
       { label: 'ERCA Export', to: '/erca-export', icon: <DescriptionIcon /> },
       { label: 'Finance Reports', to: '/finance-reports', icon: <DescriptionIcon /> },
-      // { label: 'Fayda Integration', to: '/fayda', icon: <HubIcon /> },
-      // { label: 'Database Health', to: '/database-health', icon: <MonitorHeartIcon /> },
       { label: 'Change Password', to: '/change-password', icon: <LockResetIcon /> },
     ]
   }
