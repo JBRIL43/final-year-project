@@ -257,13 +257,14 @@ async function calculateFinalWithdrawalSettlement(studentId) {
 }
 
 async function validateClearanceAllowed(studentId) {
-  const studentColumns = await getAvailableColumns('students', ['enrollment_status', 'department_withdrawal_approved']);
+  const studentColumns = await getAvailableColumns('students', ['enrollment_status', 'department_withdrawal_approved', 'withdrawal_status']);
   const debtColumns = await getAvailableColumns('debt_records', ['student_id', 'current_balance', 'is_final_settlement']);
 
   const studentRes = await pool.query(
     `SELECT 
        ${studentColumns.has('enrollment_status') ? 'enrollment_status' : "'ACTIVE'::text AS enrollment_status"},
-       ${studentColumns.has('department_withdrawal_approved') ? 'department_withdrawal_approved' : 'NULL::boolean AS department_withdrawal_approved'}
+       ${studentColumns.has('department_withdrawal_approved') ? 'department_withdrawal_approved' : 'NULL::boolean AS department_withdrawal_approved'},
+       ${studentColumns.has('withdrawal_status') ? 'withdrawal_status' : "NULL::text AS withdrawal_status"}
      FROM public.students
      WHERE student_id = $1
      LIMIT 1`,
@@ -276,6 +277,9 @@ async function validateClearanceAllowed(studentId) {
 
   const enrollmentStatus = String(studentRes.rows[0].enrollment_status || '').toUpperCase();
   const deptApproved = studentRes.rows[0].department_withdrawal_approved;
+  // Accept both the boolean flag and the legacy withdrawal_status field
+  const withdrawalStatus = String(studentRes.rows[0].withdrawal_status || '').toLowerCase();
+  const isDeptApproved = deptApproved === true || withdrawalStatus === 'academic_approved';
 
   if (enrollmentStatus === 'ACTIVE') {
     return { allowed: false, message: 'Active students cannot be cleared. Must be withdrawn or graduated.' };
@@ -303,7 +307,7 @@ async function validateClearanceAllowed(studentId) {
   const isFinalSettlement = debtRes.rows.length > 0 ? Boolean(debtRes.rows[0].is_final_settlement) : false;
 
   if (enrollmentStatus === 'WITHDRAWN') {
-    if (deptApproved !== true) {
+    if (!isDeptApproved) {
       return { allowed: false, message: 'Academic withdrawal must be approved by Department Head first' };
     }
     if (!isFinalSettlement) {
@@ -809,12 +813,13 @@ router.post('/students/:id/withdrawal/process', async (req, res) => {
     const studentColumns = await getAvailableColumns('students', [
       'full_name',
       'department_withdrawal_approved',
+      'withdrawal_status',
       'registrar_withdrawal_processed',
       'enrollment_status',
       'updated_at',
     ]);
 
-    if (!studentColumns.has('department_withdrawal_approved') || !studentColumns.has('registrar_withdrawal_processed')) {
+    if (!studentColumns.has('registrar_withdrawal_processed')) {
       return res.status(400).json({
         error: 'students withdrawal workflow columns are missing. Run withdrawal workflow migration first.',
       });
@@ -822,11 +827,13 @@ router.post('/students/:id/withdrawal/process', async (req, res) => {
 
     const fullNameExpr = studentColumns.has('full_name') ? 'full_name' : "''::text AS full_name";
 
+    const selectCols = [fullNameExpr];
+    if (studentColumns.has('department_withdrawal_approved')) selectCols.push('department_withdrawal_approved');
+    if (studentColumns.has('withdrawal_status')) selectCols.push('withdrawal_status');
+    selectCols.push('registrar_withdrawal_processed');
+
     const studentRes = await pool.query(
-      `SELECT
-         ${fullNameExpr},
-         department_withdrawal_approved,
-         registrar_withdrawal_processed
+      `SELECT ${selectCols.join(', ')}
        FROM public.students
        WHERE student_id = $1
        LIMIT 1`,
@@ -843,7 +850,11 @@ router.post('/students/:id/withdrawal/process', async (req, res) => {
       return res.status(409).json({ error: 'Withdrawal already processed' });
     }
 
-    if (student.department_withdrawal_approved !== true) {
+    // Accept both the boolean flag and the legacy withdrawal_status field
+    const withdrawalStatus = String(student.withdrawal_status || '').toLowerCase();
+    const isDeptApproved = student.department_withdrawal_approved === true || withdrawalStatus === 'academic_approved';
+
+    if (!isDeptApproved) {
       return res.status(400).json({ error: 'Department approval required first' });
     }
 

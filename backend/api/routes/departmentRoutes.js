@@ -271,11 +271,12 @@ router.post('/students/:id/withdrawal/approve', async (req, res) => {
     const studentColumns = await getAvailableColumns('students', [
       'department',
       'withdrawal_requested_at',
+      'withdrawal_status',
       'department_withdrawal_approved',
       'updated_at',
     ]);
 
-    if (!studentColumns.has('withdrawal_requested_at') || !studentColumns.has('department_withdrawal_approved')) {
+    if (!studentColumns.has('department_withdrawal_approved')) {
       return res.status(400).json({
         error: 'students withdrawal workflow columns are missing. Run withdrawal workflow migration first.',
       });
@@ -289,20 +290,34 @@ router.post('/students/:id/withdrawal/approve', async (req, res) => {
       return res.status(400).json({ error: 'No department is configured for this user' });
     }
 
-    const query = studentColumns.has('updated_at')
-      ? `UPDATE public.students
-         SET department_withdrawal_approved = $2,
-             updated_at = NOW()
+    // Build SET clause — always set department_withdrawal_approved, also sync withdrawal_status
+    const setClauses = ['department_withdrawal_approved = $2'];
+    if (studentColumns.has('withdrawal_status')) {
+      setClauses.push(`withdrawal_status = CASE WHEN $2 THEN 'academic_approved' ELSE 'rejected' END`);
+    }
+    if (studentColumns.has('updated_at')) {
+      setClauses.push('updated_at = NOW()');
+    }
+
+    // WHERE: match by withdrawal_requested_at OR withdrawal_status to handle both old and new flows
+    const withdrawalCondition = studentColumns.has('withdrawal_requested_at') && studentColumns.has('withdrawal_status')
+      ? `(withdrawal_requested_at IS NOT NULL OR withdrawal_status IN ('requested', 'academic_approved'))`
+      : studentColumns.has('withdrawal_requested_at')
+      ? `withdrawal_requested_at IS NOT NULL`
+      : studentColumns.has('withdrawal_status')
+      ? `withdrawal_status IN ('requested', 'academic_approved')`
+      : 'TRUE';
+
+    const returningCols = ['student_id', 'department', 'department_withdrawal_approved'];
+    if (studentColumns.has('withdrawal_requested_at')) returningCols.push('withdrawal_requested_at');
+    if (studentColumns.has('updated_at')) returningCols.push('updated_at');
+
+    const query = `UPDATE public.students
+         SET ${setClauses.join(', ')}
          WHERE student_id = $1
-           AND withdrawal_requested_at IS NOT NULL
+           AND ${withdrawalCondition}
            AND ($3::text IS NULL OR LOWER(COALESCE(department, '')) = LOWER($3))
-         RETURNING student_id, department, department_withdrawal_approved, withdrawal_requested_at, updated_at`
-      : `UPDATE public.students
-         SET department_withdrawal_approved = $2
-         WHERE student_id = $1
-           AND withdrawal_requested_at IS NOT NULL
-           AND ($3::text IS NULL OR LOWER(COALESCE(department, '')) = LOWER($3))
-         RETURNING student_id, department, department_withdrawal_approved, withdrawal_requested_at, NOW()::timestamp AS updated_at`;
+         RETURNING ${returningCols.join(', ')}`;
 
     const result = await pool.query(query, [studentId, approved, department || null]);
 
