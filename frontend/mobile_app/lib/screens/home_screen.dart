@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
@@ -30,33 +31,48 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _withdrawalStatus;
 
   int _selectedIndex = 0;
+  Timer? _pollTimer;
 
   @override
   void initState() {
     super.initState();
     _loadAllStudentData();
+    // Poll every 20s — catches new payment status, notifications, withdrawal updates
+    _pollTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+      if (mounted) _loadDebtBalance(silent: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadAllStudentData() async {
     await Future.wait([_loadDebtBalance(), _loadStudentStatement()]);
   }
 
-  Future<void> _loadDebtBalance() async {
-    setState(() => _isLoadingDebt = true);
+  Future<void> _loadDebtBalance({bool silent = false}) async {
+    if (!silent) setState(() => _isLoadingDebt = true);
     try {
       final data = await DebtService().getDebtBalance();
-      setState(() {
-        _debtData = data['data'];
-        _withdrawalStatus = (_debtData?['withdrawalStatus'] as String?);
-        _debtError = null;
-      });
+      if (mounted) {
+        setState(() {
+          _debtData = data['data'];
+          _withdrawalStatus = (_debtData?['withdrawalStatus'] as String?);
+          _debtError = null;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _debtError = 'Network error: $e';
-      });
+      if (mounted && !silent) {
+        setState(() {
+          _debtError = 'Network error: $e';
+        });
+      }
       debugPrint('Debt load error: $e');
     } finally {
-      if (mounted) {
+      if (mounted && !silent) {
         setState(() => _isLoadingDebt = false);
       }
     }

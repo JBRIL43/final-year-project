@@ -30,6 +30,7 @@ import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import api from '../services/api';
+import { usePolling } from '../hooks/usePolling';
 
 interface Payment {
   payment_id: number;
@@ -148,6 +149,9 @@ export default function PaymentReviewQueue() {
   };
 
   useEffect(() => { load(); }, []);
+
+  // Auto-refresh every 20s — finance sees new payments without manual reload
+  usePolling(load, 20_000, !proofDialog);
 
   const handleApprove = async (paymentId: number) => {
     setActing(paymentId);

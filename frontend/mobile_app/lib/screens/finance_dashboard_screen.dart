@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../services/finance_service.dart';
@@ -17,6 +18,7 @@ class _FinanceDashboardScreenState extends State<FinanceDashboardScreen> {
   bool _isLoadingWithdrawals = false;
   final int _verifiedBy = 1;
   int _selectedIndex = 0;
+  Timer? _pollTimer;
 
   final _currencyFmt = NumberFormat.currency(locale: 'en_ET', symbol: 'ETB ');
 
@@ -25,6 +27,19 @@ class _FinanceDashboardScreenState extends State<FinanceDashboardScreen> {
     super.initState();
     _loadPendingPayments();
     _loadPendingWithdrawals();
+    // Poll every 20s for new payments and withdrawals
+    _pollTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+      if (mounted) {
+        _loadPendingPayments();
+        _loadPendingWithdrawals();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadPendingPayments() async {
