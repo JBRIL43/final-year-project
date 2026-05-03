@@ -17,6 +17,11 @@ router.patch('/:paymentId/proof', async (req, res) => {
   if (!proof_url) return res.status(400).json({ error: 'proof_url is required' });
   const pool = require('../config/db');
   try {
+    // Ensure column exists
+    await pool.query(`
+      ALTER TABLE public.payment_history
+      ADD COLUMN IF NOT EXISTS proof_url TEXT
+    `);
     const result = await pool.query(
       `UPDATE public.payment_history SET proof_url = $1 WHERE payment_id = $2 RETURNING payment_id`,
       [proof_url, Number(paymentId)]

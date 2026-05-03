@@ -326,6 +326,12 @@ exports.verifyAndApproveAdmin = async (req, res) => {
       const chapaRef = txData?.reference || String(txRef);
       const receiptUrl = `https://chapa.link/payment-receipt/${encodeURIComponent(chapaRef)}`;
 
+      // Ensure proof_url column exists
+      await client.query(`
+        ALTER TABLE public.payment_history
+        ADD COLUMN IF NOT EXISTS proof_url TEXT
+      `);
+
       await client.query(
         `UPDATE public.payment_history
          SET status = 'SUCCESS', proof_url = COALESCE(proof_url, $2)
