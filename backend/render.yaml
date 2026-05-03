@@ -1,0 +1,43 @@
+services:
+  - type: web
+    name: hu-student-debt-backend
+    env: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: node api/server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+
+      # ── Database ──────────────────────────────────────────────────────
+      # Set these in the Render dashboard → Environment tab
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        sync: false
+      - key: DB_NAME
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+
+      # ── CORS ──────────────────────────────────────────────────────────
+      - key: CLIENT_URL
+        value: https://student-debt-admin.onrender.com
+
+      # ── Chapa Payment Gateway (Test Keys) ─────────────────────────────
+      - key: CHAPA_SECRET_KEY
+        value: CHASECK_TEST-Me9xqMfgtr6dCcVCDMqzrqK1JXHrRv6s
+      - key: CHAPA_PUBLIC_KEY
+        value: CHAPUBK_TEST-EP4Y8Ip5eOOGqQcB0UgJJvbWCrovB3oh
+      - key: CHAPA_ENCRYPTION_KEY
+        value: QVZb9CKnE9grnw1OjfeG4RGP
+      - key: CHAPA_BASE_URL
+        value: https://api.chapa.co/v1
+
+      # ── API base URL (used in Chapa callback_url) ─────────────────────
+      - key: API_BASE_URL
+        value: https://final-year-project-r2h8.onrender.com

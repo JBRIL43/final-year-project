@@ -91,10 +91,23 @@ Key environment variables:
 |----------|---------|
 | `PORT` | Server port (default 3000) |
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | PostgreSQL connection |
-| `CLIENT_URL` | Allowed CORS origin |
-| `CHAPA_SECRET_KEY` | Chapa API secret key for online payments |
+| `CLIENT_URL` | Allowed CORS origin (admin dashboard URL) |
+| `CHAPA_SECRET_KEY` | Chapa API secret key |
+| `CHAPA_PUBLIC_KEY` | Chapa API public key |
+| `CHAPA_ENCRYPTION_KEY` | Chapa encryption key |
 | `CHAPA_BASE_URL` | Chapa API base URL (default: `https://api.chapa.co/v1`) |
-| `API_BASE_URL` | Public URL of this server (used as Chapa webhook callback) |
+| `API_BASE_URL` | Public URL of this server (used as Chapa callback URL) |
+
+### Render Deployment
+
+The backend is configured for deployment on [Render](https://render.com) via `backend/render.yaml`. The service runs as a Node.js web service with:
+
+- **Build command**: `npm install`
+- **Start command**: `node api/server.js`
+- **Port**: `10000`
+- **Production URL**: `https://final-year-project-r2h8.onrender.com`
+
+Database credentials (`DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`) must be set manually in the Render dashboard under the Environment tab — they are not committed to the config file.
 
 ### Flutter Mobile App
 
