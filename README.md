@@ -85,6 +85,17 @@ cd backend/api && node server.js
 
 Requires a `.env` file in `backend/api/` — see `backend/api/.env` for required variables (DB connection, Firebase, CORS origin).
 
+Key environment variables:
+
+| Variable | Purpose |
+|----------|---------|
+| `PORT` | Server port (default 3000) |
+| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | PostgreSQL connection |
+| `CLIENT_URL` | Allowed CORS origin |
+| `CHAPA_SECRET_KEY` | Chapa API secret key for online payments |
+| `CHAPA_BASE_URL` | Chapa API base URL (default: `https://api.chapa.co/v1`) |
+| `API_BASE_URL` | Public URL of this server (used as Chapa webhook callback) |
+
 ### Flutter Mobile App
 
 ```bash
@@ -100,6 +111,27 @@ cd student-debt-admin
 npm install
 npm run dev
 ```
+
+## Chapa Payment API
+
+Two endpoints handle the Chapa online payment flow:
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/payment/chapa/initialize` | Creates a Chapa transaction and returns a `checkoutUrl` for the student to complete payment |
+| `POST` | `/api/payment/chapa/verify` | Verifies a completed transaction with Chapa and records it as pending finance approval |
+
+**Initialize request body**:
+```json
+{ "amount": 1500.00, "returnUrl": "hudebt://payment/return" }
+```
+
+**Verify request body**:
+```json
+{ "txRef": "HU-123-1234567890" }
+```
+
+Both endpoints resolve the student from the `Authorization: Bearer <token>` header (or `x-firebase-uid` / `x-user-email` fallback headers). A successful verification creates a `PENDING` payment record and sends push notifications to the student and finance officers.
 
 ## Documentation
 
