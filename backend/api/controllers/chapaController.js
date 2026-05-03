@@ -3,8 +3,14 @@ const pool = require('../config/db');
 const firebaseAdmin = require('../config/firebaseAdmin');
 const { sendPaymentNotification } = require('../utils/notifications');
 
-const CHAPA_SECRET_KEY = process.env.CHAPA_SECRET_KEY || '';
-const CHAPA_BASE_URL = process.env.CHAPA_BASE_URL || 'https://api.chapa.co/v1';
+const CHAPA_BASE_URL = 'https://api.chapa.co/v1';
+
+// Read key at call time so Render env vars are always picked up
+function getChapaKey() {
+  const key = process.env.CHAPA_SECRET_KEY || '';
+  if (!key) console.warn('CHAPA_SECRET_KEY is not set');
+  return key;
+}
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -16,7 +22,7 @@ function chapaRequest(method, path, body = null) {
       path: url.pathname + url.search,
       method,
       headers: {
-        Authorization: `Bearer ${CHAPA_SECRET_KEY}`,
+        Authorization: `Bearer ${getChapaKey()}`,
         'Content-Type': 'application/json',
       },
     };
@@ -76,10 +82,7 @@ async function resolveStudentFromRequest(req) {
     [firebaseUid, email]
   );
 
-  if (result.rows.length > 0) {
-    return result.rows[0];
-  }
-  return null;
+  return result.rows[0] || null;
 }
 
 // ── POST /api/payment/chapa/initialize ───────────────────────────────────────
@@ -91,48 +94,88 @@ exports.initializePayment = async (req, res) => {
       return res.status(400).json({ error: 'Valid amount is required' });
     }
 
+    if (!getChapaKey()) {
+      return res.status(500).json({ error: 'Payment gateway not configured. Contact support.' });
+    }
+
     const student = await resolveStudentFromRequest(req);
     if (!student) {
       return res.status(401).json({ error: 'Unable to resolve student' });
     }
 
-    // Generate a unique transaction reference
     const txRef = `HU-${student.student_id}-${Date.now()}`;
+    const apiBase = process.env.API_BASE_URL || 'https://final-year-project-r2h8.onrender.com';
+
+    // Split full_name safely
+    const nameParts = (student.full_name || 'Student User').trim().split(/\s+/);
+    const firstName = nameParts[0] || 'Student';
+    const lastName = nameParts.slice(1).join(' ') || 'User';
 
     const payload = {
       amount: String(Number(amount).toFixed(2)),
       currency: 'ETB',
       email: student.email || `student${student.student_id}@hu.edu.et`,
-      first_name: (student.full_name || 'Student').split(' ')[0],
-      last_name: (student.full_name || 'Student').split(' ').slice(1).join(' ') || 'User',
+      first_name: firstName,
+      last_name: lastName,
       tx_ref: txRef,
-      callback_url: `${process.env.API_BASE_URL || 'https://final-year-project-r2h8.onrender.com'}/api/payment/chapa/webhook`,
-      return_url: returnUrl || 'https://final-year-project-r2h8.onrender.com/api/payment/chapa/return',
+      callback_url: `${apiBase}/api/payment/chapa/webhook`,
+      return_url: returnUrl || `${apiBase}/api/payment/chapa/return`,
       customization: {
-        title: 'HU Debt Payment',
-        description: `Student ${student.student_id}`,
+        title: 'HU Debt Payment',       // max 16 chars
+        description: `Ref: ${txRef}`,   // max 100 chars
       },
     };
 
+    console.log('Chapa initialize payload:', JSON.stringify(payload));
+
     const chapaRes = await chapaRequest('POST', '/transaction/initialize', payload);
 
+    console.log('Chapa response:', chapaRes.status, JSON.stringify(chapaRes.body));
+
     if (chapaRes.status !== 200 || chapaRes.body?.status !== 'success') {
-      console.error('Chapa initialize failed:', chapaRes.body);
-      return res.status(502).json({
-        error: chapaRes.body?.message || 'Failed to initialize Chapa payment',
-      });
+      const errMsg = typeof chapaRes.body === 'object'
+        ? (chapaRes.body?.message || JSON.stringify(chapaRes.body))
+        : String(chapaRes.body);
+      return res.status(502).json({ error: errMsg });
     }
 
-    // Store the pending transaction reference so we can verify it later
-    await pool.query(
-      `INSERT INTO public.payment_history
-         (debt_id, amount, payment_method, transaction_ref, status)
-       SELECT dr.debt_id, $2, 'CHAPA', $3, 'PENDING'
-       FROM public.debt_records dr
-       WHERE dr.student_id = $1
-       ORDER BY dr.debt_id DESC LIMIT 1`,
-      [student.student_id, Number(amount), txRef]
+    // Find the debt record for this student
+    const debtRes = await pool.query(
+      `SELECT debt_id FROM public.debt_records
+       WHERE student_id = $1
+       ORDER BY debt_id DESC LIMIT 1`,
+      [student.student_id]
     );
+
+    if (debtRes.rows.length === 0) {
+      return res.status(404).json({ error: 'No debt record found for this student' });
+    }
+
+    const debtId = debtRes.rows[0].debt_id;
+
+    // Check if payment_history has a student_id column
+    const colCheck = await pool.query(
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'payment_history'
+       AND column_name = 'student_id' LIMIT 1`
+    );
+    const hasStudentId = colCheck.rows.length > 0;
+
+    if (hasStudentId) {
+      await pool.query(
+        `INSERT INTO public.payment_history
+           (debt_id, student_id, amount, payment_method, transaction_ref, status)
+         VALUES ($1, $2, $3, 'CHAPA', $4, 'PENDING')`,
+        [debtId, student.student_id, Number(amount), txRef]
+      );
+    } else {
+      await pool.query(
+        `INSERT INTO public.payment_history
+           (debt_id, amount, payment_method, transaction_ref, status)
+         VALUES ($1, $2, 'CHAPA', $3, 'PENDING')`,
+        [debtId, Number(amount), txRef]
+      );
+    }
 
     res.json({
       success: true,
@@ -140,8 +183,12 @@ exports.initializePayment = async (req, res) => {
       txRef,
     });
   } catch (error) {
-    console.error('Chapa initialize error:', error);
-    res.status(500).json({ error: 'Failed to initialize payment' });
+    console.error('Chapa initialize error:', {
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+    });
+    res.status(500).json({ error: `Failed to initialize payment: ${error.message}` });
   }
 };
 
@@ -159,8 +206,9 @@ exports.verifyPayment = async (req, res) => {
       return res.status(401).json({ error: 'Unable to resolve student' });
     }
 
-    // Verify with Chapa
     const chapaRes = await chapaRequest('GET', `/transaction/verify/${encodeURIComponent(txRef)}`);
+
+    console.log('Chapa verify response:', chapaRes.status, JSON.stringify(chapaRes.body));
 
     if (chapaRes.status !== 200) {
       return res.status(502).json({ error: 'Failed to verify payment with Chapa' });
@@ -170,23 +218,18 @@ exports.verifyPayment = async (req, res) => {
     const chapaStatus = String(txData?.status || '').toLowerCase();
 
     if (chapaStatus !== 'success') {
-      // Update the pending record to failed if Chapa says it failed
       if (chapaStatus === 'failed' || chapaStatus === 'cancelled') {
         await pool.query(
-          `UPDATE public.payment_history
-           SET status = 'FAILED'
-           WHERE transaction_ref = $1`,
+          `UPDATE public.payment_history SET status = 'FAILED' WHERE transaction_ref = $1`,
           [txRef]
         );
       }
       return res.status(400).json({
-        error: `Payment not successful. Chapa status: ${chapaStatus}`,
+        error: `Payment not successful. Status: ${chapaStatus}`,
         chapaStatus,
       });
     }
 
-    // Payment succeeded — update the record to PENDING (awaiting finance approval)
-    // and update the debt balance
     const updateResult = await pool.query(
       `UPDATE public.payment_history
        SET status = 'PENDING'
@@ -206,12 +249,8 @@ exports.verifyPayment = async (req, res) => {
       await sendPaymentNotification(
         student.user_id,
         'Chapa Payment Received 💳',
-        `Your Chapa payment of ETB ${payment.amount} was received and is pending finance verification.`,
-        {
-          type: 'CHAPA_PAYMENT_RECEIVED',
-          paymentId: String(payment.payment_id),
-          txRef,
-        }
+        `Your payment of ETB ${payment.amount} was received and is pending finance verification.`,
+        { type: 'CHAPA_PAYMENT_RECEIVED', paymentId: String(payment.payment_id), txRef }
       );
     } catch (notifErr) {
       console.error('Chapa payment notification failed:', notifErr);
@@ -225,8 +264,8 @@ exports.verifyPayment = async (req, res) => {
       for (const fu of financeUsers.rows) {
         await sendPaymentNotification(
           fu.user_id,
-          'New Chapa Payment Needs Review',
-          `A Chapa payment of ETB ${payment.amount} was received and is pending verification.`,
+          'New Chapa Payment',
+          `A Chapa payment of ETB ${payment.amount} is pending verification.`,
           { type: 'PAYMENT_PENDING_VERIFICATION', paymentId: String(payment.payment_id) }
         );
       }
@@ -236,13 +275,13 @@ exports.verifyPayment = async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Payment verified and recorded. Pending finance approval.',
+      message: 'Payment verified. Pending finance approval.',
       paymentId: payment.payment_id,
       amount: payment.amount,
       txRef,
     });
   } catch (error) {
-    console.error('Chapa verify error:', error);
-    res.status(500).json({ error: 'Failed to verify payment' });
+    console.error('Chapa verify error:', error.message);
+    res.status(500).json({ error: `Failed to verify payment: ${error.message}` });
   }
 };

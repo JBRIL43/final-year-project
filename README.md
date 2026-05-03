@@ -95,8 +95,7 @@ Key environment variables:
 | `CHAPA_SECRET_KEY` | Chapa API secret key |
 | `CHAPA_PUBLIC_KEY` | Chapa API public key |
 | `CHAPA_ENCRYPTION_KEY` | Chapa encryption key |
-| `CHAPA_BASE_URL` | Chapa API base URL (default: `https://api.chapa.co/v1`) |
-| `API_BASE_URL` | Public URL of this server (used as Chapa callback URL) |
+| `API_BASE_URL` | Public URL of this server (used as Chapa callback and return URLs; defaults to the Render production URL) |
 
 ### Render Deployment
 
