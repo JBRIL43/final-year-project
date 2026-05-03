@@ -880,11 +880,18 @@ router.post('/students', async (req, res) => {
       campus = 'Main Campus',
       living_arrangement = 'On-Campus',
       enrollment_status = 'Active',
+      payment_model = 'post_graduation',
+      pre_payment_amount = 0,
+      pre_payment_date = null,
+      pre_payment_clearance = false,
     } = req.body;
 
     if (!student_number || !full_name || !email || !department || !enrollment_year) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
+
+    const normalizedPaymentModel = normalizePaymentModel(payment_model);
+    const normalizedPrePaymentAmount = Number(pre_payment_amount) || 0;
 
     client = await pool.connect();
     await client.query('BEGIN');
