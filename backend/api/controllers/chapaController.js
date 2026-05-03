@@ -322,9 +322,15 @@ exports.verifyAndApproveAdmin = async (req, res) => {
 
       const payment = paymentRes.rows[0];
 
+      // Store Chapa receipt URL as proof_url so finance can view it later
+      const chapaRef = txData?.reference || String(txRef);
+      const receiptUrl = `https://chapa.link/payment-receipt/${encodeURIComponent(chapaRef)}`;
+
       await client.query(
-        `UPDATE public.payment_history SET status = 'SUCCESS' WHERE payment_id = $1`,
-        [payment.payment_id]
+        `UPDATE public.payment_history
+         SET status = 'SUCCESS', proof_url = COALESCE(proof_url, $2)
+         WHERE payment_id = $1`,
+        [payment.payment_id, receiptUrl]
       );
 
       // Reduce debt balance
@@ -363,7 +369,7 @@ exports.verifyAndApproveAdmin = async (req, res) => {
         console.error('Chapa admin verify notification failed:', notifErr);
       }
 
-      res.json({ success: true, status: 'success', verified: true });
+      res.json({ success: true, status: 'success', verified: true, receiptUrl });
     } catch (dbErr) {
       await client.query('ROLLBACK');
       throw dbErr;

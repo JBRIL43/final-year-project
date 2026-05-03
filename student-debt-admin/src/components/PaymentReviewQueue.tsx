@@ -178,11 +178,17 @@ export default function PaymentReviewQueue() {
     }
     setActing(p.payment_id);
     try {
-      const res = await api.get<{ verified: boolean; status: string }>(
+      const res = await api.get<{ verified: boolean; status: string; receiptUrl?: string }>(
         `/api/payment/chapa/verify-admin?txRef=${encodeURIComponent(p.transaction_ref)}&paymentId=${p.payment_id}`
       );
       if (res.data.verified) {
         setSnackbar({ open: true, message: 'Chapa payment verified and approved ✅', severity: 'success' });
+        // Update proof_url locally so the receipt link appears immediately
+        if (res.data.receiptUrl) {
+          setPayments((prev) =>
+            prev.map((x) => x.payment_id === p.payment_id ? { ...x, proof_url: res.data.receiptUrl! } : x)
+          );
+        }
         load();
       } else {
         setSnackbar({ open: true, message: `Chapa status: ${res.data.status} — not yet confirmed`, severity: 'error' });
@@ -194,9 +200,9 @@ export default function PaymentReviewQueue() {
 
   const isChapa = (p: Payment) => p.payment_method?.toUpperCase() === 'CHAPA';
 
-  // Chapa receipt URL on their dashboard
+  // Chapa receipt URL — official format from Chapa docs
   const chapaReceiptUrl = (txRef: string) =>
-    `https://dashboard.chapa.co/transactions?search=${encodeURIComponent(txRef)}`;
+    `https://chapa.link/payment-receipt/${encodeURIComponent(txRef)}`;
 
   return (
     <Box sx={{ p: 3 }}>
