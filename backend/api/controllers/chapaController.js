@@ -121,8 +121,8 @@ exports.initializePayment = async (req, res) => {
       callback_url: `${apiBase}/api/payment/chapa/webhook`,
       return_url: returnUrl || `${apiBase}/api/payment/chapa/return`,
       customization: {
-        title: 'HU Debt Payment',       // max 16 chars
-        description: `Ref: ${txRef}`,   // max 100 chars
+        title: 'HU Debt Payment',
+        description: `Ref ${txRef}`,
       },
     };
 
