@@ -1,20 +1,27 @@
 import { useState, useEffect } from 'react';
 import {
+  Alert,
   Box,
+  Button,
+  Chip,
+  CircularProgress,
   Paper,
-  Typography,
+  Snackbar,
+  Stack,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
-  Button,
   TextField,
-  Alert,
-  Snackbar,
-  CircularProgress,
+  Tooltip,
+  Typography,
 } from '@mui/material';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import CancelIcon from '@mui/icons-material/Cancel';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import CreditCardIcon from '@mui/icons-material/CreditCard';
 import api from '../services/api';
 
 interface Payment {
@@ -24,191 +31,241 @@ interface Payment {
   student_number: string;
   email: string;
   amount: number;
-  proof_url: string;
+  proof_url: string | null;
+  transaction_ref: string | null;
+  payment_method: string;
   submitted_at: string;
   status: string;
-  notes: string;
+  notes: string | null;
 }
+
+const fmt = new Intl.NumberFormat('en-ET', { style: 'currency', currency: 'ETB', minimumFractionDigits: 2 });
+const fmtDate = (d: string) =>
+  new Date(d).toLocaleString('en-ET', { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 
 export default function PaymentReviewQueue() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
-    open: false,
-    message: '',
-    severity: 'success',
-  });
   const [reviewNotes, setReviewNotes] = useState<Record<number, string>>({});
+  const [acting, setActing] = useState<number | null>(null);
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
+    open: false, message: '', severity: 'success',
+  });
 
-  const loadPayments = async () => {
+  const load = async () => {
+    setLoading(true);
     try {
       const res = await api.get<{ success: true; payments: Payment[] }>('/api/admin/payments/pending');
-      setPayments(res.data.payments);
+      setPayments(res.data.payments ?? []);
     } catch (err: any) {
-      console.error('Failed to load pending payments', err);
-      const status = err?.response?.status;
-      const backendMessage = err?.response?.data?.error;
-      const hint = status === 404 ? ' (backend route not deployed yet)' : '';
-      setSnackbar({
-        open: true,
-        message: backendMessage || `❌ Failed to load pending payments${status ? ` [${status}]` : ''}${hint}`,
-        severity: 'error',
-      });
+      const msg = err?.response?.data?.error || 'Failed to load pending payments';
+      setSnackbar({ open: true, message: msg, severity: 'error' });
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    loadPayments();
-  }, []);
+  useEffect(() => { load(); }, []);
 
   const handleApprove = async (paymentId: number) => {
+    setActing(paymentId);
     try {
-      await api.post(`/api/admin/payments/${paymentId}/approve`, {
-        notes: reviewNotes[paymentId] || '',
-      });
-      setSnackbar({
-        open: true,
-        message: '✅ Payment approved and debt updated',
-        severity: 'success',
-      });
-      loadPayments(); // Refresh list
+      await api.post(`/api/admin/payments/${paymentId}/approve`, { notes: reviewNotes[paymentId] || '' });
+      setSnackbar({ open: true, message: 'Payment approved and debt updated', severity: 'success' });
+      load();
     } catch (err: any) {
-      console.error('Approve failed', err);
-      setSnackbar({
-        open: true,
-        message: err.response?.data?.error || '❌ Approval failed',
-        severity: 'error',
-      });
+      setSnackbar({ open: true, message: err?.response?.data?.error || 'Approval failed', severity: 'error' });
+    } finally {
+      setActing(null);
     }
   };
 
   const handleReject = async (paymentId: number) => {
+    setActing(paymentId);
     try {
-      await api.post(`/api/admin/payments/${paymentId}/reject`, {
-        notes: reviewNotes[paymentId] || '',
-      });
-      setSnackbar({
-        open: true,
-        message: '✅ Payment rejected',
-        severity: 'success',
-      });
-      loadPayments(); // Refresh list
+      await api.post(`/api/admin/payments/${paymentId}/reject`, { notes: reviewNotes[paymentId] || '' });
+      setSnackbar({ open: true, message: 'Payment rejected', severity: 'success' });
+      load();
     } catch (err: any) {
-      console.error('Reject failed', err);
-      setSnackbar({
-        open: true,
-        message: err.response?.data?.error || '❌ Rejection failed',
-        severity: 'error',
-      });
+      setSnackbar({ open: true, message: err?.response?.data?.error || 'Rejection failed', severity: 'error' });
+    } finally {
+      setActing(null);
     }
   };
 
-  const formatETB = (amount: number) => {
-    return new Intl.NumberFormat('en-ET', {
-      style: 'currency',
-      currency: 'ETB',
-      minimumFractionDigits: 2,
-    }).format(amount);
+  // For Chapa: verify directly with Chapa and auto-approve
+  const handleChapaVerify = async (payment: Payment) => {
+    if (!payment.transaction_ref) {
+      setSnackbar({ open: true, message: 'No transaction reference found', severity: 'error' });
+      return;
+    }
+    setActing(payment.payment_id);
+    try {
+      const res = await api.get<{ success: boolean; status: string; verified: boolean }>(
+        `/api/payment/chapa/verify-admin?txRef=${encodeURIComponent(payment.transaction_ref)}&paymentId=${payment.payment_id}`
+      );
+      if (res.data.verified) {
+        setSnackbar({ open: true, message: 'Chapa payment verified and approved automatically', severity: 'success' });
+        load();
+      } else {
+        setSnackbar({ open: true, message: `Chapa status: ${res.data.status} — not yet confirmed`, severity: 'error' });
+      }
+    } catch (err: any) {
+      setSnackbar({ open: true, message: err?.response?.data?.error || 'Chapa verification failed', severity: 'error' });
+    } finally {
+      setActing(null);
+    }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString('en-ET', {
-      year: 'numeric',
-      month: 'short',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
+  const isChapa = (p: Payment) => String(p.payment_method || '').toUpperCase() === 'CHAPA';
 
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h4" gutterBottom>
-        Payment Review Queue
-      </Typography>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
+        <Box>
+          <Typography variant="h4" fontWeight={800}>Payment Review Queue</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Chapa payments are auto-verified. Manual payments require approve/reject.
+          </Typography>
+        </Box>
+        <Button variant="outlined" onClick={load}>Refresh</Button>
+      </Stack>
 
       {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-          <CircularProgress />
-        </Box>
+        <Box sx={{ display: 'flex', justifyContent: 'center', p: 6 }}><CircularProgress /></Box>
       ) : payments.length === 0 ? (
-        <Alert severity="info" sx={{ mb: 3 }}>
-          No pending payments. All submissions have been reviewed.
-        </Alert>
+        <Alert severity="info">No pending payments. All submissions have been reviewed.</Alert>
       ) : (
-        <TableContainer component={Paper}>
+        <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #e7ebf2', borderRadius: 3 }}>
           <Table>
             <TableHead>
-              <TableRow>
-                <TableCell>Student</TableCell>
-                <TableCell>Amount</TableCell>
-                <TableCell>Submitted</TableCell>
-                <TableCell>Proof</TableCell>
-                <TableCell>Notes</TableCell>
-                <TableCell align="right">Actions</TableCell>
+              <TableRow sx={{ bgcolor: '#f7f9fc' }}>
+                <TableCell sx={{ fontWeight: 700 }}>Student</TableCell>
+                <TableCell sx={{ fontWeight: 700 }}>Amount</TableCell>
+                <TableCell sx={{ fontWeight: 700 }}>Method</TableCell>
+                <TableCell sx={{ fontWeight: 700 }}>Submitted</TableCell>
+                <TableCell sx={{ fontWeight: 700 }}>Reference / Proof</TableCell>
+                <TableCell sx={{ fontWeight: 700 }}>Notes</TableCell>
+                <TableCell align="right" sx={{ fontWeight: 700 }}>Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {payments.map((payment) => (
-                <TableRow key={payment.payment_id}>
-                  <TableCell>
-                    <strong>{payment.full_name}</strong><br />
-                    <small>{payment.student_number} • {payment.email}</small>
-                  </TableCell>
-                  <TableCell>{formatETB(payment.amount)}</TableCell>
-                  <TableCell>{formatDate(payment.submitted_at)}</TableCell>
-                  <TableCell>
-                    {payment.proof_url ? (
-                      <Button
+              {payments.map((p) => {
+                const chapa = isChapa(p);
+                const isActing = acting === p.payment_id;
+
+                return (
+                  <TableRow key={p.payment_id} hover>
+                    <TableCell>
+                      <Typography variant="body2" fontWeight={700}>{p.full_name}</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {p.student_number} · {p.email}
+                      </Typography>
+                    </TableCell>
+
+                    <TableCell>
+                      <Typography variant="body2" fontWeight={700}>{fmt.format(Number(p.amount))}</Typography>
+                    </TableCell>
+
+                    <TableCell>
+                      <Chip
+                        icon={chapa ? <CreditCardIcon /> : <ReceiptLongIcon />}
+                        label={p.payment_method || 'MANUAL'}
                         size="small"
-                        variant="outlined"
-                        href={payment.proof_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        View Proof
-                      </Button>
-                    ) : (
-                      <em>No proof</em>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <TextField
-                      size="small"
-                      placeholder="Optional review note"
-                      value={reviewNotes[payment.payment_id] || ''}
-                      onChange={(e) =>
-                        setReviewNotes((prev) => ({
-                          ...prev,
-                          [payment.payment_id]: e.target.value,
-                        }))
-                      }
-                      sx={{ width: '160px' }}
-                    />
-                  </TableCell>
-                  <TableCell align="right">
-                    <Button
-                      color="success"
-                      size="small"
-                      variant="contained"
-                      onClick={() => handleApprove(payment.payment_id)}
-                      sx={{ mr: 1 }}
-                    >
-                      Approve
-                    </Button>
-                    <Button
-                      color="error"
-                      size="small"
-                      variant="outlined"
-                      onClick={() => handleReject(payment.payment_id)}
-                    >
-                      Reject
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
+                        color={chapa ? 'success' : 'default'}
+                        variant={chapa ? 'filled' : 'outlined'}
+                      />
+                    </TableCell>
+
+                    <TableCell>
+                      <Typography variant="body2">{p.submitted_at ? fmtDate(p.submitted_at) : '—'}</Typography>
+                    </TableCell>
+
+                    <TableCell>
+                      {chapa && p.transaction_ref ? (
+                        <Tooltip title={p.transaction_ref}>
+                          <Typography
+                            variant="caption"
+                            sx={{ fontFamily: 'monospace', color: 'text.secondary', cursor: 'default' }}
+                          >
+                            {p.transaction_ref.slice(0, 20)}…
+                          </Typography>
+                        </Tooltip>
+                      ) : p.proof_url ? (
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          href={p.proof_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          View Proof
+                        </Button>
+                      ) : (
+                        <Typography variant="caption" color="text.secondary">No proof</Typography>
+                      )}
+                    </TableCell>
+
+                    <TableCell>
+                      {chapa ? (
+                        <Typography variant="caption" color="text.secondary" fontStyle="italic">
+                          Auto-verified by Chapa
+                        </Typography>
+                      ) : (
+                        <TextField
+                          size="small"
+                          placeholder="Review note"
+                          value={reviewNotes[p.payment_id] || ''}
+                          onChange={(e) =>
+                            setReviewNotes((prev) => ({ ...prev, [p.payment_id]: e.target.value }))
+                          }
+                          sx={{ width: 150 }}
+                        />
+                      )}
+                    </TableCell>
+
+                    <TableCell align="right">
+                      {chapa ? (
+                        // Chapa: just a verify button — auto-approves if Chapa confirms
+                        <Button
+                          size="small"
+                          variant="contained"
+                          color="success"
+                          disabled={isActing}
+                          startIcon={isActing ? <CircularProgress size={14} color="inherit" /> : <CheckCircleIcon />}
+                          onClick={() => handleChapaVerify(p)}
+                        >
+                          Verify with Chapa
+                        </Button>
+                      ) : (
+                        // Manual: approve / reject
+                        <Stack direction="row" spacing={1} justifyContent="flex-end">
+                          <Button
+                            size="small"
+                            variant="contained"
+                            color="success"
+                            disabled={isActing}
+                            startIcon={isActing ? <CircularProgress size={14} color="inherit" /> : <CheckCircleIcon />}
+                            onClick={() => handleApprove(p.payment_id)}
+                          >
+                            Approve
+                          </Button>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            color="error"
+                            disabled={isActing}
+                            startIcon={<CancelIcon />}
+                            onClick={() => handleReject(p.payment_id)}
+                          >
+                            Reject
+                          </Button>
+                        </Stack>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </TableContainer>
@@ -216,8 +273,8 @@ export default function PaymentReviewQueue() {
 
       <Snackbar
         open={snackbar.open}
-        autoHideDuration={3000}
-        onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
+        autoHideDuration={4000}
+        onClose={() => setSnackbar((p) => ({ ...p, open: false }))}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
       >
         <Alert severity={snackbar.severity}>{snackbar.message}</Alert>

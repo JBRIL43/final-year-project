@@ -2213,6 +2213,7 @@ router.get('/payments/pending', async (req, res) => {
       'debt_id',
       'proof_url',
       'transaction_ref',
+      'payment_method',
       'submitted_at',
       'payment_date',
       'notes',
@@ -2225,6 +2226,7 @@ router.get('/payments/pending', async (req, res) => {
     const hasPhDebtId = paymentCols.has('debt_id');
     const hasProofUrl = paymentCols.has('proof_url');
     const hasTransactionRef = paymentCols.has('transaction_ref');
+    const hasPaymentMethod = paymentCols.has('payment_method');
     const hasSubmittedAt = paymentCols.has('submitted_at');
     const hasPaymentDate = paymentCols.has('payment_date');
     const hasNotes = paymentCols.has('notes');
@@ -2283,6 +2285,8 @@ router.get('/payments/pending', async (req, res) => {
         ${emailExpr} AS email,
         ph.amount,
         ${proofExpr} AS proof_url,
+        ${hasTransactionRef ? 'ph.transaction_ref' : 'NULL::text'} AS transaction_ref,
+        ${hasPaymentMethod ? 'ph.payment_method' : "'RECEIPT'::text"} AS payment_method,
         ${submittedExpr} AS submitted_at,
         ph.status,
         ${hasNotes ? 'ph.notes' : 'NULL::text'} AS notes

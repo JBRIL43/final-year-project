@@ -285,3 +285,93 @@ exports.verifyPayment = async (req, res) => {
     res.status(500).json({ error: `Failed to verify payment: ${error.message}` });
   }
 };
+
+// ── GET /api/payment/chapa/verify-admin ──────────────────────────────────────
+// Finance verifies a Chapa transaction — auto-approves and updates debt if confirmed
+exports.verifyAndApproveAdmin = async (req, res) => {
+  const { txRef, paymentId } = req.query;
+  try {
+    const chapaRes = await chapaRequest('GET', `/transaction/verify/${encodeURIComponent(txRef)}`);
+
+    if (chapaRes.status !== 200) {
+      return res.status(502).json({ error: 'Could not reach Chapa', status: 'unknown', verified: false });
+    }
+
+    const txData = chapaRes.body?.data;
+    const chapaStatus = String(txData?.status || '').toLowerCase();
+
+    if (chapaStatus !== 'success') {
+      return res.json({ success: true, status: chapaStatus, verified: false });
+    }
+
+    // Auto-approve: update payment to SUCCESS and reduce debt balance
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const paymentRes = await client.query(
+        `SELECT payment_id, debt_id, amount FROM public.payment_history
+         WHERE payment_id = $1 FOR UPDATE`,
+        [Number(paymentId)]
+      );
+
+      if (paymentRes.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Payment not found', verified: false });
+      }
+
+      const payment = paymentRes.rows[0];
+
+      await client.query(
+        `UPDATE public.payment_history SET status = 'SUCCESS' WHERE payment_id = $1`,
+        [payment.payment_id]
+      );
+
+      // Reduce debt balance
+      const debtRes = await client.query(
+        `SELECT current_balance FROM public.debt_records WHERE debt_id = $1 FOR UPDATE`,
+        [payment.debt_id]
+      );
+      if (debtRes.rows.length > 0) {
+        const newBalance = Math.max(0, Number(debtRes.rows[0].current_balance) - Number(payment.amount));
+        await client.query(
+          `UPDATE public.debt_records SET current_balance = $1, last_updated = NOW() WHERE debt_id = $2`,
+          [newBalance, payment.debt_id]
+        );
+      }
+
+      await client.query('COMMIT');
+
+      // Notify student
+      try {
+        const userRes = await pool.query(
+          `SELECT u.user_id FROM public.debt_records dr
+           JOIN public.students s ON dr.student_id = s.student_id
+           JOIN public.users u ON s.user_id = u.user_id
+           WHERE dr.debt_id = $1 LIMIT 1`,
+          [payment.debt_id]
+        );
+        if (userRes.rows.length > 0) {
+          await sendPaymentNotification(
+            userRes.rows[0].user_id,
+            'Chapa Payment Approved 💰',
+            `Your Chapa payment of ETB ${payment.amount} has been verified and your balance updated.`,
+            { type: 'CHAPA_PAYMENT_APPROVED', paymentId: String(payment.payment_id) }
+          );
+        }
+      } catch (notifErr) {
+        console.error('Chapa admin verify notification failed:', notifErr);
+      }
+
+      res.json({ success: true, status: 'success', verified: true });
+    } catch (dbErr) {
+      await client.query('ROLLBACK');
+      throw dbErr;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('Chapa admin verify error:', error.message);
+    res.status(500).json({ error: error.message, verified: false });
+  }
+};

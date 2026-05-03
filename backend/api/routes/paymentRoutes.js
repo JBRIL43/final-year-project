@@ -14,6 +14,9 @@ router.get('/history', getStudentPayments);
 router.post('/chapa/initialize', chapaController.initializePayment);
 router.post('/chapa/verify', chapaController.verifyPayment);
 
+// Finance-side: verify a Chapa transaction by txRef and auto-approve if confirmed
+router.get('/chapa/verify-admin', (req, res) => chapaController.verifyAndApproveAdmin(req, res));
+
 // Chapa return URL — user lands here after completing payment in browser
 // The app detects the resume lifecycle event and calls /verify automatically
 router.get('/chapa/return', (req, res) => {
