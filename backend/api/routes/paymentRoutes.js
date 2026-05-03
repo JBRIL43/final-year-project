@@ -10,6 +10,24 @@ router.post('/record', recordPayment);
 // Student payment status/history
 router.get('/history', getStudentPayments);
 
+// Finance: submit/update proof URL for a manual payment
+router.patch('/:paymentId/proof', async (req, res) => {
+  const { paymentId } = req.params;
+  const { proof_url } = req.body;
+  if (!proof_url) return res.status(400).json({ error: 'proof_url is required' });
+  const pool = require('../config/db');
+  try {
+    const result = await pool.query(
+      `UPDATE public.payment_history SET proof_url = $1 WHERE payment_id = $2 RETURNING payment_id`,
+      [proof_url, Number(paymentId)]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Payment not found' });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to update proof' });
+  }
+});
+
 // Chapa payment integration
 router.post('/chapa/initialize', chapaController.initializePayment);
 router.post('/chapa/verify', chapaController.verifyPayment);

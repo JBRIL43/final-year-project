@@ -124,7 +124,27 @@ npm install
 npm run dev
 ```
 
-## Chapa Payment API
+## Payment API
+
+### Manual Payment Proof
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `PATCH` | `/api/payment/:paymentId/proof` | Updates the proof URL for a manual payment record |
+
+**Request body**:
+```json
+{ "proof_url": "https://example.com/receipt.jpg" }
+```
+
+**Response** (on success):
+```json
+{ "success": true }
+```
+
+Returns `400` if `proof_url` is missing, `404` if the payment record does not exist.
+
+### Chapa Payment API
 
 Two endpoints handle the Chapa online payment flow:
 
