@@ -323,7 +323,22 @@ exports.verifyAndApproveAdmin = async (req, res) => {
       const payment = paymentRes.rows[0];
 
       // Store Chapa receipt URL as proof_url so finance can view it later
-      const chapaRef = txData?.reference || String(txRef);
+      // Try all known Chapa internal reference field names from their verify response
+      const chapaRef = txData?.chapa_ref
+        || txData?.reference
+        || txData?.chapa_transfer_id
+        || txData?.id
+        || txData?.tx_ref
+        || String(txRef);
+      console.log('Chapa txData fields:', JSON.stringify(Object.keys(txData || {})));
+      console.log('Chapa txData sample:', JSON.stringify({
+        chapa_ref: txData?.chapa_ref,
+        reference: txData?.reference,
+        chapa_transfer_id: txData?.chapa_transfer_id,
+        id: txData?.id,
+        tx_ref: txData?.tx_ref,
+      }));
+      console.log('Chapa chapaRef resolved:', chapaRef);
       const receiptUrl = `https://chapa.link/payment-receipt/${encodeURIComponent(chapaRef)}`;
 
       // Ensure proof_url column exists
@@ -375,7 +390,7 @@ exports.verifyAndApproveAdmin = async (req, res) => {
         console.error('Chapa admin verify notification failed:', notifErr);
       }
 
-      res.json({ success: true, status: 'success', verified: true, receiptUrl });
+      res.json({ success: true, status: 'success', verified: true, receiptUrl, _debug: { keys: Object.keys(txData || {}), txData } });
     } catch (dbErr) {
       await client.query('ROLLBACK');
       throw dbErr;

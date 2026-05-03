@@ -178,9 +178,10 @@ export default function PaymentReviewQueue() {
     }
     setActing(p.payment_id);
     try {
-      const res = await api.get<{ verified: boolean; status: string; receiptUrl?: string }>(
+      const res = await api.get<{ verified: boolean; status: string; receiptUrl?: string; _debug?: any }>(
         `/api/payment/chapa/verify-admin?txRef=${encodeURIComponent(p.transaction_ref)}&paymentId=${p.payment_id}`
       );
+      console.log('Chapa verify full response:', JSON.stringify(res.data, null, 2));
       if (res.data.verified) {
         setSnackbar({ open: true, message: 'Chapa payment verified and approved ✅', severity: 'success' });
         // Update proof_url locally so the receipt link appears immediately
