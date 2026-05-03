@@ -136,8 +136,10 @@ Two endpoints handle the Chapa online payment flow:
 
 **Initialize request body**:
 ```json
-{ "amount": 1500.00, "returnUrl": "hudebt://payment/return" }
+{ "amount": 1500.00, "returnUrl": "https://your-app-return-url" }
 ```
+
+> If `returnUrl` is omitted, the server defaults to `https://final-year-project-r2h8.onrender.com/api/payment/chapa/return`.
 
 **Verify request body**:
 ```json

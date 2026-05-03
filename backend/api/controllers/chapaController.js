@@ -107,10 +107,10 @@ exports.initializePayment = async (req, res) => {
       last_name: (student.full_name || 'Student').split(' ').slice(1).join(' ') || 'User',
       tx_ref: txRef,
       callback_url: `${process.env.API_BASE_URL || 'https://final-year-project-r2h8.onrender.com'}/api/payment/chapa/webhook`,
-      return_url: returnUrl || 'hudebt://payment/return',
+      return_url: returnUrl || 'https://final-year-project-r2h8.onrender.com/api/payment/chapa/return',
       customization: {
-        title: 'HU Student Debt Payment',
-        description: `Debt payment for student ${student.student_id}`,
+        title: 'HU Debt Payment',
+        description: `Student ${student.student_id}`,
       },
     };
 
