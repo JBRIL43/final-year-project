@@ -138,7 +138,14 @@ Two endpoints handle the Chapa online payment flow:
 { "amount": 1500.00, "returnUrl": "https://your-app-return-url" }
 ```
 
-> If `returnUrl` is omitted, the server defaults to `https://final-year-project-r2h8.onrender.com/api/payment/chapa/return`.
+> If `returnUrl` is omitted, the server falls back to `<API_BASE_URL>/api/payment/chapa/return`. The Chapa callback URL is always set to `<API_BASE_URL>/api/payment/chapa/webhook`. Both default to the Render production URL when `API_BASE_URL` is not set.
+
+**Initialize response** (on success):
+```json
+{ "success": true, "checkoutUrl": "https://checkout.chapa.co/...", "txRef": "HU-123-1234567890" }
+```
+
+On failure the response includes the error message returned by Chapa (or a gateway error if Chapa is unreachable). If `CHAPA_SECRET_KEY` is not configured the endpoint returns `500` immediately.
 
 **Verify request body**:
 ```json
@@ -146,6 +153,8 @@ Two endpoints handle the Chapa online payment flow:
 ```
 
 Both endpoints resolve the student from the `Authorization: Bearer <token>` header (or `x-firebase-uid` / `x-user-email` fallback headers). A successful verification creates a `PENDING` payment record and sends push notifications to the student and finance officers.
+
+> **Note**: The Chapa base URL (`https://api.chapa.co/v1`) is hardcoded in the controller and is not overridable via environment variable.
 
 ## Documentation
 
