@@ -6,7 +6,11 @@ import {
   Chip,
   CircularProgress,
   Divider,
+  FormControl,
+  InputLabel,
+  MenuItem,
   Paper,
+  Select,
   Stack,
   Table,
   TableBody,
@@ -14,19 +18,24 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  TextField,
   Typography,
 } from '@mui/material'
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartTooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+} from 'recharts'
 import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined'
-import RefreshIcon from '@mui/icons-material/Refresh'
-import TrendingUpIcon from '@mui/icons-material/TrendingUp'
-import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet'
-import WarningAmberIcon from '@mui/icons-material/WarningAmber'
-import PaymentsIcon from '@mui/icons-material/Payments'
-import ExitToAppIcon from '@mui/icons-material/ExitToApp'
-import TableChartIcon from '@mui/icons-material/TableChart'
-import api from '../services/api'
-import { API_BASE_URL } from '../services/api'
+import AssessmentIcon from '@mui/icons-material/Assessment'
+import api, { API_BASE_URL } from '../services/api'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -34,18 +43,34 @@ type MonthlyRow = { month: string; payments_count: number; total_collections: nu
 type OutstandingRow = { campus: string; program: string; students_count: number; total_outstanding_debt: number }
 type DefaultTotals = { total_graduates: number; delinquent_graduates: number; default_rate: number }
 type MethodRow = { payment_method: string; total_transactions: number; approved_count: number; total_approved_amount: number; pending_count: number; rejected_count: number }
-type WithdrawalRow = { student_number: string; full_name: string; department: string; campus: string; enrollment_status: string; withdrawal_status: string; withdrawal_requested_at: string; settlement_amount: number; remaining_balance: number; is_final_settlement: boolean }
+type WithdrawalRow = { student_number: string; full_name: string; department: string; campus: string; enrollment_status: string; withdrawal_status: string; settlement_amount: number; remaining_balance: number; is_final_settlement: boolean }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+type ReportType = 'monthly' | 'outstanding' | 'default' | 'methods' | 'withdrawals' | 'erca'
 
-const fmt = new Intl.NumberFormat('en-ET', { style: 'currency', currency: 'ETB', minimumFractionDigits: 2 })
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const REPORT_OPTIONS: { value: ReportType; label: string; description: string }[] = [
+  { value: 'monthly', label: 'Monthly Collections', description: 'Approved payments grouped by month' },
+  { value: 'outstanding', label: 'Outstanding Debt', description: 'Unpaid balances by campus and program' },
+  { value: 'default', label: 'Graduate Default Rate', description: 'Delinquent graduates vs total graduates' },
+  { value: 'methods', label: 'Payment Method Breakdown', description: 'Chapa, Bank Transfer, Receipt analysis' },
+  { value: 'withdrawals', label: 'Withdrawal Settlements', description: 'All withdrawal records and settlement amounts' },
+  { value: 'erca', label: 'ERCA Debtor Export', description: 'Delinquent graduates for ERCA submission' },
+]
+
+const PIE_COLORS = ['#2563eb', '#16a34a', '#d97706', '#dc2626', '#7c3aed', '#0891b2']
+
+const fmt = new Intl.NumberFormat('en-ET', { style: 'currency', currency: 'ETB', minimumFractionDigits: 0 })
+const fmtFull = new Intl.NumberFormat('en-ET', { style: 'currency', currency: 'ETB', minimumFractionDigits: 2 })
 const today = new Date().toISOString().slice(0, 10)
 
+// ─── CSV download helper ──────────────────────────────────────────────────────
+
 function downloadCsvUrl(path: string, filename: string) {
-  const url = `${API_BASE_URL}${path}`
   const token = localStorage.getItem('firebase_id_token')
-  // Build a temporary anchor with auth header via fetch + blob
-  fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+  fetch(`${API_BASE_URL}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
     .then((r) => r.blob())
     .then((blob) => {
       const a = document.createElement('a')
@@ -57,62 +82,284 @@ function downloadCsvUrl(path: string, filename: string) {
     .catch(console.error)
 }
 
-// ─── Section wrapper ──────────────────────────────────────────────────────────
+// ─── KPI Card ─────────────────────────────────────────────────────────────────
 
-function ReportSection({
-  icon,
-  title,
-  description,
-  csvPath,
-  csvFilename,
-  loading,
-  children,
-}: {
-  icon: React.ReactNode
-  title: string
-  description: string
-  csvPath: string
-  csvFilename: string
-  loading: boolean
-  children: React.ReactNode
-}) {
+function KpiCard({ label, value, sub, color }: { label: string; value: string; sub?: string; color: string }) {
   return (
-    <Paper elevation={0} sx={{ border: '1px solid #e7ebf2', borderRadius: 3, overflow: 'hidden' }}>
-      <Stack
-        direction={{ xs: 'column', sm: 'row' }}
-        justifyContent="space-between"
-        alignItems={{ sm: 'center' }}
-        sx={{ px: 2.5, py: 2, bgcolor: '#f7f9fc', borderBottom: '1px solid #e7ebf2' }}
-      >
-        <Stack direction="row" spacing={1.5} alignItems="center">
-          {icon}
-          <Box>
-            <Typography fontWeight={800}>{title}</Typography>
-            <Typography variant="caption" color="text.secondary">{description}</Typography>
-          </Box>
-        </Stack>
-        <Button
-          size="small"
-          variant="outlined"
-          startIcon={<DownloadOutlinedIcon />}
-          onClick={() => downloadCsvUrl(csvPath, csvFilename)}
-          sx={{ mt: { xs: 1, sm: 0 }, whiteSpace: 'nowrap' }}
-        >
-          Download CSV
-        </Button>
-      </Stack>
-      <Box sx={{ p: 2 }}>
-        {loading ? <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}><CircularProgress size={28} /></Box> : children}
-      </Box>
+    <Paper elevation={0} sx={{ flex: 1, p: 2.5, borderRadius: 3, border: `1.5px solid ${color}33`, bgcolor: `${color}08` }}>
+      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+        {label}
+      </Typography>
+      <Typography variant="h4" fontWeight={800} sx={{ color, mt: 0.5 }}>{value}</Typography>
+      {sub && <Typography variant="caption" color="text.secondary">{sub}</Typography>}
     </Paper>
   )
+}
+
+// ─── Report views ─────────────────────────────────────────────────────────────
+
+function MonthlyView({ rows }: { rows: MonthlyRow[] }) {
+  const total = rows.reduce((s, r) => s + r.total_collections, 0)
+  const chartData = [...rows].reverse().map((r) => ({ month: r.month, amount: r.total_collections, count: r.payments_count }))
+
+  return (
+    <Stack spacing={3}>
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+        <KpiCard label="Total Collected" value={fmt.format(total)} sub={`Last ${rows.length} months`} color="#16a34a" />
+        <KpiCard label="Avg per Month" value={fmt.format(rows.length ? total / rows.length : 0)} color="#2563eb" />
+        <KpiCard label="Total Payments" value={String(rows.reduce((s, r) => s + r.payments_count, 0))} color="#7c3aed" />
+      </Stack>
+
+      <Paper elevation={0} sx={{ p: 2, border: '1px solid #e7ebf2', borderRadius: 3 }}>
+        <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 2 }}>Collections by Month (ETB)</Typography>
+        <ResponsiveContainer width="100%" height={260}>
+          <BarChart data={chartData} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+            <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+            <YAxis tickFormatter={(v) => fmt.format(v)} tick={{ fontSize: 11 }} width={90} />
+            <RechartTooltip formatter={(v: number) => fmtFull.format(v)} />
+            <Bar dataKey="amount" fill="#2563eb" radius={[4, 4, 0, 0]} name="Collected" />
+          </BarChart>
+        </ResponsiveContainer>
+      </Paper>
+
+      <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #e7ebf2', borderRadius: 3 }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow sx={{ bgcolor: '#f7f9fc' }}>
+              <TableCell sx={{ fontWeight: 700 }}>Month</TableCell>
+              <TableCell align="right" sx={{ fontWeight: 700 }}>Payments</TableCell>
+              <TableCell align="right" sx={{ fontWeight: 700 }}>Total Collected</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {rows.map((r) => (
+              <TableRow key={r.month} hover>
+                <TableCell>{r.month}</TableCell>
+                <TableCell align="right">{r.payments_count}</TableCell>
+                <TableCell align="right" sx={{ fontWeight: 700, color: 'success.main' }}>{fmtFull.format(r.total_collections)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Stack>
+  )
+}
+
+function OutstandingView({ rows }: { rows: OutstandingRow[] }) {
+  const total = rows.reduce((s, r) => s + r.total_outstanding_debt, 0)
+  const chartData = rows.slice(0, 8).map((r) => ({ name: r.program?.slice(0, 20) || r.campus, debt: r.total_outstanding_debt }))
+
+  return (
+    <Stack spacing={3}>
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+        <KpiCard label="Total Outstanding" value={fmt.format(total)} color="#dc2626" />
+        <KpiCard label="Programs Affected" value={String(rows.length)} color="#d97706" />
+        <KpiCard label="Students with Debt" value={String(rows.reduce((s, r) => s + r.students_count, 0))} color="#7c3aed" />
+      </Stack>
+
+      <Paper elevation={0} sx={{ p: 2, border: '1px solid #e7ebf2', borderRadius: 3 }}>
+        <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 2 }}>Top Programs by Outstanding Debt</Typography>
+        <ResponsiveContainer width="100%" height={260}>
+          <BarChart data={chartData} layout="vertical" margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+            <XAxis type="number" tickFormatter={(v) => fmt.format(v)} tick={{ fontSize: 11 }} />
+            <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={130} />
+            <RechartTooltip formatter={(v: number) => fmtFull.format(v)} />
+            <Bar dataKey="debt" fill="#dc2626" radius={[0, 4, 4, 0]} name="Outstanding" />
+          </BarChart>
+        </ResponsiveContainer>
+      </Paper>
+
+      <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #e7ebf2', borderRadius: 3 }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow sx={{ bgcolor: '#f7f9fc' }}>
+              <TableCell sx={{ fontWeight: 700 }}>Campus</TableCell>
+              <TableCell sx={{ fontWeight: 700 }}>Program</TableCell>
+              <TableCell align="right" sx={{ fontWeight: 700 }}>Students</TableCell>
+              <TableCell align="right" sx={{ fontWeight: 700 }}>Outstanding</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {rows.map((r, i) => (
+              <TableRow key={i} hover>
+                <TableCell>{r.campus}</TableCell>
+                <TableCell>{r.program}</TableCell>
+                <TableCell align="right">{r.students_count}</TableCell>
+                <TableCell align="right" sx={{ fontWeight: 700, color: 'error.main' }}>{fmtFull.format(r.total_outstanding_debt)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Stack>
+  )
+}
+
+function DefaultView({ totals }: { totals: DefaultTotals | null }) {
+  if (!totals) return <Typography color="text.secondary">No data available.</Typography>
+  const pieData = [
+    { name: 'Delinquent', value: totals.delinquent_graduates },
+    { name: 'On Track', value: Math.max(0, totals.total_graduates - totals.delinquent_graduates) },
+  ]
+  return (
+    <Stack spacing={3}>
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+        <KpiCard label="Total Graduates" value={String(totals.total_graduates)} color="#2563eb" />
+        <KpiCard label="Delinquent" value={String(totals.delinquent_graduates)} color="#dc2626" />
+        <KpiCard label="Default Rate" value={`${(totals.default_rate * 100).toFixed(2)}%`} color="#d97706" />
+      </Stack>
+      <Paper elevation={0} sx={{ p: 2, border: '1px solid #e7ebf2', borderRadius: 3 }}>
+        <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 2 }}>Graduate Repayment Status</Typography>
+        <ResponsiveContainer width="100%" height={240}>
+          <PieChart>
+            <Pie data={pieData} cx="50%" cy="50%" outerRadius={90} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(1)}%`}>
+              {pieData.map((_, i) => <Cell key={i} fill={i === 0 ? '#dc2626' : '#16a34a'} />)}
+            </Pie>
+            <Legend />
+            <RechartTooltip />
+          </PieChart>
+        </ResponsiveContainer>
+      </Paper>
+    </Stack>
+  )
+}
+
+function MethodsView({ rows }: { rows: MethodRow[] }) {
+  const pieData = rows.map((r) => ({ name: r.payment_method, value: r.total_approved_amount }))
+  return (
+    <Stack spacing={3}>
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+        <KpiCard label="Total Methods" value={String(rows.length)} color="#2563eb" />
+        <KpiCard label="Total Approved" value={fmt.format(rows.reduce((s, r) => s + r.total_approved_amount, 0))} color="#16a34a" />
+        <KpiCard label="Pending" value={String(rows.reduce((s, r) => s + r.pending_count, 0))} color="#d97706" />
+      </Stack>
+
+      <Paper elevation={0} sx={{ p: 2, border: '1px solid #e7ebf2', borderRadius: 3 }}>
+        <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 2 }}>Approved Amount by Method</Typography>
+        <ResponsiveContainer width="100%" height={240}>
+          <PieChart>
+            <Pie data={pieData} cx="50%" cy="50%" outerRadius={90} dataKey="value" label={({ name }) => name}>
+              {pieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+            </Pie>
+            <Legend />
+            <RechartTooltip formatter={(v: number) => fmtFull.format(v)} />
+          </PieChart>
+        </ResponsiveContainer>
+      </Paper>
+
+      <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #e7ebf2', borderRadius: 3 }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow sx={{ bgcolor: '#f7f9fc' }}>
+              <TableCell sx={{ fontWeight: 700 }}>Method</TableCell>
+              <TableCell align="right" sx={{ fontWeight: 700 }}>Total</TableCell>
+              <TableCell align="right" sx={{ fontWeight: 700 }}>Approved</TableCell>
+              <TableCell align="right" sx={{ fontWeight: 700 }}>Amount</TableCell>
+              <TableCell align="right" sx={{ fontWeight: 700 }}>Pending</TableCell>
+              <TableCell align="right" sx={{ fontWeight: 700 }}>Rejected</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {rows.map((r) => (
+              <TableRow key={r.payment_method} hover>
+                <TableCell><Chip label={r.payment_method} size="small" color={r.payment_method === 'CHAPA' ? 'success' : r.payment_method === 'BANK_TRANSFER' ? 'primary' : 'default'} variant="outlined" /></TableCell>
+                <TableCell align="right">{r.total_transactions}</TableCell>
+                <TableCell align="right" sx={{ color: 'success.main' }}>{r.approved_count}</TableCell>
+                <TableCell align="right" sx={{ fontWeight: 700, color: 'success.main' }}>{fmtFull.format(r.total_approved_amount)}</TableCell>
+                <TableCell align="right" sx={{ color: 'warning.main' }}>{r.pending_count}</TableCell>
+                <TableCell align="right" sx={{ color: 'error.main' }}>{r.rejected_count}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Stack>
+  )
+}
+
+function WithdrawalsView({ rows }: { rows: WithdrawalRow[] }) {
+  const settled = rows.filter((r) => r.is_final_settlement).length
+  return (
+    <Stack spacing={3}>
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+        <KpiCard label="Total Withdrawals" value={String(rows.length)} color="#7c3aed" />
+        <KpiCard label="Settled" value={String(settled)} color="#16a34a" />
+        <KpiCard label="Pending Settlement" value={String(rows.length - settled)} color="#d97706" />
+      </Stack>
+      <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #e7ebf2', borderRadius: 3 }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow sx={{ bgcolor: '#f7f9fc' }}>
+              <TableCell sx={{ fontWeight: 700 }}>Student</TableCell>
+              <TableCell sx={{ fontWeight: 700 }}>Department</TableCell>
+              <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
+              <TableCell align="right" sx={{ fontWeight: 700 }}>Settlement</TableCell>
+              <TableCell align="right" sx={{ fontWeight: 700 }}>Remaining</TableCell>
+              <TableCell sx={{ fontWeight: 700 }}>Settled</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {rows.map((r, i) => (
+              <TableRow key={i} hover>
+                <TableCell>
+                  <Typography variant="body2" fontWeight={700}>{r.full_name}</Typography>
+                  <Typography variant="caption" color="text.secondary">{r.student_number}</Typography>
+                </TableCell>
+                <TableCell>{r.department}</TableCell>
+                <TableCell>
+                  <Chip label={r.withdrawal_status || r.enrollment_status || '—'} size="small"
+                    color={r.withdrawal_status === 'completed' ? 'success' : r.withdrawal_status === 'finance_approved' ? 'primary' : 'default'}
+                    variant="outlined" />
+                </TableCell>
+                <TableCell align="right">{r.settlement_amount != null ? fmtFull.format(r.settlement_amount) : '—'}</TableCell>
+                <TableCell align="right" sx={{ color: Number(r.remaining_balance) > 0 ? 'error.main' : 'success.main', fontWeight: 700 }}>
+                  {r.remaining_balance != null ? fmtFull.format(r.remaining_balance) : '—'}
+                </TableCell>
+                <TableCell><Chip label={r.is_final_settlement ? 'Yes' : 'No'} size="small" color={r.is_final_settlement ? 'success' : 'default'} /></TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Stack>
+  )
+}
+
+// ─── CSV path map ─────────────────────────────────────────────────────────────
+
+function csvPath(type: ReportType, months: number): string {
+  switch (type) {
+    case 'monthly': return `/api/admin/reports/monthly-collections.csv?months=${months}`
+    case 'outstanding': return '/api/admin/reports/outstanding-debt.csv'
+    case 'default': return '/api/admin/reports/default-rate.csv'
+    case 'methods': return '/api/admin/reports/payment-methods.csv'
+    case 'withdrawals': return '/api/admin/reports/withdrawal-settlements.csv'
+    case 'erca': return '/api/admin/erca/debtors.csv'
+  }
+}
+
+function csvFilename(type: ReportType): string {
+  const labels: Record<ReportType, string> = {
+    monthly: 'monthly_collections',
+    outstanding: 'outstanding_debt',
+    default: 'default_rate',
+    methods: 'payment_methods',
+    withdrawals: 'withdrawal_settlements',
+    erca: 'ERCA_Debtors',
+  }
+  return `${labels[type]}_${today}.csv`
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function FinanceReportsDashboard() {
+  const [reportType, setReportType] = useState<ReportType>('monthly')
   const [months, setMonths] = useState(12)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
+  const [generated, setGenerated] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const [monthly, setMonthly] = useState<MonthlyRow[]>([])
@@ -123,335 +370,145 @@ export default function FinanceReportsDashboard() {
 
   const safeMonths = Math.min(36, Math.max(1, Number(months) || 12))
 
-  const load = async () => {
+  const generate = async () => {
     setLoading(true)
     setError(null)
+    setGenerated(false)
     try {
-      const [mRes, oRes, dRes, pmRes, wRes] = await Promise.all([
-        api.get<{ rows: MonthlyRow[] }>(`/api/admin/reports/monthly-collections?months=${safeMonths}`),
-        api.get<{ rows: OutstandingRow[] }>('/api/admin/reports/outstanding-debt'),
-        api.get<{ totals: DefaultTotals }>('/api/admin/reports/default-rate'),
-        api.get<{ rows: MethodRow[] }>('/api/admin/reports/payment-methods'),
-        api.get<{ rows: WithdrawalRow[] }>('/api/admin/reports/withdrawal-settlements'),
-      ])
-      setMonthly(mRes.data.rows || [])
-      setOutstanding(oRes.data.rows || [])
-      setDefaultRate(dRes.data.totals || null)
-      setMethods(pmRes.data.rows || [])
-      setWithdrawals(wRes.data.rows || [])
+      if (reportType === 'monthly') {
+        const r = await api.get<{ rows: MonthlyRow[] }>(`/api/admin/reports/monthly-collections?months=${safeMonths}`)
+        setMonthly(r.data.rows || [])
+      } else if (reportType === 'outstanding') {
+        const r = await api.get<{ rows: OutstandingRow[] }>('/api/admin/reports/outstanding-debt')
+        setOutstanding(r.data.rows || [])
+      } else if (reportType === 'default') {
+        const r = await api.get<{ totals: DefaultTotals }>('/api/admin/reports/default-rate')
+        setDefaultRate(r.data.totals || null)
+      } else if (reportType === 'methods') {
+        const r = await api.get<{ rows: MethodRow[] }>('/api/admin/reports/payment-methods')
+        setMethods(r.data.rows || [])
+      } else if (reportType === 'withdrawals') {
+        const r = await api.get<{ rows: WithdrawalRow[] }>('/api/admin/reports/withdrawal-settlements')
+        setWithdrawals(r.data.rows || [])
+      } else if (reportType === 'erca') {
+        // ERCA is CSV-only — trigger download directly
+        downloadCsvUrl(csvPath('erca', safeMonths), csvFilename('erca'))
+        setLoading(false)
+        return
+      }
+      setGenerated(true)
     } catch (e: any) {
-      setError(e?.response?.data?.error || 'Failed to load reports')
+      setError(e?.response?.data?.error || 'Failed to generate report')
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => { load() }, []) // eslint-disable-line
-
-  const totalCollected = useMemo(() => monthly.reduce((s, r) => s + r.total_collections, 0), [monthly])
-  const totalOutstanding = useMemo(() => outstanding.reduce((s, r) => s + r.total_outstanding_debt, 0), [outstanding])
+  const selectedOption = REPORT_OPTIONS.find((o) => o.value === reportType)!
 
   return (
-    <Box sx={{ p: { xs: 2, md: 3 } }}>
+    <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1100 }}>
       {/* Header */}
-      <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems={{ md: 'center' }} sx={{ mb: 3 }}>
+      <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 0.5 }}>
+        <AssessmentIcon sx={{ color: '#2563eb', fontSize: 32 }} />
         <Box>
-          <Typography variant="h4" fontWeight={800} sx={{ mb: 0.5 }}>Finance Reports</Typography>
+          <Typography variant="h4" fontWeight={800}>Finance Reports</Typography>
           <Typography variant="body2" color="text.secondary">
-            Live data previews with CSV export for all report types.
+            Select a report type, generate a preview, then export as CSV.
           </Typography>
         </Box>
-        <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mt: { xs: 1, md: 0 } }}>
-          <TextField
-            label="Months (Collections)"
-            value={months}
-            onChange={(e) => setMonths(Number(e.target.value))}
-            size="small"
-            type="number"
-            inputProps={{ min: 1, max: 36 }}
-            sx={{ width: 180 }}
-          />
-          <Button variant="outlined" startIcon={<RefreshIcon />} onClick={load}>
-            Refresh All
-          </Button>
-        </Stack>
       </Stack>
 
+      <Divider sx={{ my: 2.5 }} />
+
+      {/* Controls */}
+      <Paper elevation={0} sx={{ p: 2.5, border: '1px solid #e7ebf2', borderRadius: 3, mb: 3 }}>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ sm: 'flex-end' }}>
+          <FormControl size="small" sx={{ minWidth: 280 }}>
+            <InputLabel>Report Type</InputLabel>
+            <Select
+              value={reportType}
+              label="Report Type"
+              onChange={(e) => { setReportType(e.target.value as ReportType); setGenerated(false); setError(null) }}
+            >
+              {REPORT_OPTIONS.map((o) => (
+                <MenuItem key={o.value} value={o.value}>
+                  <Box>
+                    <Typography variant="body2" fontWeight={700}>{o.label}</Typography>
+                    <Typography variant="caption" color="text.secondary">{o.description}</Typography>
+                  </Box>
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          {reportType === 'monthly' && (
+            <FormControl size="small" sx={{ minWidth: 140 }}>
+              <InputLabel>Period</InputLabel>
+              <Select value={months} label="Period" onChange={(e) => setMonths(Number(e.target.value))}>
+                {[3, 6, 12, 24, 36].map((m) => (
+                  <MenuItem key={m} value={m}>{m} months</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
+
+          <Stack direction="row" spacing={1.5}>
+            <Button
+              variant="contained"
+              onClick={generate}
+              disabled={loading}
+              startIcon={loading ? <CircularProgress size={16} color="inherit" /> : <AssessmentIcon />}
+              sx={{ px: 3 }}
+            >
+              {loading ? 'Generating…' : 'Generate Report'}
+            </Button>
+
+            {generated && reportType !== 'erca' && (
+              <Button
+                variant="outlined"
+                startIcon={<DownloadOutlinedIcon />}
+                onClick={() => downloadCsvUrl(csvPath(reportType, safeMonths), csvFilename(reportType))}
+              >
+                Export CSV
+              </Button>
+            )}
+          </Stack>
+        </Stack>
+
+        {selectedOption && (
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 1.5, display: 'block' }}>
+            <strong>{selectedOption.label}</strong> — {selectedOption.description}
+          </Typography>
+        )}
+      </Paper>
+
+      {/* Error */}
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-      {/* KPI summary cards */}
-      {!loading && (
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 3 }}>
-          {[
-            { label: 'Total Collected', value: fmt.format(totalCollected), color: '#16a34a', bg: '#f0fdf4' },
-            { label: 'Total Outstanding', value: fmt.format(totalOutstanding), color: '#dc2626', bg: '#fef2f2' },
-            { label: 'Default Rate', value: `${((defaultRate?.default_rate ?? 0) * 100).toFixed(1)}%`, color: '#d97706', bg: '#fffbeb' },
-            { label: 'Withdrawals', value: String(withdrawals.length), color: '#7c3aed', bg: '#f5f3ff' },
-          ].map((k) => (
-            <Paper key={k.label} elevation={0} sx={{ flex: 1, p: 2, borderRadius: 3, bgcolor: k.bg, border: `1px solid ${k.color}22` }}>
-              <Typography variant="caption" color="text.secondary">{k.label}</Typography>
-              <Typography variant="h5" fontWeight={800} color={k.color}>{k.value}</Typography>
-            </Paper>
-          ))}
-        </Stack>
+      {/* Report preview */}
+      {generated && !loading && (
+        <Box>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+            <Typography variant="h6" fontWeight={800}>{selectedOption.label}</Typography>
+            <Chip label={`Generated ${new Date().toLocaleTimeString()}`} size="small" color="success" variant="outlined" />
+          </Stack>
+
+          {reportType === 'monthly' && <MonthlyView rows={monthly} />}
+          {reportType === 'outstanding' && <OutstandingView rows={outstanding} />}
+          {reportType === 'default' && <DefaultView totals={defaultRate} />}
+          {reportType === 'methods' && <MethodsView rows={methods} />}
+          {reportType === 'withdrawals' && <WithdrawalsView rows={withdrawals} />}
+        </Box>
       )}
 
-      <Stack spacing={2.5}>
-
-        {/* 1. Monthly Collections */}
-        <ReportSection
-          icon={<TrendingUpIcon color="primary" />}
-          title="Monthly Collections"
-          description={`Approved payments grouped by month — last ${safeMonths} month(s)`}
-          csvPath={`/api/admin/reports/monthly-collections.csv?months=${safeMonths}`}
-          csvFilename={`monthly_collections_${today}.csv`}
-          loading={loading}
-        >
-          {monthly.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">No collection data found.</Typography>
-          ) : (
-            <TableContainer>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell sx={{ fontWeight: 700 }}>Month</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 700 }}>Payments</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 700 }}>Total Collected</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {monthly.map((r) => (
-                    <TableRow key={r.month} hover>
-                      <TableCell>{r.month}</TableCell>
-                      <TableCell align="right">{r.payments_count}</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 700, color: 'success.main' }}>{fmt.format(r.total_collections)}</TableCell>
-                    </TableRow>
-                  ))}
-                  <TableRow sx={{ bgcolor: '#f7f9fc' }}>
-                    <TableCell sx={{ fontWeight: 700 }}>Total</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 700 }}>{monthly.reduce((s, r) => s + r.payments_count, 0)}</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 700, color: 'success.main' }}>{fmt.format(totalCollected)}</TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </TableContainer>
-          )}
-        </ReportSection>
-
-        {/* 2. Outstanding Debt */}
-        <ReportSection
-          icon={<AccountBalanceWalletIcon color="error" />}
-          title="Outstanding Debt by Campus / Program"
-          description="Unpaid balances grouped by campus and department"
-          csvPath="/api/admin/reports/outstanding-debt.csv"
-          csvFilename={`outstanding_debt_${today}.csv`}
-          loading={loading}
-        >
-          {outstanding.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">No outstanding debt found.</Typography>
-          ) : (
-            <TableContainer>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell sx={{ fontWeight: 700 }}>Campus</TableCell>
-                    <TableCell sx={{ fontWeight: 700 }}>Program</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 700 }}>Students</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 700 }}>Outstanding</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {outstanding.map((r, i) => (
-                    <TableRow key={i} hover>
-                      <TableCell>{r.campus}</TableCell>
-                      <TableCell>{r.program}</TableCell>
-                      <TableCell align="right">{r.students_count}</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 700, color: 'error.main' }}>{fmt.format(r.total_outstanding_debt)}</TableCell>
-                    </TableRow>
-                  ))}
-                  <TableRow sx={{ bgcolor: '#f7f9fc' }}>
-                    <TableCell colSpan={2} sx={{ fontWeight: 700 }}>Total</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 700 }}>{outstanding.reduce((s, r) => s + r.students_count, 0)}</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 700, color: 'error.main' }}>{fmt.format(totalOutstanding)}</TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </TableContainer>
-          )}
-        </ReportSection>
-
-        {/* 3. Default Rate */}
-        <ReportSection
-          icon={<WarningAmberIcon color="warning" />}
-          title="Graduate Default Rate"
-          description="Delinquent graduates past repayment start date vs total graduates"
-          csvPath="/api/admin/reports/default-rate.csv"
-          csvFilename={`default_rate_${today}.csv`}
-          loading={loading}
-        >
-          {defaultRate && (
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={3} sx={{ py: 1 }}>
-              {[
-                { label: 'Total Graduates', value: defaultRate.total_graduates },
-                { label: 'Delinquent', value: defaultRate.delinquent_graduates },
-                { label: 'Default Rate', value: `${(defaultRate.default_rate * 100).toFixed(2)}%` },
-              ].map((s) => (
-                <Box key={s.label}>
-                  <Typography variant="caption" color="text.secondary">{s.label}</Typography>
-                  <Typography variant="h5" fontWeight={800}>{s.value}</Typography>
-                </Box>
-              ))}
-            </Stack>
-          )}
-        </ReportSection>
-
-        {/* 4. Payment Methods */}
-        <ReportSection
-          icon={<PaymentsIcon color="primary" />}
-          title="Payment Method Breakdown"
-          description="Transactions by method — Chapa, Bank Transfer, Receipt"
-          csvPath="/api/admin/reports/payment-methods.csv"
-          csvFilename={`payment_methods_${today}.csv`}
-          loading={loading}
-        >
-          {methods.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">No payment data found.</Typography>
-          ) : (
-            <TableContainer>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell sx={{ fontWeight: 700 }}>Method</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 700 }}>Total</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 700 }}>Approved</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 700 }}>Amount Approved</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 700 }}>Pending</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 700 }}>Rejected</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {methods.map((r) => (
-                    <TableRow key={r.payment_method} hover>
-                      <TableCell>
-                        <Chip label={r.payment_method} size="small"
-                          color={r.payment_method === 'CHAPA' ? 'success' : r.payment_method === 'BANK_TRANSFER' ? 'primary' : 'default'}
-                          variant="outlined"
-                        />
-                      </TableCell>
-                      <TableCell align="right">{r.total_transactions}</TableCell>
-                      <TableCell align="right" sx={{ color: 'success.main' }}>{r.approved_count}</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 700, color: 'success.main' }}>{fmt.format(r.total_approved_amount)}</TableCell>
-                      <TableCell align="right" sx={{ color: 'warning.main' }}>{r.pending_count}</TableCell>
-                      <TableCell align="right" sx={{ color: 'error.main' }}>{r.rejected_count}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          )}
-        </ReportSection>
-
-        {/* 5. Withdrawal Settlements */}
-        <ReportSection
-          icon={<ExitToAppIcon sx={{ color: '#7c3aed' }} />}
-          title="Withdrawal Settlements"
-          description="Students who have requested or completed withdrawal"
-          csvPath="/api/admin/reports/withdrawal-settlements.csv"
-          csvFilename={`withdrawal_settlements_${today}.csv`}
-          loading={loading}
-        >
-          {withdrawals.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">No withdrawal records found.</Typography>
-          ) : (
-            <TableContainer>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell sx={{ fontWeight: 700 }}>Student</TableCell>
-                    <TableCell sx={{ fontWeight: 700 }}>Department</TableCell>
-                    <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 700 }}>Settlement</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 700 }}>Remaining</TableCell>
-                    <TableCell sx={{ fontWeight: 700 }}>Settled</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {withdrawals.map((r, i) => (
-                    <TableRow key={i} hover>
-                      <TableCell>
-                        <Typography variant="body2" fontWeight={700}>{r.full_name}</Typography>
-                        <Typography variant="caption" color="text.secondary">{r.student_number}</Typography>
-                      </TableCell>
-                      <TableCell>{r.department}</TableCell>
-                      <TableCell>
-                        <Chip label={r.withdrawal_status || r.enrollment_status} size="small"
-                          color={r.withdrawal_status === 'completed' ? 'success' : r.withdrawal_status === 'finance_approved' ? 'primary' : 'default'}
-                          variant="outlined"
-                        />
-                      </TableCell>
-                      <TableCell align="right">{r.settlement_amount != null ? fmt.format(r.settlement_amount) : '—'}</TableCell>
-                      <TableCell align="right" sx={{ color: Number(r.remaining_balance) > 0 ? 'error.main' : 'success.main', fontWeight: 700 }}>
-                        {r.remaining_balance != null ? fmt.format(r.remaining_balance) : '—'}
-                      </TableCell>
-                      <TableCell>
-                        <Chip label={r.is_final_settlement ? 'Yes' : 'No'} size="small"
-                          color={r.is_final_settlement ? 'success' : 'default'} />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          )}
-        </ReportSection>
-
-        {/* 6. ERCA Export */}
-        <Paper elevation={0} sx={{ border: '1px solid #e7ebf2', borderRadius: 3, p: 2.5 }}>
-          <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }}>
-            <Stack direction="row" spacing={1.5} alignItems="center">
-              <TableChartIcon color="action" />
-              <Box>
-                <Typography fontWeight={800}>ERCA Debtor Export</Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Delinquent graduates list for external ERCA submission
-                </Typography>
-              </Box>
-            </Stack>
-            <Button
-              variant="contained"
-              startIcon={<DownloadOutlinedIcon />}
-              onClick={() => downloadCsvUrl('/api/admin/erca/debtors.csv', `ERCA_Debtors_${today}.csv`)}
-              sx={{ mt: { xs: 1, sm: 0 } }}
-            >
-              Download CSV
-            </Button>
-          </Stack>
+      {!generated && !loading && !error && (
+        <Paper elevation={0} sx={{ p: 6, border: '1px dashed #d0d7e2', borderRadius: 3, textAlign: 'center' }}>
+          <AssessmentIcon sx={{ fontSize: 56, color: '#c5cdd8', mb: 1 }} />
+          <Typography variant="h6" color="text.secondary">Select a report type and click Generate Report</Typography>
+          <Typography variant="body2" color="text.secondary">Charts and data tables will appear here</Typography>
         </Paper>
-
-        {/* 7. Semester Costs */}
-        <Paper elevation={0} sx={{ border: '1px solid #e7ebf2', borderRadius: 3, p: 2.5 }}>
-          <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }}>
-            <Stack direction="row" spacing={1.5} alignItems="center">
-              <TableChartIcon color="action" />
-              <Box>
-                <Typography fontWeight={800}>Semester Cost Configuration</Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Cost share configurations used for billing and debt reconciliation
-                </Typography>
-              </Box>
-            </Stack>
-            <Button
-              variant="contained"
-              startIcon={<DownloadOutlinedIcon />}
-              onClick={() => downloadCsvUrl('/api/admin/reports/semester-costs.csv', `semester_costs_${today}.csv`)}
-              sx={{ mt: { xs: 1, sm: 0 } }}
-            >
-              Download CSV
-            </Button>
-          </Stack>
-        </Paper>
-
-      </Stack>
+      )}
     </Box>
   )
 }

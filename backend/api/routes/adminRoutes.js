@@ -2640,14 +2640,23 @@ function sendCsv(res, rows, filename) {
 router.get('/reports/monthly-collections', async (req, res) => {
   try {
     const months = Math.min(36, Math.max(1, Number(req.query.months) || 12));
+
+    // Check which date column exists
+    const phCols = await getAvailableColumns('payment_history', ['payment_date', 'submitted_at']);
+    const dateExpr = phCols.has('payment_date')
+      ? "COALESCE(ph.payment_date, NOW())"
+      : phCols.has('submitted_at')
+      ? "COALESCE(ph.submitted_at, NOW())"
+      : 'NOW()';
+
     const result = await pool.query(
       `SELECT
-         TO_CHAR(DATE_TRUNC('month', COALESCE(ph.payment_date, ph.submitted_at, NOW())), 'YYYY-MM') AS month,
+         TO_CHAR(DATE_TRUNC('month', ${dateExpr}), 'YYYY-MM') AS month,
          COUNT(*) AS payments_count,
-         SUM(ph.amount) AS total_collections
+         COALESCE(SUM(ph.amount), 0) AS total_collections
        FROM public.payment_history ph
        WHERE UPPER(COALESCE(ph.status, '')) IN ('SUCCESS', 'APPROVED')
-         AND COALESCE(ph.payment_date, ph.submitted_at) >= NOW() - ($1 || ' months')::interval
+         AND ${dateExpr} >= NOW() - ($1 * INTERVAL '1 month')
        GROUP BY 1
        ORDER BY 1 DESC`,
       [months]
@@ -2662,8 +2671,8 @@ router.get('/reports/monthly-collections', async (req, res) => {
     }
     res.json({ success: true, rows });
   } catch (error) {
-    console.error('Monthly collections report error:', error);
-    res.status(500).json({ error: 'Failed to generate monthly collections report' });
+    console.error('Monthly collections report error:', error.message);
+    res.status(500).json({ error: 'Failed to generate monthly collections report: ' + error.message });
   }
 });
 
