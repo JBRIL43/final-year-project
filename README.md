@@ -176,6 +176,29 @@ Both endpoints resolve the student from the `Authorization: Bearer <token>` head
 
 > **Note**: The Chapa base URL (`https://api.chapa.co/v1`) is hardcoded in the controller and is not overridable via environment variable.
 
+## Finance Reports API
+
+All report endpoints are under `/api/admin/reports/` and require `finance` or `admin` role. Each endpoint returns JSON by default; append `.csv` to the path to download a UTF-8 CSV file (BOM-prefixed for Excel compatibility).
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/admin/reports/monthly-collections[.csv]` | Approved payment totals grouped by month. Optional `?months=N` param (1–36, default 12). |
+| `GET` | `/api/admin/reports/outstanding-debt[.csv]` | Total outstanding debt grouped by campus and program. |
+| `GET` | `/api/admin/reports/default-rate[.csv]` | Count of graduated students with overdue balances and the overall default rate. |
+| `GET` | `/api/admin/reports/payment-methods[.csv]` | Transaction counts and amounts broken down by payment method (Chapa, bank transfer, etc.). |
+| `GET` | `/api/admin/reports/withdrawal-settlements[.csv]` | Students with a withdrawal status or `WITHDRAWN` enrollment, with settlement and remaining balance. |
+| `GET` | `/api/admin/reports/semester-costs[.csv]` | Configured tuition, boarding, food, and fee amounts per academic year, campus, and program type. |
+| `GET` | `/api/admin/erca/debtors.csv` | ERCA tax-authority export — graduated students with outstanding balances, ordered by debt amount. |
+
+**JSON response shape** (non-CSV):
+```json
+{ "success": true, "rows": [ ... ] }
+```
+The `default-rate` endpoint returns `totals` instead of `rows`:
+```json
+{ "success": true, "totals": { "total_graduates": 120, "delinquent_graduates": 14, "default_rate": 0.1167 } }
+```
+
 ## Documentation
 
 - [`docs/demo_setup.md`](docs/demo_setup.md) — network and demo environment configuration

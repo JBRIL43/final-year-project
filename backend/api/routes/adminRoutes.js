@@ -2611,4 +2611,265 @@ router.delete('/students/:id', async (req, res) => {
   }
 });
 
+// ─── Finance Reports ──────────────────────────────────────────────────────────
+
+// Helper: convert array of objects to CSV string
+function toCsv(rows) {
+  if (!rows || rows.length === 0) return '';
+  const headers = Object.keys(rows[0]);
+  const escape = (v) => {
+    const s = String(v ?? '');
+    return s.includes(',') || s.includes('"') || s.includes('\n')
+      ? `"${s.replace(/"/g, '""')}"`
+      : s;
+  };
+  return [
+    headers.join(','),
+    ...rows.map((r) => headers.map((h) => escape(r[h])).join(',')),
+  ].join('\n');
+}
+
+function sendCsv(res, rows, filename) {
+  const csv = toCsv(rows);
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.send('\uFEFF' + csv); // BOM for Excel UTF-8
+}
+
+// GET /api/admin/reports/monthly-collections[.csv]
+router.get('/reports/monthly-collections', async (req, res) => {
+  try {
+    const months = Math.min(36, Math.max(1, Number(req.query.months) || 12));
+    const result = await pool.query(
+      `SELECT
+         TO_CHAR(DATE_TRUNC('month', COALESCE(ph.payment_date, ph.submitted_at, NOW())), 'YYYY-MM') AS month,
+         COUNT(*) AS payments_count,
+         SUM(ph.amount) AS total_collections
+       FROM public.payment_history ph
+       WHERE UPPER(COALESCE(ph.status, '')) IN ('SUCCESS', 'APPROVED')
+         AND COALESCE(ph.payment_date, ph.submitted_at) >= NOW() - ($1 || ' months')::interval
+       GROUP BY 1
+       ORDER BY 1 DESC`,
+      [months]
+    );
+    const rows = result.rows.map((r) => ({
+      month: r.month,
+      payments_count: Number(r.payments_count),
+      total_collections: Number(r.total_collections || 0),
+    }));
+    if (req.path.endsWith('.csv')) {
+      return sendCsv(res, rows, `monthly_collections_${new Date().toISOString().slice(0, 10)}.csv`);
+    }
+    res.json({ success: true, rows });
+  } catch (error) {
+    console.error('Monthly collections report error:', error);
+    res.status(500).json({ error: 'Failed to generate monthly collections report' });
+  }
+});
+
+// GET /api/admin/reports/outstanding-debt[.csv]
+router.get('/reports/outstanding-debt', async (req, res) => {
+  try {
+    const studentCols = await getAvailableColumns('students', ['department', 'campus']);
+    const departmentExpr = studentCols.has('department') ? 's.department' : "'Unknown'::text";
+    const campusExpr = studentCols.has('campus') ? 's.campus' : "'Main Campus'::text";
+
+    const result = await pool.query(
+      `SELECT
+         ${campusExpr} AS campus,
+         ${departmentExpr} AS program,
+         COUNT(DISTINCT s.student_id) AS students_count,
+         SUM(dr.current_balance) AS total_outstanding_debt
+       FROM public.students s
+       JOIN public.debt_records dr ON dr.student_id = s.student_id
+       WHERE dr.current_balance > 0
+       GROUP BY 1, 2
+       ORDER BY total_outstanding_debt DESC`
+    );
+    const rows = result.rows.map((r) => ({
+      campus: r.campus,
+      program: r.program,
+      students_count: Number(r.students_count),
+      total_outstanding_debt: Number(r.total_outstanding_debt || 0),
+    }));
+    if (req.path.endsWith('.csv')) {
+      return sendCsv(res, rows, `outstanding_debt_${new Date().toISOString().slice(0, 10)}.csv`);
+    }
+    res.json({ success: true, rows });
+  } catch (error) {
+    console.error('Outstanding debt report error:', error);
+    res.status(500).json({ error: 'Failed to generate outstanding debt report' });
+  }
+});
+
+// GET /api/admin/reports/default-rate[.csv]
+router.get('/reports/default-rate', async (req, res) => {
+  try {
+    const studentCols = await getAvailableColumns('students', ['graduation_date', 'repayment_start_date', 'clearance_status']);
+    if (!studentCols.has('graduation_date') || !studentCols.has('repayment_start_date')) {
+      return res.json({ success: true, totals: { total_graduates: 0, delinquent_graduates: 0, default_rate: 0 } });
+    }
+    const totalRes = await pool.query(
+      `SELECT COUNT(*) AS total FROM public.students WHERE graduation_date IS NOT NULL`
+    );
+    const delinquentRes = await pool.query(
+      `SELECT COUNT(DISTINCT s.student_id) AS delinquent
+       FROM public.students s
+       JOIN public.debt_records dr ON dr.student_id = s.student_id
+       WHERE s.graduation_date IS NOT NULL
+         AND s.repayment_start_date IS NOT NULL
+         AND s.repayment_start_date <= NOW()
+         AND UPPER(COALESCE(s.clearance_status, '')) = 'PENDING'
+         AND dr.current_balance > 0`
+    );
+    const total = Number(totalRes.rows[0]?.total || 0);
+    const delinquent = Number(delinquentRes.rows[0]?.delinquent || 0);
+    const rate = total > 0 ? delinquent / total : 0;
+    const totals = { total_graduates: total, delinquent_graduates: delinquent, default_rate: rate };
+    if (req.path.endsWith('.csv')) {
+      return sendCsv(res, [totals], `default_rate_${new Date().toISOString().slice(0, 10)}.csv`);
+    }
+    res.json({ success: true, totals });
+  } catch (error) {
+    console.error('Default rate report error:', error);
+    res.status(500).json({ error: 'Failed to generate default rate report' });
+  }
+});
+
+// GET /api/admin/reports/payment-methods[.csv]
+router.get('/reports/payment-methods', async (req, res) => {
+  try {
+    const paymentCols = await getAvailableColumns('payment_history', ['payment_method']);
+    if (!paymentCols.has('payment_method')) {
+      return res.json({ success: true, rows: [] });
+    }
+    const result = await pool.query(
+      `SELECT
+         UPPER(COALESCE(payment_method, 'UNKNOWN')) AS payment_method,
+         COUNT(*) AS total_transactions,
+         COUNT(*) FILTER (WHERE UPPER(COALESCE(status,'')) IN ('SUCCESS','APPROVED')) AS approved_count,
+         SUM(amount) FILTER (WHERE UPPER(COALESCE(status,'')) IN ('SUCCESS','APPROVED')) AS total_approved_amount,
+         COUNT(*) FILTER (WHERE UPPER(COALESCE(status,'')) = 'PENDING') AS pending_count,
+         COUNT(*) FILTER (WHERE UPPER(COALESCE(status,'')) IN ('FAILED','REJECTED')) AS rejected_count
+       FROM public.payment_history
+       GROUP BY 1
+       ORDER BY total_approved_amount DESC NULLS LAST`
+    );
+    const rows = result.rows.map((r) => ({
+      payment_method: r.payment_method,
+      total_transactions: Number(r.total_transactions),
+      approved_count: Number(r.approved_count || 0),
+      total_approved_amount: Number(r.total_approved_amount || 0),
+      pending_count: Number(r.pending_count || 0),
+      rejected_count: Number(r.rejected_count || 0),
+    }));
+    if (req.path.endsWith('.csv')) {
+      return sendCsv(res, rows, `payment_methods_${new Date().toISOString().slice(0, 10)}.csv`);
+    }
+    res.json({ success: true, rows });
+  } catch (error) {
+    console.error('Payment methods report error:', error);
+    res.status(500).json({ error: 'Failed to generate payment methods report' });
+  }
+});
+
+// GET /api/admin/reports/withdrawal-settlements[.csv]
+router.get('/reports/withdrawal-settlements', async (req, res) => {
+  try {
+    const studentCols = await getAvailableColumns('students', [
+      'full_name', 'student_number', 'department', 'campus',
+      'withdrawal_status', 'withdrawal_requested_at', 'enrollment_status',
+    ]);
+    const debtCols = await getAvailableColumns('debt_records', ['is_final_settlement', 'current_balance', 'initial_amount']);
+
+    const fullNameExpr = studentCols.has('full_name') ? 's.full_name' : 'u.full_name';
+    const needsUsersJoin = !studentCols.has('full_name');
+
+    const result = await pool.query(
+      `SELECT
+         s.student_number,
+         ${fullNameExpr} AS full_name,
+         ${studentCols.has('department') ? 's.department' : "'Unknown'::text"} AS department,
+         ${studentCols.has('campus') ? 's.campus' : "'Main Campus'::text"} AS campus,
+         ${studentCols.has('enrollment_status') ? 's.enrollment_status' : "'UNKNOWN'::text"} AS enrollment_status,
+         ${studentCols.has('withdrawal_status') ? 's.withdrawal_status' : "NULL::text"} AS withdrawal_status,
+         ${studentCols.has('withdrawal_requested_at') ? 's.withdrawal_requested_at' : 'NULL::timestamp'} AS withdrawal_requested_at,
+         ${debtCols.has('initial_amount') ? 'dr.initial_amount' : 'NULL::numeric'} AS settlement_amount,
+         ${debtCols.has('current_balance') ? 'dr.current_balance' : 'NULL::numeric'} AS remaining_balance,
+         ${debtCols.has('is_final_settlement') ? 'dr.is_final_settlement' : 'FALSE::boolean'} AS is_final_settlement
+       FROM public.students s
+       ${needsUsersJoin ? 'LEFT JOIN public.users u ON s.user_id = u.user_id' : ''}
+       LEFT JOIN public.debt_records dr ON dr.student_id = s.student_id
+       WHERE UPPER(COALESCE(${studentCols.has('enrollment_status') ? 's.enrollment_status' : "'ACTIVE'"}, '')) = 'WITHDRAWN'
+          OR ${studentCols.has('withdrawal_status') ? "COALESCE(s.withdrawal_status, '') != ''" : 'FALSE'}
+       ORDER BY s.student_id DESC`
+    );
+    const rows = result.rows;
+    if (req.path.endsWith('.csv')) {
+      return sendCsv(res, rows, `withdrawal_settlements_${new Date().toISOString().slice(0, 10)}.csv`);
+    }
+    res.json({ success: true, rows });
+  } catch (error) {
+    console.error('Withdrawal settlements report error:', error);
+    res.status(500).json({ error: 'Failed to generate withdrawal settlements report' });
+  }
+});
+
+// GET /api/admin/reports/semester-costs[.csv]
+router.get('/reports/semester-costs', async (req, res) => {
+  try {
+    const hasSemesterTable = (
+      await pool.query(`SELECT to_regclass('public.semester_amounts') AS t`)
+    ).rows[0]?.t;
+
+    if (!hasSemesterTable) {
+      return res.json({ success: true, rows: [] });
+    }
+
+    const result = await pool.query(
+      `SELECT academic_year, campus, program_type,
+              tuition_cost_per_year, boarding_cost_per_year,
+              food_cost_per_month, health_insurance_fee, other_fees,
+              effective_from
+       FROM public.semester_amounts
+       ORDER BY academic_year DESC, campus, program_type`
+    );
+    const rows = result.rows;
+    if (req.path.endsWith('.csv')) {
+      return sendCsv(res, rows, `semester_costs_${new Date().toISOString().slice(0, 10)}.csv`);
+    }
+    res.json({ success: true, rows });
+  } catch (error) {
+    console.error('Semester costs report error:', error);
+    res.status(500).json({ error: 'Failed to generate semester costs report' });
+  }
+});
+
+// GET /api/admin/erca/debtors.csv — ERCA export as CSV
+router.get('/erca/debtors.csv', async (req, res) => {
+  try {
+    const ercaRes = await pool.query(
+      `SELECT
+         s.student_number,
+         u.full_name,
+         u.email,
+         s.department AS program,
+         ${(await getAvailableColumns('students', ['campus'])).has('campus') ? 's.campus' : "'Main Campus'::text"} AS campus,
+         dr.current_balance AS total_debt,
+         s.graduation_date,
+         s.repayment_start_date
+       FROM public.students s
+       JOIN public.users u ON s.user_id = u.user_id
+       JOIN public.debt_records dr ON dr.student_id = s.student_id
+       WHERE dr.current_balance > 0
+         AND s.graduation_date IS NOT NULL
+       ORDER BY dr.current_balance DESC`
+    );
+    sendCsv(res, ercaRes.rows, `ERCA_Debtors_${new Date().toISOString().slice(0, 10)}.csv`);
+  } catch (error) {
+    console.error('ERCA CSV error:', error);
+    res.status(500).json({ error: 'Failed to generate ERCA export' });
+  }
+});
+
 module.exports = router;
