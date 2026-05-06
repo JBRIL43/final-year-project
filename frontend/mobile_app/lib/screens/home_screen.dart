@@ -244,12 +244,72 @@ class _HomeScreenState extends State<HomeScreen> {
               .toUpperCase() ==
           'PENDING',
     );
+    final enrollmentStatus = ((_debtData!['enrollmentStatus'] as String?) ?? '')
+        .toUpperCase();
+    final isWithdrawn = enrollmentStatus == 'WITHDRAWN';
+    final isCleared = _debtData!['isCleared'] == true;
 
     return RefreshIndicator(
       onRefresh: _loadDebtBalance,
       child: ListView(
         padding: const EdgeInsets.all(16.0),
         children: [
+          // ── Withdrawn status banner ──────────────────────────────
+          if (isWithdrawn)
+            Card(
+              color: isCleared ? Colors.green[50] : Colors.red[50],
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+                side: BorderSide(
+                  color: isCleared ? Colors.green.shade300 : Colors.red.shade300,
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Row(
+                  children: [
+                    Icon(
+                      isCleared ? Icons.check_circle : Icons.exit_to_app,
+                      color: isCleared ? Colors.green[700] : Colors.red[700],
+                      size: 28,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            isCleared ? 'Withdrawn & Cleared' : 'Withdrawn',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                              color: isCleared
+                                  ? Colors.green[800]
+                                  : Colors.red[800],
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            isCleared
+                                ? 'Your withdrawal has been fully processed and clearance has been granted.'
+                                : currentBalance > 0
+                                    ? 'Your enrollment has been withdrawn. Please settle your remaining balance of ${formatter.format(currentBalance)} to complete the process.'
+                                    : 'Your enrollment has been withdrawn. Awaiting final clearance from the registrar.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isCleared
+                                  ? Colors.green[700]
+                                  : Colors.red[700],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          if (isWithdrawn) const SizedBox(height: 12),
           Card(
             elevation: 4,
             child: Container(
@@ -895,7 +955,12 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: Text(
           _selectedIndex == 0
-              ? 'HU Student Debt System'
+              ? (_debtData != null &&
+                      ((_debtData!['enrollmentStatus'] as String?) ?? '')
+                          .toUpperCase() ==
+                          'WITHDRAWN'
+                  ? 'HU Student — Withdrawn'
+                  : 'HU Student Debt System')
               : _selectedIndex == 1
               ? 'Cost Statement'
               : _selectedIndex == 2

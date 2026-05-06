@@ -362,7 +362,7 @@ Students are trained on:
    - For Chapa: you will be redirected to the Chapa checkout page; complete payment and return to the app
 4. **View Statement:** Tap "Statement" in the bottom navigation to see your full cost breakdown and download a PDF
 5. **Notifications:** Tap "Notifications" to see payment status updates and withdrawal notifications
-6. **Withdrawal Request:** Tap "More" → "Withdrawal Request" to submit, track, or cancel a withdrawal request
+6. **Withdrawal Request:** Tap "More" → "Withdrawal Request" to submit, track, or cancel a withdrawal request. If your enrollment has been set to `WITHDRAWN`, a status banner appears at the top of the dashboard: red while an outstanding balance remains or final clearance is pending, and green once the registrar has granted full clearance.
 7. **Change Password:** Tap "More" → "Change Password"
 
 **Admin Dashboard (Finance Officer)**

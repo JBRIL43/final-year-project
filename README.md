@@ -21,7 +21,7 @@ A student debt management platform for Hawassa University (Ethiopia). It tracks 
 - **Cost-sharing statement** — per-year breakdown of tuition share (15%), boarding, and food costs; exportable as PDF
 - **Payment submission** — Chapa online payment or manual receipt upload
 - **Push notifications** — Firebase Cloud Messaging alerts for payment status changes and withdrawal clearance
-- **Withdrawal request** — students can submit, track, and cancel a formal withdrawal request through a multi-stage approval workflow
+- **Withdrawal request** — students can submit, track, and cancel a formal withdrawal request through a multi-stage approval workflow; once withdrawn, a status banner on the dashboard shows whether clearance has been granted or an outstanding balance remains
 
 ### Admin Web Dashboard (React)
 
