@@ -9,11 +9,25 @@ const router = express.Router();
 // GET /api/admin/users — list all admin users (not students)
 router.get('/users', authenticateRequest, requireRoles(['admin']), async (req, res) => {
   try {
+    const userCols = await getAvailableColumns('users', [
+      'updated_at', 'created_at', 'full_name', 'department',
+    ]);
+
+    const fullNameExpr = userCols.has('full_name') ? 'full_name' : "''::text AS full_name";
+    const departmentExpr = userCols.has('department') ? 'department' : "NULL::text AS department";
+    const createdAtExpr = userCols.has('created_at') ? 'created_at' : 'NOW() AS created_at';
+    const updatedAtExpr = userCols.has('updated_at')
+      ? 'updated_at'
+      : userCols.has('created_at')
+      ? 'created_at AS updated_at'
+      : 'NOW() AS updated_at';
+    const orderExpr = userCols.has('created_at') ? 'created_at DESC' : 'user_id DESC';
+
     const result = await pool.query(
-      `SELECT user_id, email, full_name, role, department, created_at, updated_at
+      `SELECT user_id, email, ${fullNameExpr}, role, ${departmentExpr}, ${createdAtExpr}, ${updatedAtExpr}
        FROM public.users
        WHERE UPPER(COALESCE(role, '')) IN ('ADMIN', 'REGISTRAR', 'DEPARTMENT_HEAD', 'FINANCE_OFFICER', 'FINANCE')
-       ORDER BY created_at DESC`
+       ORDER BY ${orderExpr}`
     );
     res.json({ success: true, users: result.rows });
   } catch (error) {
@@ -32,7 +46,7 @@ router.put('/users/:id', authenticateRequest, requireRoles(['admin']), async (re
     if (!normalizedRole) return res.status(400).json({ error: 'Invalid role' });
     const updateFields = ['role = $1'];
     const values = [normalizedRole, id];
-    if (normalizedRole === 'DEPARTMENT_HEAD') {
+    if (normalizedRole === 'department_head') {
       if (!department) return res.status(400).json({ error: 'department is required for department_head' });
       updateFields.push('department = $2');
       values[1] = department;

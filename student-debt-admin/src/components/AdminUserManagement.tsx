@@ -228,7 +228,7 @@ export default function AdminUserManagement() {
               }
             } },
             { field: 'department', headerName: 'Department', width: 160 },
-            { field: 'created_at', headerName: 'Created', width: 160, valueGetter: (params) => new Date(params.value).toLocaleString() },
+            { field: 'created_at', headerName: 'Created', width: 160, valueGetter: (params) => params.value ? new Date(params.value).toLocaleString() : '—' },
             { field: 'actions', headerName: 'Actions', width: 140, sortable: false, renderCell: (params) => (
               <Box sx={{ display: 'flex', gap: 1 }}>
                 <Button size="small" startIcon={<EditIcon />} onClick={() => handleEditClick(params.row)}>
