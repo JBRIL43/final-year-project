@@ -12,13 +12,13 @@ router.get('/users', authenticateRequest, requireRoles(['admin']), async (req, r
     const result = await pool.query(
       `SELECT user_id, email, full_name, role, department, created_at, updated_at
        FROM public.users
-       WHERE role IN ('ADMIN', 'REGISTRAR', 'DEPARTMENT_HEAD', 'FINANCE_OFFICER')
+       WHERE UPPER(COALESCE(role, '')) IN ('ADMIN', 'REGISTRAR', 'DEPARTMENT_HEAD', 'FINANCE_OFFICER', 'FINANCE')
        ORDER BY created_at DESC`
     );
     res.json({ success: true, users: result.rows });
   } catch (error) {
-    console.error('Failed to fetch admin users:', error);
-    res.status(500).json({ error: 'Failed to fetch admin users' });
+    console.error('Failed to fetch admin users:', error.message);
+    res.status(500).json({ error: 'Failed to fetch admin users: ' + error.message });
   }
 });
 
@@ -117,10 +117,10 @@ function inferProgramType(value) {
 function normalizeAdminRole(role) {
   const normalized = String(role || '').trim().toLowerCase();
 
-  if (normalized === 'registrar') return 'REGISTRAR';
-  if (normalized === 'department_head') return 'DEPARTMENT_HEAD';
-  if (normalized === 'finance') return 'FINANCE_OFFICER';
-  if (normalized === 'admin') return 'ADMIN';
+  if (normalized === 'registrar') return 'registrar';
+  if (normalized === 'department_head') return 'department_head';
+  if (normalized === 'finance') return 'finance';
+  if (normalized === 'admin') return 'admin';
 
   return null;
 }
@@ -332,7 +332,7 @@ router.post('/users', authenticateRequest, requireRoles(['admin']), async (req, 
       return res.status(400).json({ error: 'Invalid role' });
     }
 
-    if (role === 'DEPARTMENT_HEAD' && !department) {
+    if (role === 'department_head' && !department) {
       return res.status(400).json({ error: 'department is required for department_head' });
     }
 

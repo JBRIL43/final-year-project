@@ -73,11 +73,12 @@ export default function AdminUserManagement() {
 
   const handleEditClick = (user: AdminUser) => {
     setEditUser(user)
+    const r = String(user.role || '').toUpperCase()
     setEditRole(
-      user.role === 'REGISTRAR' ? 'registrar' :
-      user.role === 'DEPARTMENT_HEAD' ? 'department_head' :
-      user.role === 'FINANCE_OFFICER' ? 'finance' :
-      'admin'
+      r === 'REGISTRAR' ? 'registrar' :
+      r === 'DEPARTMENT_HEAD' ? 'department_head' :
+      r === 'FINANCE_OFFICER' || r === 'FINANCE' ? 'finance' :
+      r === 'ADMIN' ? 'admin' : 'registrar'
     )
     setEditDepartment(user.department || '')
   }
@@ -217,10 +218,11 @@ export default function AdminUserManagement() {
             { field: 'email', headerName: 'Email', width: 220 },
             { field: 'full_name', headerName: 'Full Name', width: 160 },
             { field: 'role', headerName: 'Role', width: 140, valueGetter: (params) => {
-              switch (params.value) {
+              switch (String(params.value || '').toUpperCase()) {
                 case 'REGISTRAR': return 'Registrar'
                 case 'DEPARTMENT_HEAD': return 'Department Head'
-                case 'FINANCE_OFFICER': return 'Finance Officer'
+                case 'FINANCE_OFFICER':
+                case 'FINANCE': return 'Finance Officer'
                 case 'ADMIN': return 'Admin'
                 default: return params.value
               }
