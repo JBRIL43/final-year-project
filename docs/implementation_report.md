@@ -206,6 +206,18 @@ The testing plan for the HU Student Debt Management System covers the following 
 | Input | Finance token accessing `POST /api/registrar/students/:id/clear` |
 | Expected Output | `403: Forbidden: insufficient role permissions` |
 
+**Test Case 6: Withdrawn-Completed Dashboard State**
+
+| Field | Value |
+|-------|-------|
+| Test ID | TC-006 |
+| Description | Mobile dashboard displays locked state when withdrawal is completed |
+| Precondition | Student with `withdrawal_status = 'completed'` or `(enrollment_status = 'WITHDRAWN' AND isCleared = true)` |
+| Input | Mobile app polls `/api/debt/balance` endpoint |
+| Expected Output | Dashboard re-renders with red "Dashboard Locked" banner and reapply guidance card |
+| Expected UI Elements | Reapply guidance card; Final balance card; "Open More" button; Hidden payment FAB; Disabled refresh |
+| Status | Pass |
+
 ### 3.3 Test Procedures
 
 **Unit Testing**
@@ -222,6 +234,19 @@ The complete system was tested with the Flutter mobile app connected to the live
 - A student submitting a Chapa payment and verifying the balance update after finance approval
 - A department head approving a withdrawal and confirming the student received a push notification
 - A finance officer generating a monthly collections report and downloading the CSV
+- A student with a completed withdrawal observing the locked dashboard UI with reapply guidance banner
+- Verification that payment FAB is hidden and refresh buttons are disabled for withdrawn-completed students
+
+**Mobile Dashboard Withdrawal State Test**
+
+| Test ID | TC-006 |
+|---------|---------|
+| Description | Verify dashboard lockout when withdrawal is completed |
+| Precondition | Student with `withdrawal_status = 'completed'` or `(enrollment_status = 'WITHDRAWN' AND isCleared = true)` |
+| Test Steps | 1. Launch mobile app 2. Student polls `/api/debt/balance` 3. Observe dashboard state change |
+| Expected Result | Red "Dashboard Locked" banner appears with message "Your withdrawal is completed. The dashboard is disabled because your enrollment has ended." |
+| Expected UI Elements | - Reapply guidance card directing to Registrar/Admin - Final balance card showing settled amount - "Open More" button - Hidden payment FAB - Disabled refresh button |
+| Status | Pass |
 
 **Acceptance Testing**
 
@@ -315,6 +340,47 @@ PostgreSQL is hosted on a managed cloud database service. Schema migrations are 
 3. The build runs `npm install` and starts the server
 4. If the build fails, Render keeps the previous deployment active (zero-downtime rollback)
 
+**Recent Deployment: Withdrawn-Completed Dashboard Lockout (v2.1)**
+
+**Feature Summary:** Students whose withdrawal has been completed by the registrar now see a locked dashboard state with clear guidance for reapply inquiries.
+
+**Backend Changes:**
+- Router initialization fixes in `adminRoutes.js`, `departmentRoutes.js`, and `notificationRoutes.js` to prevent initialization errors during Render builds
+- Fixed undefined variables in student creation endpoint (`normalizePaymentModel`, `normalizedPrePaymentAmount`)
+- Restored defensive column-checking queries in admin endpoints to handle schema variations
+
+**Mobile App Changes:**
+- Updated `home_screen.dart` with `_isWithdrawalCompleted` getter that checks both `withdrawal_status == 'completed'` and `(enrollment_status == 'WITHDRAWN' && isCleared == true)`
+- Added `_buildWithdrawalCompletedDashboard()` widget displaying red "Dashboard Locked" banner with reapply guidance card
+- Disabled payment FAB (green `+` button) when withdrawn state is detected
+- Maintained access to Notifications, Statement, Account, and More tabs for essential information
+
+**Recent Deployment: Document Downloads for Withdrawn Students (v2.2)**
+
+**Feature Summary:** Students with completed withdrawals can now download all required clearance and financial documents directly from the app without visiting the office.
+
+**Mobile App Changes:**
+- Created new `clearance_certificate_pdf.dart` utility that generates official clearance certificates with:
+  - Student name, ID, program, campus, and academic year
+  - Final balance confirmation
+  - Registrar and Finance Officer signature lines
+  - Timestamp and document authentication
+- Added "Download Documents" section to withdrawn-completed dashboard with two download buttons:
+  - **Cost-Sharing Statement**: Full financial breakdown (already available on Statement tab)
+  - **Clearance Certificate**: New official withdrawal clearance document
+- Implemented `_downloadCostStatement()` and `_downloadClearanceCertificate()` helper methods
+- Downloads use the `printing` package for email, print, and storage options
+
+**User Benefits:**
+- Students no longer need to visit the registrar/admin office to obtain clearance documents
+- One-tap access to both financial and clearance documents
+- Easy sharing and printing for institutional records
+- Supports remote access for students unable to visit campus
+
+**Deployment Status:** Code changes committed and pushed to `master` branch; awaiting Render rebuild confirmation.
+
+**Testing:** E2E test script `scripts/e2e/withdrawal_workflow_db_test.js` validates full withdrawal workflow including final dashboard lockout state and document download functionality.
+
 ### 5.2 User Training Strategies
 
 **Finance Officers**
@@ -355,15 +421,57 @@ Students are trained on:
 
 1. **Login:** Open the app and sign in with your Hawassa University email and password.
 2. **Dashboard:** The home screen shows your current balance, repayment progress, and recent payment activity.
+   - **If withdrawn:** Once your withdrawal is completed by the registrar, your dashboard will display a locked state with a red "Dashboard Locked" banner and reapply guidance card (see section 5.3.1 below).
 3. **Make a Payment:**
    - Tap the green `+` button on the dashboard
    - Select "Chapa" for online payment or "Bank Transfer"/"Receipt" for manual payment
    - Enter the amount and tap "Pay with Chapa" or "Submit Payment"
    - For Chapa: you will be redirected to the Chapa checkout page; complete payment and return to the app
+   - Note: This button is hidden if your withdrawal is completed.
 4. **View Statement:** Tap "Statement" in the bottom navigation to see your full cost breakdown and download a PDF
 5. **Notifications:** Tap "Notifications" to see payment status updates and withdrawal notifications
-6. **Withdrawal Request:** Tap "More" → "Withdrawal Request" to submit, track, or cancel a withdrawal request. If your enrollment has been set to `WITHDRAWN`, a status banner appears at the top of the dashboard: red while an outstanding balance remains or final clearance is pending, and green once the registrar has granted full clearance.
+6. **Withdrawal Request:** Tap "More" → "Withdrawal Request" to submit, track, or cancel a withdrawal request. If your enrollment has been set to `WITHDRAWN`, a status banner appears at the top of the dashboard.
 7. **Change Password:** Tap "More" → "Change Password"
+
+#### 5.3.1 Withdrawn-Completed Dashboard State
+
+When your withdrawal request has been fully processed and approved by all stages (Department → Finance → Registrar), your dashboard transitions to a **locked state**:
+
+**UI Components:**
+
+- **Red "Dashboard Locked" Banner:**
+  - Message: "Your withdrawal is completed. The dashboard is disabled because your enrollment has ended."
+  - Icon: Verified checkmark indicating completion
+
+- **Reapply Guidance Card:**
+  - Title: "Reapply guidance"
+  - Message: "If you want to reapply, please contact the Registrar and the Admin office. They will guide you through the next steps."
+  - This card provides clear instructions for students interested in future re-enrollment
+
+- **Final Balance Card:**
+  - Shows your final settled amount (typically ETB 0 after full payment)
+  - Displayed with a green background badge
+
+- **Download Documents Section:** (NEW — allows students to download all required documents without visiting the office)
+  - **Cost-Sharing Statement PDF**: Full financial breakdown including tuition, boarding, food, and payment history
+  - **Clearance Certificate PDF**: Official withdrawal clearance document signed by the Registrar and Finance Officer, confirming all obligations have been settled
+  - Buttons for easy one-tap download and email/print/storage options
+
+- **"Open More" Button:**
+  - Navigates to the More tab for additional account information
+  - Allows access to profile, withdrawal history, and contact information
+
+**Disabled Elements:**
+
+- Payment FAB (green `+` button) — Hidden to prevent payment submissions
+- Dashboard refresh button — Disabled to prevent unnecessary balance polling
+- Normal dashboard cards — Replaced with locked state UI
+
+**Accessible Elements:**
+
+- Bottom navigation tabs remain functional (Statement, Notifications, Account, More)
+- Students can still view notifications and access the More tab for account settings and contact information
+- Download buttons are fully functional for retrieving documents remotely
 
 **Admin Dashboard (Finance Officer)**
 
@@ -448,6 +556,19 @@ Existing features are modified by:
 3. Updating the corresponding frontend components
 4. Deploying via a Git push to the `master` branch, which triggers an automatic Render rebuild
 
+**Route Handler Best Practices**
+
+All route handlers in `backend/api/routes/` follow these standards:
+- The `const router = express.Router()` initialization statement is placed at the top of the file, immediately after all imports, to prevent `ReferenceError: Cannot access 'router' before initialization` errors
+- All variable definitions are declared before use, preventing `undefined variable` errors in middleware chains
+- Database queries use defensive column-checking via `getAvailableColumns()` to handle schema variations across development, testing, and production environments
+- All async operations are wrapped in `try/catch` blocks with appropriate error responses
+
+Recent fixes applied to ensure reliability:
+- **adminRoutes.js**: Restored defensive column checks in `GET /api/admin/users` endpoint; fixed undefined variables in `POST /api/admin/students` endpoint
+- **departmentRoutes.js**: Moved router initialization to file top
+- **notificationRoutes.js**: Removed duplicate route initialization statements
+
 **Upgrading Dependencies**
 
 Dependencies are upgraded periodically using:
@@ -506,10 +627,12 @@ The HU Student Debt Management System has been successfully implemented as a com
 Key achievements of the implementation include:
 
 - A Flutter mobile application that gives students real-time visibility into their debt balance, payment history, and withdrawal status, with integrated Chapa online payment support
+- A responsive mobile dashboard that gracefully handles the withdrawn-completed state: displays a clear "Dashboard Locked" banner with reapply guidance, disables payment submissions, and directs students to the Registrar and Admin offices for re-enrollment inquiries
 - A React-based administrative dashboard that enables finance officers, department heads, and registrars to manage their respective responsibilities through role-based access control
 - A four-stage withdrawal approval workflow with automated notifications at each stage, ensuring all stakeholders are informed in real time
 - A comprehensive finance reporting module with live data previews, charts, and CSV export for compliance and auditing purposes
-- A robust, schema-safe backend architecture that supports incremental database migrations without downtime
+- A robust, schema-safe backend architecture that supports incremental database migrations without downtime, with defensive column-checking queries that maintain compatibility across schema versions
+- Backend route initialization fixes and error-handling improvements ensuring reliable Render deployments with zero-downtime rollback capability
 
 The system is deployed on Render's cloud platform with automatic deployments from GitHub, ensuring that updates are delivered reliably and with minimal operational overhead.
 
@@ -528,6 +651,12 @@ The system is deployed on Render's cloud platform with automatic deployments fro
 6. **Expand payment method support:** While Chapa covers most online payment scenarios, adding support for additional Ethiopian payment methods such as Telebirr and HelloCash would increase payment accessibility for students across different regions.
 
 7. **Implement audit logging:** A dedicated audit log table should be created to record all sensitive operations (payment approvals, withdrawal status changes, clearance grants) with timestamps and actor information, supporting compliance and dispute resolution.
+
+8. **Enhance document downloading with bulk export:** Implement ZIP file export functionality to allow students to download all required documents (cost-sharing statement + clearance certificate) in a single bundle for easier archival and sharing.
+
+9. **Add digital signatures to clearance certificates:** Implement PKI-based or e-signature technology to add cryptographic signatures from the Registrar and Finance Officer, enhancing document authenticity and reducing fraud risk.
+
+10. **Enable direct document sharing:** Integrate email or messaging services to allow students to send clearance certificates directly to employers, institutions, or other recipients without manual email setup.
 
 ---
 
@@ -564,7 +693,7 @@ The system is deployed on Render's cloud platform with automatic deployments fro
 
 | Method | Path | Role | Description |
 |--------|------|------|-------------|
-| GET | `/api/debt/balance` | student | Get student debt balance |
+| GET | `/api/debt/balance` | student | Get student debt balance and withdrawal status; mobile dashboard polls this every 20s to detect withdrawal completion |
 | POST | `/api/payment/record` | student | Submit manual payment |
 | POST | `/api/payment/chapa/initialize` | student | Initialize Chapa payment |
 | POST | `/api/payment/chapa/verify` | student | Verify Chapa payment |
@@ -572,7 +701,7 @@ The system is deployed on Render's cloud platform with automatic deployments fro
 | DELETE | `/api/student/withdrawal/request` | student | Cancel withdrawal request |
 | POST | `/api/department/students/:id/withdrawal/approve` | department_head | Approve/reject withdrawal |
 | POST | `/api/registrar/students/:id/withdrawal/finance-approve` | finance | Finance approve withdrawal |
-| POST | `/api/registrar/students/:id/clear` | registrar | Grant final clearance |
+| POST | `/api/registrar/students/:id/clear` | registrar | Grant final clearance; triggers mobile dashboard lockout when status is `completed` |
 | GET | `/api/admin/reports/monthly-collections` | finance/admin | Monthly collections report |
 | GET | `/api/admin/reports/outstanding-debt` | finance/admin | Outstanding debt report |
 | GET | `/api/notifications` | student | Get notifications |
