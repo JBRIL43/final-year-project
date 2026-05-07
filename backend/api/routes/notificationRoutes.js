@@ -13,18 +13,9 @@ router.get('/unread-count', authenticateRequest, async (req, res) => {
     const userId = req.user?.user_id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
     await ensureNotificationsTable();
-
-    // notifications table stores firebase_uid, not user_id — look it up first
-    const userRes = await pool.query(
-      'SELECT firebase_uid FROM public.users WHERE user_id = $1 LIMIT 1',
-      [userId]
-    );
-    if (userRes.rows.length === 0) return res.json({ count: 0 });
-
-    const firebaseUid = userRes.rows[0].firebase_uid;
     const count = await pool.query(
-      'SELECT COUNT(*) FROM notifications WHERE firebase_uid = $1 AND is_read = false',
-      [firebaseUid]
+      'SELECT COUNT(*) FROM notifications WHERE user_id = $1 AND is_read = false',
+      [userId]
     );
     res.json({ count: parseInt(count.rows[0].count) });
   } catch (err) {
