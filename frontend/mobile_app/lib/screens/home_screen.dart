@@ -24,7 +24,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   bool _isLoadingDebt = true;
   bool _isLoadingStatement = true;
-  bool _isSubmittingWithdrawal = false;
 
   String? _debtError;
   String? _statementError;
@@ -102,96 +101,120 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _requestWithdrawal() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Confirm Withdrawal Request'),
-        content: const Text(
-          'Submit a withdrawal request for department and registrar review? This action starts the formal withdrawal workflow.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange[700],
-            ),
-            child: const Text('Submit Request'),
-          ),
-        ],
-      ),
-    );
+  bool get _isWithdrawalCompleted {
+    final withdrawalStatus = (_withdrawalStatus ?? '').toLowerCase();
+    final enrollmentStatus =
+        ((_debtData?['enrollmentStatus'] as String?) ?? '').toUpperCase();
+    final isCleared = _debtData?['isCleared'] == true;
 
-    if (confirmed != true || !mounted) return;
-
-    setState(() => _isSubmittingWithdrawal = true);
-    try {
-      final message = await DebtService().requestWithdrawal();
-      if (!mounted) return;
-      setState(() => _withdrawalStatus = 'requested');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message), backgroundColor: Colors.green),
-      );
-      await _loadDebtBalance();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _isSubmittingWithdrawal = false);
-      }
-    }
+    return withdrawalStatus == 'completed' ||
+        (enrollmentStatus == 'WITHDRAWN' && isCleared);
   }
 
-  Future<void> _cancelWithdrawal() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Cancel Withdrawal Request'),
-        content: const Text(
-          'Are you sure you want to cancel your withdrawal request?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('No'),
+  Widget _buildWithdrawalCompletedDashboard(NumberFormat formatter) {
+    return RefreshIndicator(
+      onRefresh: _loadDebtBalance,
+      child: ListView(
+        padding: const EdgeInsets.all(16.0),
+        children: [
+          Card(
+            color: Colors.red[50],
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: BorderSide(color: Colors.red.shade300),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.verified_user_outlined, color: Colors.red[700], size: 30),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Dashboard Locked',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                            color: Colors.red[800],
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Your withdrawal is completed. The dashboard is disabled because your enrollment has ended.',
+                          style: TextStyle(fontSize: 12, color: Colors.red[700]),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Yes, Cancel'),
+          const SizedBox(height: 12),
+          Card(
+            elevation: 0,
+            color: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: BorderSide(color: Colors.blueGrey.shade100),
+            ),
+            child: const Padding(
+              padding: EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Reapply guidance',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    'If you want to reapply, please contact the Registrar and the Admin office. They will guide you through the next steps.',
+                    style: TextStyle(fontSize: 13, height: 1.5),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            color: Colors.green[50],
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: BorderSide(color: Colors.green.shade300),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.green[700]),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Final balance: ${formatter.format((_debtData?['currentBalance'] as num?)?.toDouble() ?? 0)}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.green[900],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed: () => setState(() => _selectedIndex = 4),
+            icon: const Icon(Icons.more_horiz),
+            label: const Text('Open More'),
           ),
         ],
       ),
     );
-
-    if (confirmed != true || !mounted) return;
-
-    setState(() => _isSubmittingWithdrawal = true);
-    try {
-      await DebtService().cancelWithdrawal();
-      if (!mounted) return;
-      setState(() => _withdrawalStatus = null);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Withdrawal request cancelled.'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-      );
-    } finally {
-      if (mounted) setState(() => _isSubmittingWithdrawal = false);
-    }
   }
 
   Widget _buildDashboard(BuildContext context, NumberFormat formatter) {
@@ -226,6 +249,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (_debtData == null) {
       return const Center(child: Text('No debt data available'));
+    }
+
+    if (_isWithdrawalCompleted) {
+      return _buildWithdrawalCompletedDashboard(formatter);
     }
 
     final dashboardHistory =
@@ -950,25 +977,26 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final formatter = NumberFormat.currency(locale: 'en_ET', symbol: 'ETB ');
+    final title = _selectedIndex == 0
+        ? (_isWithdrawalCompleted
+            ? 'Dashboard Locked'
+            : (_debtData != null &&
+                    ((_debtData!['enrollmentStatus'] as String?) ?? '')
+                        .toUpperCase() ==
+                        'WITHDRAWN'
+                ? 'HU Student — Withdrawn'
+                : 'HU Student Debt System'))
+        : _selectedIndex == 1
+        ? 'Cost Statement'
+        : _selectedIndex == 2
+        ? 'Notifications'
+        : _selectedIndex == 3
+        ? 'Account'
+        : 'More';
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          _selectedIndex == 0
-              ? (_debtData != null &&
-                      ((_debtData!['enrollmentStatus'] as String?) ?? '')
-                          .toUpperCase() ==
-                          'WITHDRAWN'
-                  ? 'HU Student — Withdrawn'
-                  : 'HU Student Debt System')
-              : _selectedIndex == 1
-              ? 'Cost Statement'
-              : _selectedIndex == 2
-              ? 'Notifications'
-              : _selectedIndex == 3
-              ? 'Account'
-              : 'More',
-        ),
+        title: Text(title),
         actions: [
           if (_selectedIndex == 0 || _selectedIndex == 1)
             IconButton(
@@ -979,7 +1007,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
         ],
       ),
-      floatingActionButton: _selectedIndex == 0
+      floatingActionButton: _selectedIndex == 0 && !_isWithdrawalCompleted
           ? FloatingActionButton(
               onPressed: () {
                 Navigator.push(
