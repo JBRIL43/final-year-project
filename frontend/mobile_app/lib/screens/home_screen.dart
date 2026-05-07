@@ -7,6 +7,7 @@ import '../service/debt_service.dart';
 import 'notifications_screen.dart';
 import '../services/student_statement_service.dart';
 import '../utils/cost_statement_pdf.dart';
+import '../utils/clearance_certificate_pdf.dart';
 import 'account_screen.dart';
 import 'more_screen.dart';
 
@@ -199,6 +200,56 @@ class _HomeScreenState extends State<HomeScreen> {
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
                         color: Colors.green[900],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          // ── Download Documents Section ──
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.download, color: Colors.indigo[700]),
+                      const SizedBox(width: 10),
+                      const Text(
+                        'Download Documents',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Download all your clearance and financial documents. No need to visit the office.',
+                    style: TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
+                  const SizedBox(height: 14),
+                  // Cost-Sharing Statement Download
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => _downloadCostStatement(formatter),
+                      icon: const Icon(Icons.picture_as_pdf),
+                      label: const Text('Cost-Sharing Statement'),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  // Clearance Certificate Download
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: () => _downloadClearanceCertificate(formatter),
+                      icon: const Icon(Icons.verified_user),
+                      label: const Text('Clearance Certificate'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.green[700],
                       ),
                     ),
                   ),
@@ -972,6 +1023,106 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _downloadCostStatement(NumberFormat formatter) async {
+    if (_costBreakdown == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Loading cost statement...')),
+      );
+      return;
+    }
+
+    try {
+      final tuitionFull =
+          (_costBreakdown!['tuitionFullCost'] as num?)?.toDouble() ?? 0;
+      final tuitionShare =
+          (_costBreakdown!['tuitionStudentShare'] as num?)?.toDouble() ?? 0;
+      final boarding =
+          (_costBreakdown!['boardingCost'] as num?)?.toDouble() ?? 0;
+      final foodMonthly =
+          (_costBreakdown!['foodCostMonthly'] as num?)?.toDouble() ?? 0;
+      final foodAnnual =
+          (_costBreakdown!['foodCostAnnual'] as num?)?.toDouble() ?? 0;
+      final totalDebt =
+          (_costBreakdown!['totalDebt'] as num?)?.toDouble() ?? 0;
+
+      final pdf = generateCostStatementPdf(
+        fullName: '${_costBreakdown!['fullName'] ?? 'Student'}',
+        program: '${_costBreakdown!['program'] ?? 'N/A'}',
+        campus: '${_costBreakdown!['campus'] ?? 'Main Campus'}',
+        academicYear: '${_costBreakdown!['academicYear'] ?? 'N/A'}',
+        tuitionFullCost: tuitionFull,
+        tuitionStudentShare: tuitionShare,
+        boardingCost: boarding,
+        foodCostMonthly: foodMonthly,
+        foodCostAnnual: foodAnnual,
+        totalDebt: totalDebt,
+      );
+
+      if (!mounted) return;
+      await Printing.sharePdf(
+        bytes: await pdf.save(),
+        filename:
+            'Hawassa_University_Cost_Statement_${DateTime.now().year}.pdf',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to generate statement: $e')),
+      );
+    }
+  }
+
+  Future<void> _downloadClearanceCertificate(NumberFormat formatter) async {
+    if (_debtData == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Loading clearance data...')),
+      );
+      return;
+    }
+
+    try {
+      final fullName = _debtData!['fullName'] ?? 'Student';
+      final studentId = _debtData!['studentId'] ?? 'N/A';
+      final program = _debtData!['program'] ?? 'N/A';
+      final campus = _debtData!['campus'] ?? 'Main Campus';
+      final academicYear = _debtData!['academicYear'] ?? DateTime.now().year.toString();
+      final finalBalance = (_debtData!['currentBalance'] as num?)?.toDouble() ?? 0;
+
+      final clearanceDate = DateTime.now().toString().split(' ')[0];
+
+      final pdf = generateClearanceCertificatePdf(
+        fullName: fullName,
+        studentId: studentId,
+        program: program,
+        campus: campus,
+        academicYear: academicYear,
+        clearanceDate: clearanceDate,
+        finalBalance: finalBalance,
+      );
+
+      if (!mounted) return;
+      await Printing.sharePdf(
+        bytes: await pdf.save(),
+        filename: 'Hawassa_University_Clearance_Certificate_$studentId.pdf',
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Clearance certificate downloaded successfully'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to generate clearance certificate: $e')),
+      );
+    }
   }
 
   @override
