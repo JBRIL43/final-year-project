@@ -9,16 +9,30 @@ const router = express.Router();
 // GET /api/admin/users — list all admin users (not students)
 router.get('/users', authenticateRequest, requireRoles(['admin']), async (req, res) => {
   try {
+    const userCols = await getAvailableColumns('users', [
+      'updated_at', 'created_at', 'full_name', 'department',
+    ]);
+
+    const fullNameExpr = userCols.has('full_name') ? 'full_name' : "''::text AS full_name";
+    const departmentExpr = userCols.has('department') ? 'department' : "NULL::text AS department";
+    const createdAtExpr = userCols.has('created_at') ? 'created_at' : 'NOW() AS created_at';
+    const updatedAtExpr = userCols.has('updated_at')
+      ? 'updated_at'
+      : userCols.has('created_at')
+      ? 'created_at AS updated_at'
+      : 'NOW() AS updated_at';
+    const orderExpr = userCols.has('created_at') ? 'created_at DESC' : 'user_id DESC';
+
     const result = await pool.query(
-      `SELECT user_id, email, full_name, role, department, created_at, updated_at
+      `SELECT user_id, email, ${fullNameExpr}, role, ${departmentExpr}, ${createdAtExpr}, ${updatedAtExpr}
        FROM public.users
-       WHERE role IN ('ADMIN', 'REGISTRAR', 'DEPARTMENT_HEAD', 'FINANCE_OFFICER')
-       ORDER BY created_at DESC`
+       WHERE UPPER(COALESCE(role, '')) IN ('ADMIN', 'REGISTRAR', 'DEPARTMENT_HEAD', 'FINANCE_OFFICER')
+       ORDER BY ${orderExpr}`
     );
     res.json({ success: true, users: result.rows });
   } catch (error) {
-    console.error('Failed to fetch admin users:', error);
-    res.status(500).json({ error: 'Failed to fetch admin users' });
+    console.error('Failed to fetch admin users:', error.message);
+    res.status(500).json({ error: 'Failed to fetch admin users: ' + error.message });
   }
 });
 
@@ -880,11 +894,18 @@ router.post('/students', async (req, res) => {
       campus = 'Main Campus',
       living_arrangement = 'On-Campus',
       enrollment_status = 'Active',
+      payment_model = 'post_graduation',
+      pre_payment_amount = 0,
+      pre_payment_date = null,
+      pre_payment_clearance = false,
     } = req.body;
 
     if (!student_number || !full_name || !email || !department || !enrollment_year) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
+
+    const normalizedPaymentModel = normalizePaymentModel(payment_model);
+    const normalizedPrePaymentAmount = Number(pre_payment_amount) || 0;
 
     client = await pool.connect();
     await client.query('BEGIN');
