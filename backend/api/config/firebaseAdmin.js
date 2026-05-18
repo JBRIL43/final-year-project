@@ -76,6 +76,10 @@ function initializeFromEnv() {
     serviceAccount?.client_email &&
     serviceAccount?.private_key
   ) {
+    console.log(
+      '🔥 Initializing Firebase Admin from service account JSON. Project:',
+      serviceAccount.project_id
+    );
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
       databaseURL:
@@ -90,10 +94,19 @@ function initializeFromEnv() {
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
   const privateKey = getEnvPrivateKey();
 
+  console.log('🔥 Checking individual Firebase env vars:');
+  console.log('  ✓ FIREBASE_PROJECT_ID:', projectId ? 'SET' : 'MISSING');
+  console.log('  ✓ FIREBASE_CLIENT_EMAIL:', clientEmail ? 'SET' : 'MISSING');
+  console.log('  ✓ FIREBASE_PRIVATE_KEY:', privateKey ? 'SET' : 'MISSING');
+
   if (!projectId || !clientEmail || !privateKey) {
     return false;
   }
 
+  console.log(
+    '🔥 Initializing Firebase Admin from individual env vars. Project:',
+    projectId
+  );
   admin.initializeApp({
     credential: admin.credential.cert({
       projectId,
@@ -110,17 +123,18 @@ function initializeFromEnv() {
 if (admin.apps.length === 0) {
   try {
     if (initializeFromEnv()) {
-      console.log('Firebase Admin initialized from environment variables.');
+      console.log('✅ Firebase Admin initialized successfully.');
     } else {
       console.warn(
-        'Firebase Admin credentials are not configured. Set FIREBASE_SERVICE_ACCOUNT_JSON/FIREBASE_SERVICE_ACCOUNT(_BASE64) or FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY(_BASE64).'
+        '⚠️ Firebase Admin credentials are not configured. Set FIREBASE_SERVICE_ACCOUNT_JSON/FIREBASE_SERVICE_ACCOUNT(_BASE64) or FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY(_BASE64).'
       );
     }
   } catch (error) {
     console.error(
-      'Firebase Admin initialization failed. Notifications will be disabled until credentials are fixed.',
+      '❌ Firebase Admin initialization failed:',
       error.message
     );
+    console.error('Stack:', error.stack);
   }
 }
 
