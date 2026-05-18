@@ -355,31 +355,59 @@ PostgreSQL is hosted on a managed cloud database service. Schema migrations are 
 - Disabled payment FAB (green `+` button) when withdrawn state is detected
 - Maintained access to Notifications, Statement, Account, and More tabs for essential information
 
-**Recent Deployment: Document Downloads for Withdrawn Students (v2.2)**
+**Recent Deployment: Cost-Sharing Beneficiary Form Compliance (v2.3)**
 
-**Feature Summary:** Students with completed withdrawals can now download all required clearance and financial documents directly from the app without visiting the office.
+**Feature Summary:** Implementation of the official cost-sharing beneficiary form (Ethiopian Council of Ministers Regulation No. 447/2024) as a digital document with full compliance features.
+
+**Regulatory Requirement:**
+This form is mandated by Ethiopian education policy and serves as:
+- Official documentation of student financial obligation
+- Legal record for cost-sharing policy compliance
+- Essential input for ERCA (Ethiopian Revenue and Customs Authority) reporting
+- Verification document for university audits and inspections
+
+**Database Changes:**
+- Added `preparatory_school` field to students table for background verification
+- Added `cost_sharing_statement_accepted` and `cost_sharing_accepted_date` for compliance tracking
+- Created `historical_payments` table to track payments per academic year (2011-2018 onwards)
+- Created `cost_sharing_statement_audit` table for download audit trail and security logging
+- Indexes added for fast lookups and reporting
 
 **Mobile App Changes:**
-- Created new `clearance_certificate_pdf.dart` utility that generates official clearance certificates with:
-  - Student name, ID, program, campus, and academic year
-  - Final balance confirmation
-  - Registrar and Finance Officer signature lines
-  - Timestamp and document authentication
-- Added "Download Documents" section to withdrawn-completed dashboard with two download buttons:
-  - **Cost-Sharing Statement**: Full financial breakdown (already available on Statement tab)
-  - **Clearance Certificate**: New official withdrawal clearance document
-- Implemented `_downloadCostStatement()` and `_downloadClearanceCertificate()` helper methods
-- Downloads use the `printing` package for email, print, and storage options
+- Created comprehensive `cost_sharing_form_pdf.dart` PDF generator that:
+  - Matches the official paper form's structure exactly
+  - Includes all required fields (student info, program, campus, preparatory school)
+  - Generates cost breakdown tables with full financial details
+  - Includes "Amount in Words" section for legal documentation
+  - Features official declaration statement citing Regulation No. 447/2024
+  - Provides signature fields for Registrar, Finance Officer, and Student
+  - Adds unique document IDs for verification and audit trails
+- Added "Cost-Sharing Beneficiary Form" download button to:
+  - Withdrawn-completed dashboard (with Financial Statement and Clearance Certificate)
+  - Statement tab (alongside cost statement and financial breakdown)
+- Supports email, print, and storage options via Flutter printing package
+
+**Backend Routes Created:**
+- `POST /api/cost-sharing/accept` — Records student acceptance of cost-sharing statement
+- `GET /api/cost-sharing/statement` — Retrieves complete cost-sharing statement data
+- `GET /api/cost-sharing/historical-payments` — Fetches historical payment records by academic year
+- `POST /api/cost-sharing/log-download` — Audit logging for compliance tracking
+
+**Compliance Features:**
+- Automatic document ID generation with timestamp for fraud prevention
+- Download audit trail (date, time, format, IP address, device info, user role)
+- Student acceptance tracking with date-time stamps
+- Supports historical payment data for multi-year compliance reporting
+- Full integration with national regulatory requirements
 
 **User Benefits:**
-- Students no longer need to visit the registrar/admin office to obtain clearance documents
-- One-tap access to both financial and clearance documents
-- Easy sharing and printing for institutional records
-- Supports remote access for students unable to visit campus
+✅ Students can access official cost-sharing documentation without office visits
+✅ Complete financial transparency in a single downloadable document
+✅ Includes legal declaration of obligations per Ethiopian policy
+✅ Proper audit trail for university compliance and audits
+✅ Historical payment tracking for tax authority reporting (ERCA)
 
 **Deployment Status:** Code changes committed and pushed to `master` branch; awaiting Render rebuild confirmation.
-
-**Testing:** E2E test script `scripts/e2e/withdrawal_workflow_db_test.js` validates full withdrawal workflow including final dashboard lockout state and document download functionality.
 
 ### 5.2 User Training Strategies
 
@@ -414,6 +442,8 @@ Students are trained on:
 - Submitting payments via Chapa or manual receipt upload
 - Requesting and tracking withdrawal status through the app
 - Understanding the withdrawal workflow stages and what each status means
+- **Downloading official cost-sharing documents** including the beneficiary form, financial statement, and clearance certificate
+- Understanding the cost-sharing beneficiary form as an official legal document under Regulation No. 447/2024
 
 ### 5.3 User Manual
 
@@ -453,9 +483,36 @@ When your withdrawal request has been fully processed and approved by all stages
   - Displayed with a green background badge
 
 - **Download Documents Section:** (NEW — allows students to download all required documents without visiting the office)
+  - **Cost-Sharing Beneficiary Form PDF**: Official legal document required by Ethiopian Council of Ministers Regulation No. 447/2024. Includes:
+    - Your complete personal information (name, ID, program, campus, preparatory school)
+    - Cost breakdown showing the full tuition cost and your 15% cost-sharing obligation
+    - Monthly and annual boarding and food costs
+    - Historical payment records (if available)
+    - Amount in words (Birr format) for legal documentation
+    - Official declaration statement citing the national cost-sharing policy
+    - Signature fields for the Registrar, Finance Officer, and yourself
+    - Unique document ID for audit and verification purposes
   - **Cost-Sharing Statement PDF**: Full financial breakdown including tuition, boarding, food, and payment history
   - **Clearance Certificate PDF**: Official withdrawal clearance document signed by the Registrar and Finance Officer, confirming all obligations have been settled
   - Buttons for easy one-tap download and email/print/storage options
+
+**About the Cost-Sharing Beneficiary Form:**
+
+The cost-sharing beneficiary form is an official document mandated by Ethiopian education policy. It serves as:
+- Legal documentation of your 15% cost-sharing obligation
+- Official record for national education authority (ERCA) compliance
+- Verification document for university audits and inspections
+- Personal record of your financial commitment to higher education
+
+The form includes comprehensive information about your costs, payment history, and financial obligations. You can download and store this document for your records, email it to yourself, or print it for institutional submission.
+
+**Privacy and Compliance:**
+
+All downloaded documents include:
+- A unique document ID for verification and fraud prevention
+- Automatic audit logging (download date, time, and device information)
+- Integration with national regulatory compliance systems
+- Secure PDF generation with no data transmission to external services
 
 - **"Open More" Button:**
   - Navigates to the More tab for additional account information
@@ -628,11 +685,13 @@ Key achievements of the implementation include:
 
 - A Flutter mobile application that gives students real-time visibility into their debt balance, payment history, and withdrawal status, with integrated Chapa online payment support
 - A responsive mobile dashboard that gracefully handles the withdrawn-completed state: displays a clear "Dashboard Locked" banner with reapply guidance, disables payment submissions, and directs students to the Registrar and Admin offices for re-enrollment inquiries
+- **Full digital implementation of the cost-sharing beneficiary form (Regulation No. 447/2024)** with official PDF generation, audit logging, and compliance documentation required by Ethiopian education policy
 - A React-based administrative dashboard that enables finance officers, department heads, and registrars to manage their respective responsibilities through role-based access control
 - A four-stage withdrawal approval workflow with automated notifications at each stage, ensuring all stakeholders are informed in real time
 - A comprehensive finance reporting module with live data previews, charts, and CSV export for compliance and auditing purposes
 - A robust, schema-safe backend architecture that supports incremental database migrations without downtime, with defensive column-checking queries that maintain compatibility across schema versions
 - Backend route initialization fixes and error-handling improvements ensuring reliable Render deployments with zero-downtime rollback capability
+- **Document download functionality** enabling students to access clearance certificates, financial statements, and cost-sharing forms without physical office visits
 
 The system is deployed on Render's cloud platform with automatic deployments from GitHub, ensuring that updates are delivered reliably and with minimal operational overhead.
 
