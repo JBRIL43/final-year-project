@@ -1,8 +1,109 @@
 const express = require('express');
+const pool = require('../config/db');
 const firebaseAdmin = require('../config/firebaseAdmin');
 const { authenticateRequest } = require('../middleware/auth');
 
 const router = express.Router();
+
+// POST /api/auth/sync-firebase-users
+// One-time endpoint: reads all Firebase Auth users and upserts them into Supabase.
+// Protected by SYNC_SECRET env var — call with header: x-sync-secret: <value>
+// After running, remove or disable this endpoint.
+router.post('/sync-firebase-users', async (req, res) => {
+  const secret = process.env.SYNC_SECRET || 'hu-sync-2025';
+  if (req.headers['x-sync-secret'] !== secret) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+
+  if (!firebaseAdmin || firebaseAdmin.apps.length === 0) {
+    return res.status(500).json({ error: 'Firebase Admin not configured' });
+  }
+
+  const results = { inserted: [], updated: [], skipped: [], errors: [] };
+
+  try {
+    // List all Firebase users (handles pagination)
+    let nextPageToken;
+    const firebaseUsers = [];
+
+    do {
+      const listResult = await firebaseAdmin.auth().listUsers(1000, nextPageToken);
+      firebaseUsers.push(...listResult.users);
+      nextPageToken = listResult.pageToken;
+    } while (nextPageToken);
+
+    console.log(`Found ${firebaseUsers.length} Firebase users`);
+
+    for (const fbUser of firebaseUsers) {
+      try {
+        const email = fbUser.email?.toLowerCase().trim();
+        if (!email) {
+          results.skipped.push({ uid: fbUser.uid, reason: 'no email' });
+          continue;
+        }
+
+        const displayName = fbUser.displayName || email.split('@')[0];
+
+        // Check if user already exists in Supabase by firebase_uid or email
+        const existing = await pool.query(
+          `SELECT user_id, email, role, firebase_uid FROM public.users
+           WHERE firebase_uid = $1 OR LOWER(email) = LOWER($2)
+           LIMIT 1`,
+          [fbUser.uid, email]
+        );
+
+        if (existing.rows.length > 0) {
+          const row = existing.rows[0];
+          // Update firebase_uid if it was a local fallback
+          if (row.firebase_uid !== fbUser.uid) {
+            await pool.query(
+              `UPDATE public.users SET firebase_uid = $1, updated_at = NOW()
+               WHERE user_id = $2`,
+              [fbUser.uid, row.user_id]
+            );
+            results.updated.push({ email, uid: fbUser.uid, reason: 'uid_updated' });
+          } else {
+            results.skipped.push({ email, uid: fbUser.uid, reason: 'already_exists' });
+          }
+          continue;
+        }
+
+        // Determine role from email pattern (customize as needed)
+        let role = 'student';
+        if (email.includes('admin')) role = 'admin';
+        else if (email.includes('finance')) role = 'finance';
+        else if (email.includes('registrar')) role = 'registrar';
+        else if (email.includes('dept') || email.includes('head')) role = 'department_head';
+
+        // Insert new user
+        await pool.query(
+          `INSERT INTO public.users (firebase_uid, email, full_name, role, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, NOW(), NOW())`,
+          [fbUser.uid, email, displayName, role]
+        );
+
+        results.inserted.push({ email, uid: fbUser.uid, role });
+      } catch (userErr) {
+        results.errors.push({ uid: fbUser.uid, error: userErr.message });
+      }
+    }
+
+    res.json({
+      success: true,
+      summary: {
+        total_firebase_users: firebaseUsers.length,
+        inserted: results.inserted.length,
+        updated: results.updated.length,
+        skipped: results.skipped.length,
+        errors: results.errors.length,
+      },
+      details: results,
+    });
+  } catch (error) {
+    console.error('Firebase sync error:', error);
+    res.status(500).json({ error: 'Sync failed: ' + error.message });
+  }
+});
 
 // POST /api/auth/change-password — change password for current user
 router.post('/change-password', authenticateRequest, async (req, res) => {
