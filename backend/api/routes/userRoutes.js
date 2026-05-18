@@ -1,9 +1,73 @@
 const express = require('express');
 const pool = require('../config/db');
+const firebaseAdmin = require('../config/firebaseAdmin');
 const { ensureUsersFcmTokenColumn } = require('../utils/notifications');
 const { authenticateRequest } = require('../middleware/auth');
 
 const router = express.Router();
+
+async function resolveAppUserByIdentity(uid, email) {
+  const result = await pool.query(
+    `SELECT
+       user_id,
+       email,
+       full_name,
+       role,
+       department
+     FROM public.users
+     WHERE ($1::text IS NOT NULL AND firebase_uid = $1)
+        OR ($2::text IS NOT NULL AND LOWER(email) = LOWER($2))
+     ORDER BY user_id ASC
+     LIMIT 1`,
+    [uid || null, email || null]
+  );
+
+  return result.rows[0] || null;
+}
+
+router.post('/debug/firebase', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : req.body?.idToken;
+
+    if (!token) {
+      return res.status(400).json({ error: 'Bearer token or idToken is required' });
+    }
+
+    if (!firebaseAdmin || firebaseAdmin.apps.length === 0) {
+      return res.status(500).json({ error: 'Firebase Admin is not configured' });
+    }
+
+    const decoded = await firebaseAdmin.auth().verifyIdToken(token);
+    const appUser = await resolveAppUserByIdentity(decoded.uid, decoded.email || null);
+
+    return res.json({
+      success: true,
+      firebase: {
+        uid: decoded.uid,
+        email: decoded.email || null,
+        name: decoded.name || null,
+        issuer: decoded.iss || null,
+        audience: decoded.aud || null,
+        authTime: decoded.auth_time || null,
+      },
+      appUser,
+    });
+  } catch (error) {
+    console.error('Firebase debug verification failed:', {
+      message: error.message,
+      code: error.code || error.errorInfo?.code || null,
+      stack: error.stack,
+    });
+
+    return res.status(401).json({
+      success: false,
+      error: 'Token verification failed',
+      message: error.message,
+      code: error.code || error.errorInfo?.code || null,
+    });
+  }
+});
 
 router.get('/me', authenticateRequest, async (req, res) => {
   res.json({
