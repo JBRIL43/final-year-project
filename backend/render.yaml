@@ -12,16 +12,8 @@ services:
         value: 10000
 
       # ── Database ──────────────────────────────────────────────────────
-      # Set these in the Render dashboard → Environment tab
-      - key: DB_HOST
-        sync: false
-      - key: DB_PORT
-        sync: false
-      - key: DB_NAME
-        sync: false
-      - key: DB_USER
-        sync: false
-      - key: DB_PASSWORD
+      # Set the Supabase connection string in the Render dashboard → Environment tab
+      - key: SUPABASE_DATABASE_URL
         sync: false
 
       # ── CORS ──────────────────────────────────────────────────────────

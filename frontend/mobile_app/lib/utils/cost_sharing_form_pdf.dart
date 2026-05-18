@@ -66,9 +66,7 @@ pw.Document generateCostSharingStatementPdf({
           // ── Student Information ────────────────────────────────
           pw.Container(
             padding: const pw.EdgeInsets.all(10),
-            decoration: pw.BoxDecoration(
-              border: pw.Border.all(width: 1),
-            ),
+            decoration: pw.BoxDecoration(border: pw.Border.all(width: 1)),
             child: pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
@@ -87,10 +85,7 @@ pw.Document generateCostSharingStatementPdf({
           // ── Cost Breakdown ────────────────────────────────
           pw.Text(
             'COST BREAKDOWN (Academic Year $academicYear)',
-            style: pw.TextStyle(
-              fontSize: 12,
-              fontWeight: pw.FontWeight.bold,
-            ),
+            style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
           ),
           pw.SizedBox(height: 8),
 
@@ -228,9 +223,7 @@ pw.Document generateCostSharingStatementPdf({
           // ── Amount In Words ────────────────────────────────
           pw.Container(
             padding: const pw.EdgeInsets.all(8),
-            decoration: pw.BoxDecoration(
-              border: pw.Border.all(width: 0.5),
-            ),
+            decoration: pw.BoxDecoration(border: pw.Border.all(width: 0.5)),
             child: pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
@@ -253,10 +246,7 @@ pw.Document generateCostSharingStatementPdf({
           if (paymentHistory.isNotEmpty) ...[
             pw.Text(
               'PAYMENT HISTORY',
-              style: pw.TextStyle(
-                fontSize: 12,
-                fontWeight: pw.FontWeight.bold,
-              ),
+              style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
             ),
             pw.SizedBox(height: 8),
             pw.Table(
@@ -306,7 +296,8 @@ pw.Document generateCostSharingStatementPdf({
                   ],
                 ),
                 ...paymentHistory.map((payment) {
-                  final year = payment['academic_year'] ?? payment['year'] ?? '';
+                  final year =
+                      payment['academic_year'] ?? payment['year'] ?? '';
                   final amount = ((payment['amount'] as num?) ?? 0).toDouble();
                   final receiptNo = payment['receipt_no'] ?? 'N/A';
                   final date = payment['payment_date'] ?? payment['date'] ?? '';
@@ -325,7 +316,10 @@ pw.Document generateCostSharingStatementPdf({
                       ),
                       pw.Padding(
                         padding: const pw.EdgeInsets.all(4),
-                        child: pw.Text(receiptNo, textAlign: pw.TextAlign.center),
+                        child: pw.Text(
+                          receiptNo,
+                          textAlign: pw.TextAlign.center,
+                        ),
                       ),
                       pw.Padding(
                         padding: const pw.EdgeInsets.all(4),
@@ -342,9 +336,7 @@ pw.Document generateCostSharingStatementPdf({
           // ── Official Declaration ────────────────────────────────
           pw.Container(
             padding: const pw.EdgeInsets.all(10),
-            decoration: pw.BoxDecoration(
-              border: pw.Border.all(width: 1),
-            ),
+            decoration: pw.BoxDecoration(border: pw.Border.all(width: 1)),
             child: pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
@@ -379,9 +371,7 @@ pw.Document generateCostSharingStatementPdf({
                     width: 80,
                     height: 40,
                     decoration: pw.BoxDecoration(
-                      border: pw.Border(
-                        bottom: pw.BorderSide(width: 1),
-                      ),
+                      border: pw.Border(bottom: pw.BorderSide(width: 1)),
                     ),
                   ),
                   pw.SizedBox(height: 2),
@@ -395,13 +385,14 @@ pw.Document generateCostSharingStatementPdf({
                     width: 80,
                     height: 40,
                     decoration: pw.BoxDecoration(
-                      border: pw.Border(
-                        bottom: pw.BorderSide(width: 1),
-                      ),
+                      border: pw.Border(bottom: pw.BorderSide(width: 1)),
                     ),
                   ),
                   pw.SizedBox(height: 2),
-                  pw.Text('Finance Officer', style: const pw.TextStyle(fontSize: 9)),
+                  pw.Text(
+                    'Finance Officer',
+                    style: const pw.TextStyle(fontSize: 9),
+                  ),
                 ],
               ),
               pw.Column(
@@ -411,9 +402,7 @@ pw.Document generateCostSharingStatementPdf({
                     width: 80,
                     height: 40,
                     decoration: pw.BoxDecoration(
-                      border: pw.Border(
-                        bottom: pw.BorderSide(width: 1),
-                      ),
+                      border: pw.Border(bottom: pw.BorderSide(width: 1)),
                     ),
                   ),
                   pw.SizedBox(height: 2),
@@ -436,17 +425,11 @@ pw.Document generateCostSharingStatementPdf({
                 ),
                 pw.Text(
                   'Document ID: HU-CSSB-$studentId-${DateTime.now().millisecondsSinceEpoch}',
-                  style: const pw.TextStyle(
-                    fontSize: 8,
-                    color: PdfColors.grey,
-                  ),
+                  style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey),
                 ),
                 pw.Text(
                   'Hawassa University Student Debt Management System',
-                  style: const pw.TextStyle(
-                    fontSize: 8,
-                    color: PdfColors.grey,
-                  ),
+                  style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey),
                 ),
               ],
             ),
@@ -498,7 +481,7 @@ String _convertNumberToWords(double amount) {
     'Six',
     'Seven',
     'Eight',
-    'Nine'
+    'Nine',
   ];
   final teens = [
     'Ten',
@@ -510,7 +493,7 @@ String _convertNumberToWords(double amount) {
     'Sixteen',
     'Seventeen',
     'Eighteen',
-    'Nineteen'
+    'Nineteen',
   ];
   final tens = [
     '',
@@ -522,7 +505,7 @@ String _convertNumberToWords(double amount) {
     'Sixty',
     'Seventy',
     'Eighty',
-    'Ninety'
+    'Ninety',
   ];
   final scales = ['', 'Thousand', 'Million', 'Billion'];
 

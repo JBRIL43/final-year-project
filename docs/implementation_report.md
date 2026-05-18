@@ -260,7 +260,7 @@ The system was demonstrated to university stakeholders using a demo environment 
 
 **Connection Security**
 
-The PostgreSQL database connection uses environment variables for all credentials (`DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`). These are never committed to source control. On Render, they are stored as encrypted environment variables in the service dashboard.
+The PostgreSQL database connection uses a Supabase connection string stored in environment variables (`SUPABASE_DATABASE_URL`, with `DATABASE_URL` as a fallback). These are never committed to source control. The application enables SSL for hosted PostgreSQL providers such as Supabase.
 
 **Parameterized Queries**
 
@@ -268,7 +268,7 @@ All database queries use parameterized statements (`$1`, `$2`, ...) via the `pg`
 
 **Role and Privilege Assignment**
 
-The database user (`DB_USER`) is granted only the minimum required privileges: `SELECT`, `INSERT`, `UPDATE`, and `DELETE` on the `public` schema tables. `DROP`, `CREATE`, and `TRUNCATE` privileges are not granted to the application user. Schema migrations are applied manually by a privileged database administrator.
+The database role used by the application is granted only the minimum required privileges: `SELECT`, `INSERT`, `UPDATE`, and `DELETE` on the `public` schema tables. `DROP`, `CREATE`, and `TRUNCATE` privileges are not granted to the application user. Schema migrations are applied manually by a privileged database administrator.
 
 **Schema Isolation**
 
@@ -551,10 +551,10 @@ cd backend && npm install
 
 # 3. Configure environment variables
 cp backend/api/.env.example backend/api/.env
-# Edit .env with your database credentials, Firebase config, and Chapa keys
+# Edit .env with your Supabase connection string, Firebase config, and Chapa keys
 
 # 4. Apply database migrations (in order)
-psql -U <db_user> -d <db_name> -f backend/database/complete_schema.sql
+psql "$SUPABASE_DATABASE_URL" -f backend/database/complete_schema.sql
 # Apply additional migration files as needed
 
 # 5. Start the server
@@ -770,11 +770,8 @@ The system is deployed on Render's cloud platform with automatic deployments fro
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `PORT` | No | Server port (default 3000) |
-| `DB_HOST` | Yes | PostgreSQL host |
-| `DB_PORT` | Yes | PostgreSQL port |
-| `DB_NAME` | Yes | Database name |
-| `DB_USER` | Yes | Database user |
-| `DB_PASSWORD` | Yes | Database password |
+| `SUPABASE_DATABASE_URL` | Yes | Supabase PostgreSQL connection string |
+| `DATABASE_URL` | No | Optional fallback PostgreSQL connection string |
 | `CLIENT_URL` | Yes | Admin dashboard URL (CORS allowlist) |
 | `CHAPA_SECRET_KEY` | Yes | Chapa secret API key |
 | `CHAPA_PUBLIC_KEY` | Yes | Chapa public API key |

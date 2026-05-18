@@ -52,10 +52,7 @@ pw.Document generateClearanceCertificatePdf({
             alignment: pw.Alignment.center,
             child: pw.Text(
               fullName,
-              style: pw.TextStyle(
-                fontSize: 16,
-                fontWeight: pw.FontWeight.bold,
-              ),
+              style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
             ),
           ),
           pw.SizedBox(height: 8),
@@ -69,9 +66,7 @@ pw.Document generateClearanceCertificatePdf({
           pw.SizedBox(height: 20),
           pw.Container(
             padding: const pw.EdgeInsets.all(12),
-            decoration: pw.BoxDecoration(
-              border: pw.Border.all(width: 1),
-            ),
+            decoration: pw.BoxDecoration(border: pw.Border.all(width: 1)),
             child: pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
@@ -79,7 +74,10 @@ pw.Document generateClearanceCertificatePdf({
                 _buildCertRow('Campus', campus),
                 _buildCertRow('Academic Year', academicYear),
                 _buildCertRow('Clearance Date', clearanceDate),
-                _buildCertRow('Final Balance', 'ETB ${finalBalance.toStringAsFixed(2)}'),
+                _buildCertRow(
+                  'Final Balance',
+                  'ETB ${finalBalance.toStringAsFixed(2)}',
+                ),
               ],
             ),
           ),
@@ -110,9 +108,7 @@ pw.Document generateClearanceCertificatePdf({
                     width: 100,
                     height: 50,
                     decoration: pw.BoxDecoration(
-                      border: pw.Border(
-                        bottom: pw.BorderSide(width: 1),
-                      ),
+                      border: pw.Border(bottom: pw.BorderSide(width: 1)),
                     ),
                   ),
                   pw.SizedBox(height: 4),
@@ -126,13 +122,14 @@ pw.Document generateClearanceCertificatePdf({
                     width: 100,
                     height: 50,
                     decoration: pw.BoxDecoration(
-                      border: pw.Border(
-                        bottom: pw.BorderSide(width: 1),
-                      ),
+                      border: pw.Border(bottom: pw.BorderSide(width: 1)),
                     ),
                   ),
                   pw.SizedBox(height: 4),
-                  pw.Text('Finance Officer', style: const pw.TextStyle(fontSize: 10)),
+                  pw.Text(
+                    'Finance Officer',
+                    style: const pw.TextStyle(fontSize: 10),
+                  ),
                 ],
               ),
             ],
@@ -144,7 +141,10 @@ pw.Document generateClearanceCertificatePdf({
               children: [
                 pw.Text(
                   'This document is issued on ${DateTime.now().toString().split(' ')[0]}',
-                  style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey),
+                  style: const pw.TextStyle(
+                    fontSize: 10,
+                    color: PdfColors.grey,
+                  ),
                 ),
                 pw.Text(
                   'Hawassa University Student Debt Management System',
@@ -174,10 +174,7 @@ pw.Widget _buildCertRow(String label, String value) {
             style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
           ),
         ),
-        pw.Expanded(
-          flex: 3,
-          child: pw.Text(value),
-        ),
+        pw.Expanded(flex: 3, child: pw.Text(value)),
       ],
     ),
   );

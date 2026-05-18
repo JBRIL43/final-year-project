@@ -229,7 +229,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(width: 10),
                       const Text(
                         'Download Documents',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ],
                   ),
@@ -941,9 +944,7 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: () => _downloadCostSharingStatement(formatter),
             icon: const Icon(Icons.description),
             label: const Text('Download Cost-Sharing Form'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.amber[600],
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.amber[600]),
           ),
           const SizedBox(height: 12),
           Card(
@@ -1175,8 +1176,7 @@ class _HomeScreenState extends State<HomeScreen> {
           (_costBreakdown!['foodCostMonthly'] as num?)?.toDouble() ?? 0;
       final foodAnnual =
           (_costBreakdown!['foodCostAnnual'] as num?)?.toDouble() ?? 0;
-      final totalDebt =
-          (_costBreakdown!['totalDebt'] as num?)?.toDouble() ?? 0;
+      final totalDebt = (_costBreakdown!['totalDebt'] as num?)?.toDouble() ?? 0;
 
       final fullName = _debtData!['fullName'] ?? 'Student';
       final studentId = _debtData!['studentId'] ?? 'N/A';
@@ -1224,7 +1224,9 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to generate cost-sharing statement: $e')),
+        SnackBar(
+          content: Text('Failed to generate cost-sharing statement: $e'),
+        ),
       );
     }
   }

@@ -93,7 +93,8 @@ Defined in `backend/api/.env`. Key variables:
 | Variable | Purpose |
 |----------|---------|
 | `PORT` | Server port (default 3000) |
-| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | PostgreSQL connection |
+| `SUPABASE_DATABASE_URL` | Supabase PostgreSQL connection string |
+| `DATABASE_URL` | Optional fallback PostgreSQL connection string |
 | `CLIENT_URL` | Allowed CORS origin |
 
 ## API Base URL (Flutter)

@@ -72,7 +72,10 @@ async function authenticateRequest(req, res, next) {
 
     next();
   } catch (error) {
-    console.error('Authentication failed:', error.message);
+    console.error('Authentication failed:', {
+      message: error.message,
+      code: error.code || error.errorInfo?.code || null,
+    });
     return res.status(401).json({ error: 'Unauthorized' });
   }
 }

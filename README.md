@@ -90,7 +90,8 @@ Key environment variables:
 | Variable | Purpose |
 |----------|---------|
 | `PORT` | Server port (default 3000) |
-| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | PostgreSQL connection |
+| `SUPABASE_DATABASE_URL` | Supabase PostgreSQL connection string (`sslmode=require`) |
+| `DATABASE_URL` | Optional fallback PostgreSQL connection string |
 | `CLIENT_URL` | Allowed CORS origin (admin dashboard URL) |
 | `CHAPA_SECRET_KEY` | Chapa API secret key |
 | `CHAPA_PUBLIC_KEY` | Chapa API public key |
@@ -106,7 +107,7 @@ The backend is configured for deployment on [Render](https://render.com) via `ba
 - **Port**: `10000`
 - **Production URL**: `https://final-year-project-r2h8.onrender.com`
 
-Database credentials (`DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`) must be set manually in the Render dashboard under the Environment tab — they are not committed to the config file.
+Set `SUPABASE_DATABASE_URL` in the deployment environment to point to the Supabase project database. The app will prefer `SUPABASE_DATABASE_URL` and fall back to `DATABASE_URL` if needed.
 
 ### Flutter Mobile App
 

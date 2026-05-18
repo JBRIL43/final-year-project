@@ -344,14 +344,12 @@ async function validateClearanceAllowed(studentId) {
     }
   }
 
-  if (enrollmentStatus === 'GRADUATED') {
-    if (balance > 0) {
+  if (enrollmentStatus === 'GRADUATED' && balance > 0) {
+    
       return { allowed: false, message: 'Graduating students must have a zero balance before clearance' };
     }
+    return { allowed: true };
   }
-
-  return { allowed: true };
-}
 
 router.use(authenticateRequest, requireRoles(['registrar', 'finance']));
 

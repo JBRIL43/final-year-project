@@ -24,6 +24,16 @@ interface AuthContextType {
   logout: () => Promise<void>
 }
 
+class ProfileLoadError extends Error {
+  status: number
+
+  constructor(status: number, message: string) {
+    super(message)
+    this.name = 'ProfileLoadError'
+    this.status = status
+  }
+}
+
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
@@ -65,7 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
 
     if (!response.ok) {
-      throw new Error(`Failed to load user profile (${response.status})`)
+      throw new ProfileLoadError(response.status, `Failed to load user profile (${response.status})`)
     }
 
     const data = (await response.json()) as { success: boolean; user: UserProfile }
@@ -76,10 +86,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         try {
-          const idToken = await currentUser.getIdToken()
+          let idToken = await currentUser.getIdToken()
           localStorage.setItem('firebase_id_token', idToken)
 
-          const currentProfile = await loadProfile(idToken)
+          let currentProfile: UserProfile
+          try {
+            currentProfile = await loadProfile(idToken)
+          } catch (error) {
+            const shouldRetryWithFreshToken =
+              error instanceof ProfileLoadError && error.status === 401
+
+            if (!shouldRetryWithFreshToken) {
+              throw error
+            }
+
+            idToken = await currentUser.getIdToken(true)
+            localStorage.setItem('firebase_id_token', idToken)
+            currentProfile = await loadProfile(idToken)
+          }
+
           const resolvedRole = currentProfile?.role || 'student'
 
           setUser(currentUser)

@@ -1,12 +1,19 @@
 const { Pool } = require('pg');
 require('dotenv').config();
 
-const connectionString = process.env.DATABASE_URL;
+const connectionString = process.env.SUPABASE_DATABASE_URL || process.env.DATABASE_URL;
 const shouldUseSsl =
   process.env.DB_SSL === 'true' ||
   /render|neon|supabase|railway|cloud|amazonaws|azure/i.test(connectionString || '');
 
+const connectionLabel = process.env.SUPABASE_DATABASE_URL
+  ? 'SUPABASE_DATABASE_URL'
+  : connectionString
+    ? 'DATABASE_URL'
+    : 'DB_HOST/DB_PORT/DB_NAME';
+
 console.log('🔍 DATABASE_URL:', connectionString ? 'SET' : 'NOT SET');
+console.log('🔍 Database source:', connectionLabel);
 console.log('🔍 Should use SSL:', shouldUseSsl);
 console.log('🔍 Connection string preview:', connectionString ? connectionString.substring(0, 50) + '...' : 'N/A');
 
