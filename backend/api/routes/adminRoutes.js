@@ -150,6 +150,10 @@ async function createOrResolveFirebaseUid({ studentNumber, email, fullName }) {
   const fallbackUid = buildFallbackUid(studentNumber);
 
   if (!firebaseAdmin || firebaseAdmin.apps.length === 0) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('Firebase Admin is not configured');
+    }
+
     return {
       uid: fallbackUid,
       source: 'fallback',
@@ -363,12 +367,10 @@ router.post('/users', authenticateRequest, requireRoles(['admin']), async (req, 
       return res.status(500).json({ error: 'Firebase Admin is not configured' });
     }
 
-    const userRecord = await firebaseAdmin.auth().createUser({
+    const firebaseResult = await createOrResolveFirebaseUid({
+      studentNumber: email,
       email,
-      emailVerified: false,
-      password: '12345678',
-      displayName: email.split('@')[0],
-      disabled: false,
+      fullName: email.split('@')[0],
     });
 
     let insertResult;
@@ -378,11 +380,13 @@ router.post('/users', authenticateRequest, requireRoles(['admin']), async (req, 
         `INSERT INTO public.users (firebase_uid, email, full_name, role, department, created_at)
          VALUES ($1, $2, $3, $4, $5, NOW())
          RETURNING user_id, email, role, department`,
-        [userRecord.uid, email, email.split('@')[0], role, department]
+        [firebaseResult.uid, email, email.split('@')[0], role, department]
       );
     } catch (dbError) {
       try {
-        await firebaseAdmin.auth().deleteUser(userRecord.uid);
+        if (firebaseResult.source === 'created') {
+          await firebaseAdmin.auth().deleteUser(firebaseResult.uid);
+        }
       } catch (cleanupError) {
         console.error('Failed to clean up Firebase user after DB insert error:', cleanupError.message);
       }
