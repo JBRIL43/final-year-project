@@ -44,6 +44,23 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
     return <Navigate to="/login" replace />
   }
 
+  // If user is authenticated but role resolved to 'student', they may not be
+  // in Supabase yet. Show a helpful message instead of silently redirecting.
+  if (role === 'student' && user) {
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100vh', gap: 2, p: 3, textAlign: 'center' }}>
+        <CircularProgress />
+        <Box>
+          <strong>Account not configured</strong>
+          <br />
+          You are logged in as <strong>{user.email}</strong> but your account has not been set up in the system yet.
+          <br /><br />
+          Ask your administrator to run the Firebase sync and assign your role in Supabase.
+        </Box>
+      </Box>
+    )
+  }
+
   if (!roleAllowed) {
     return <Navigate to={roleHome} replace />
   }
