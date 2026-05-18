@@ -13,7 +13,6 @@ const registrarRoutes = require('./routes/registrarRoutes');
 const departmentRoutes = require('./routes/departmentRoutes');
 const faydaRoutes = require('./routes/faydaRoutes');
 const semesterAmountsRoutes = require('./routes/semesterAmountsRoutes');
-const costSharingRoutes = require('./routes/costSharingRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -48,7 +47,6 @@ app.use('/api/user', userRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/student', studentRoutes);
 app.use('/api/registrar', registrarRoutes);
-app.use('/api/cost-sharing', costSharingRoutes);
 app.use('/api/admin/fayda', faydaRoutes);
 app.use('/api/admin/semester-amounts', semesterAmountsRoutes);
 app.use('/api/department', departmentRoutes);
@@ -56,32 +54,6 @@ app.use('/api/department', departmentRoutes);
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
-});
-
-// Database health check
-app.get('/api/health/db', async (req, res) => {
-  try {
-    const pool = require('./config/db');
-    const result = await pool.query(
-      `SELECT COUNT(*) as table_count FROM information_schema.tables WHERE table_schema = 'public'`
-    );
-    const tableCount = parseInt(result.rows[0].table_count);
-    res.json({
-      status: 'OK',
-      database: 'connected',
-      tables_in_schema: tableCount,
-      tables_expected: 13,
-      schema_ready: tableCount >= 13,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    res.status(500).json({
-      status: 'ERROR',
-      database: 'disconnected',
-      error: error.message,
-      timestamp: new Date().toISOString(),
-    });
-  }
 });
 
 // Start server

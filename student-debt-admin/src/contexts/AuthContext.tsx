@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { onAuthStateChanged, signOut, type User } from 'firebase/auth'
+import { onAuthStateChanged, type User } from 'firebase/auth'
 import { auth } from '../lib/firebase'
 import { API_BASE_URL } from '../services/api'
 
@@ -21,17 +21,6 @@ interface AuthContextType {
   role: UserRole
   department: string | null
   profile: UserProfile | null
-  logout: () => Promise<void>
-}
-
-class ProfileLoadError extends Error {
-  status: number
-
-  constructor(status: number, message: string) {
-    super(message)
-    this.name = 'ProfileLoadError'
-    this.status = status
-  }
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -41,7 +30,6 @@ const AuthContext = createContext<AuthContextType>({
   role: 'student',
   department: null,
   profile: null,
-  logout: async () => {},
 })
 
 export function useAuth() {
@@ -56,16 +44,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [department, setDepartment] = useState<string | null>(null)
   const [profile, setProfile] = useState<UserProfile | null>(null)
 
-  const logout = async () => {
-    await signOut(auth)
-    localStorage.removeItem('firebase_id_token')
-    setUser(null)
-    setIsAdmin(false)
-    setRole('student')
-    setDepartment(null)
-    setProfile(null)
-  }
-
   const loadProfile = async (token: string) => {
     const response = await fetch(`${API_BASE_URL}/api/user/me`, {
       method: 'GET',
@@ -75,7 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
 
     if (!response.ok) {
-      throw new ProfileLoadError(response.status, `Failed to load user profile (${response.status})`)
+      throw new Error(`Failed to load user profile (${response.status})`)
     }
 
     const data = (await response.json()) as { success: boolean; user: UserProfile }
@@ -86,25 +64,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         try {
-          let idToken = await currentUser.getIdToken()
+          const idToken = await currentUser.getIdToken()
           localStorage.setItem('firebase_id_token', idToken)
 
-          let currentProfile: UserProfile
-          try {
-            currentProfile = await loadProfile(idToken)
-          } catch (error) {
-            const shouldRetryWithFreshToken =
-              error instanceof ProfileLoadError && error.status === 401
-
-            if (!shouldRetryWithFreshToken) {
-              throw error
-            }
-
-            idToken = await currentUser.getIdToken(true)
-            localStorage.setItem('firebase_id_token', idToken)
-            currentProfile = await loadProfile(idToken)
-          }
-
+          const currentProfile = await loadProfile(idToken)
           const resolvedRole = currentProfile?.role || 'student'
 
           setUser(currentUser)
@@ -135,7 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <AuthContext.Provider value={{ user, loading, isAdmin, role, department, profile, logout }}>
+    <AuthContext.Provider value={{ user, loading, isAdmin, role, department, profile }}>
       {children}
     </AuthContext.Provider>
   )

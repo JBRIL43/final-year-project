@@ -8,7 +8,6 @@ import 'notifications_screen.dart';
 import '../services/student_statement_service.dart';
 import '../utils/cost_statement_pdf.dart';
 import '../utils/clearance_certificate_pdf.dart';
-import '../utils/cost_sharing_form_pdf.dart';
 import 'account_screen.dart';
 import 'more_screen.dart';
 
@@ -242,23 +241,13 @@ class _HomeScreenState extends State<HomeScreen> {
                     style: TextStyle(fontSize: 12, color: Colors.black54),
                   ),
                   const SizedBox(height: 14),
-                  // Cost-Sharing Beneficiary Form Download
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: () => _downloadCostSharingStatement(formatter),
-                      icon: const Icon(Icons.description),
-                      label: const Text('Cost-Sharing Beneficiary Form'),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
                   // Cost-Sharing Statement Download
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
                       onPressed: () => _downloadCostStatement(formatter),
                       icon: const Icon(Icons.picture_as_pdf),
-                      label: const Text('Financial Statement'),
+                      label: const Text('Cost-Sharing Statement'),
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -939,13 +928,6 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: const Icon(Icons.picture_as_pdf),
             label: const Text('Download Statement'),
           ),
-          const SizedBox(height: 10),
-          ElevatedButton.icon(
-            onPressed: () => _downloadCostSharingStatement(formatter),
-            icon: const Icon(Icons.description),
-            label: const Text('Download Cost-Sharing Form'),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.amber[600]),
-          ),
           const SizedBox(height: 12),
           Card(
             child: Padding(
@@ -1152,81 +1134,6 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to generate clearance certificate: $e')),
-      );
-    }
-  }
-
-  Future<void> _downloadCostSharingStatement(NumberFormat formatter) async {
-    if (_costBreakdown == null || _debtData == null) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Loading cost-sharing data...')),
-      );
-      return;
-    }
-
-    try {
-      final tuitionFull =
-          (_costBreakdown!['tuitionFullCost'] as num?)?.toDouble() ?? 0;
-      final tuitionShare =
-          (_costBreakdown!['tuitionStudentShare'] as num?)?.toDouble() ?? 0;
-      final boarding =
-          (_costBreakdown!['boardingCost'] as num?)?.toDouble() ?? 0;
-      final foodMonthly =
-          (_costBreakdown!['foodCostMonthly'] as num?)?.toDouble() ?? 0;
-      final foodAnnual =
-          (_costBreakdown!['foodCostAnnual'] as num?)?.toDouble() ?? 0;
-      final totalDebt = (_costBreakdown!['totalDebt'] as num?)?.toDouble() ?? 0;
-
-      final fullName = _debtData!['fullName'] ?? 'Student';
-      final studentId = _debtData!['studentId'] ?? 'N/A';
-      final program = _debtData!['program'] ?? 'N/A';
-      final campus = _debtData!['campus'] ?? 'Main Campus';
-      final academicYear =
-          _costBreakdown!['academicYear'] ?? DateTime.now().year.toString();
-      final preparatorySchool = _debtData!['preparatory_school'] ?? 'N/A';
-
-      // Get payment history - use dashboard history if available
-      final paymentHistory =
-          (_debtData!['paymentHistory'] as List<dynamic>? ?? [])
-              .cast<Map<String, dynamic>>();
-
-      final pdf = generateCostSharingStatementPdf(
-        fullName: fullName,
-        studentId: studentId,
-        program: program,
-        campus: campus,
-        academicYear: academicYear,
-        preparatorySchool: preparatorySchool,
-        tuitionFullCost: tuitionFull,
-        tuitionStudentShare: tuitionShare,
-        boardingCost: boarding,
-        foodCostMonthly: foodMonthly,
-        foodCostAnnual: foodAnnual,
-        totalDebt: totalDebt,
-        paymentHistory: paymentHistory,
-      );
-
-      if (!mounted) return;
-      await Printing.sharePdf(
-        bytes: await pdf.save(),
-        filename:
-            'Hawassa_University_Cost_Sharing_Statement_${DateTime.now().year}.pdf',
-      );
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Cost-sharing statement downloaded successfully'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to generate cost-sharing statement: $e'),
-        ),
       );
     }
   }
