@@ -8,6 +8,7 @@ import 'notifications_screen.dart';
 import '../services/student_statement_service.dart';
 import '../utils/cost_statement_pdf.dart';
 import '../utils/clearance_certificate_pdf.dart';
+import '../utils/cost_sharing_form_pdf.dart';
 import 'account_screen.dart';
 import 'more_screen.dart';
 
@@ -104,8 +105,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   bool get _isWithdrawalCompleted {
     final withdrawalStatus = (_withdrawalStatus ?? '').toLowerCase();
-    final enrollmentStatus =
-        ((_debtData?['enrollmentStatus'] as String?) ?? '').toUpperCase();
+    final enrollmentStatus = ((_debtData?['enrollmentStatus'] as String?) ?? '')
+        .toUpperCase();
     final isCleared = _debtData?['isCleared'] == true;
 
     return withdrawalStatus == 'completed' ||
@@ -129,7 +130,11 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.verified_user_outlined, color: Colors.red[700], size: 30),
+                  Icon(
+                    Icons.verified_user_outlined,
+                    color: Colors.red[700],
+                    size: 30,
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -146,7 +151,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         const SizedBox(height: 4),
                         Text(
                           'Your withdrawal is completed. The dashboard is disabled because your enrollment has ended.',
-                          style: TextStyle(fontSize: 12, color: Colors.red[700]),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.red[700],
+                          ),
                         ),
                       ],
                     ),
@@ -231,13 +239,23 @@ class _HomeScreenState extends State<HomeScreen> {
                     style: TextStyle(fontSize: 12, color: Colors.black54),
                   ),
                   const SizedBox(height: 14),
+                  // Cost-Sharing Beneficiary Form Download
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => _downloadCostSharingStatement(formatter),
+                      icon: const Icon(Icons.description),
+                      label: const Text('Cost-Sharing Beneficiary Form'),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
                   // Cost-Sharing Statement Download
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
                       onPressed: () => _downloadCostStatement(formatter),
                       icon: const Icon(Icons.picture_as_pdf),
-                      label: const Text('Cost-Sharing Statement'),
+                      label: const Text('Financial Statement'),
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -339,7 +357,9 @@ class _HomeScreenState extends State<HomeScreen> {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14),
                 side: BorderSide(
-                  color: isCleared ? Colors.green.shade300 : Colors.red.shade300,
+                  color: isCleared
+                      ? Colors.green.shade300
+                      : Colors.red.shade300,
                 ),
               ),
               child: Padding(
@@ -371,8 +391,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             isCleared
                                 ? 'Your withdrawal has been fully processed and clearance has been granted.'
                                 : currentBalance > 0
-                                    ? 'Your enrollment has been withdrawn. Please settle your remaining balance of ${formatter.format(currentBalance)} to complete the process.'
-                                    : 'Your enrollment has been withdrawn. Awaiting final clearance from the registrar.',
+                                ? 'Your enrollment has been withdrawn. Please settle your remaining balance of ${formatter.format(currentBalance)} to complete the process.'
+                                : 'Your enrollment has been withdrawn. Awaiting final clearance from the registrar.',
                             style: TextStyle(
                               fontSize: 12,
                               color: isCleared
@@ -916,6 +936,15 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: const Icon(Icons.picture_as_pdf),
             label: const Text('Download Statement'),
           ),
+          const SizedBox(height: 10),
+          ElevatedButton.icon(
+            onPressed: () => _downloadCostSharingStatement(formatter),
+            icon: const Icon(Icons.description),
+            label: const Text('Download Cost-Sharing Form'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.amber[600],
+            ),
+          ),
           const SizedBox(height: 12),
           Card(
             child: Padding(
@@ -1045,8 +1074,7 @@ class _HomeScreenState extends State<HomeScreen> {
           (_costBreakdown!['foodCostMonthly'] as num?)?.toDouble() ?? 0;
       final foodAnnual =
           (_costBreakdown!['foodCostAnnual'] as num?)?.toDouble() ?? 0;
-      final totalDebt =
-          (_costBreakdown!['totalDebt'] as num?)?.toDouble() ?? 0;
+      final totalDebt = (_costBreakdown!['totalDebt'] as num?)?.toDouble() ?? 0;
 
       final pdf = generateCostStatementPdf(
         fullName: '${_costBreakdown!['fullName'] ?? 'Student'}',
@@ -1089,8 +1117,10 @@ class _HomeScreenState extends State<HomeScreen> {
       final studentId = _debtData!['studentId'] ?? 'N/A';
       final program = _debtData!['program'] ?? 'N/A';
       final campus = _debtData!['campus'] ?? 'Main Campus';
-      final academicYear = _debtData!['academicYear'] ?? DateTime.now().year.toString();
-      final finalBalance = (_debtData!['currentBalance'] as num?)?.toDouble() ?? 0;
+      final academicYear =
+          _debtData!['academicYear'] ?? DateTime.now().year.toString();
+      final finalBalance =
+          (_debtData!['currentBalance'] as num?)?.toDouble() ?? 0;
 
       final clearanceDate = DateTime.now().toString().split(' ')[0];
 
@@ -1125,18 +1155,92 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _downloadCostSharingStatement(NumberFormat formatter) async {
+    if (_costBreakdown == null || _debtData == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Loading cost-sharing data...')),
+      );
+      return;
+    }
+
+    try {
+      final tuitionFull =
+          (_costBreakdown!['tuitionFullCost'] as num?)?.toDouble() ?? 0;
+      final tuitionShare =
+          (_costBreakdown!['tuitionStudentShare'] as num?)?.toDouble() ?? 0;
+      final boarding =
+          (_costBreakdown!['boardingCost'] as num?)?.toDouble() ?? 0;
+      final foodMonthly =
+          (_costBreakdown!['foodCostMonthly'] as num?)?.toDouble() ?? 0;
+      final foodAnnual =
+          (_costBreakdown!['foodCostAnnual'] as num?)?.toDouble() ?? 0;
+      final totalDebt =
+          (_costBreakdown!['totalDebt'] as num?)?.toDouble() ?? 0;
+
+      final fullName = _debtData!['fullName'] ?? 'Student';
+      final studentId = _debtData!['studentId'] ?? 'N/A';
+      final program = _debtData!['program'] ?? 'N/A';
+      final campus = _debtData!['campus'] ?? 'Main Campus';
+      final academicYear =
+          _costBreakdown!['academicYear'] ?? DateTime.now().year.toString();
+      final preparatorySchool = _debtData!['preparatory_school'] ?? 'N/A';
+
+      // Get payment history - use dashboard history if available
+      final paymentHistory =
+          (_debtData!['paymentHistory'] as List<dynamic>? ?? [])
+              .cast<Map<String, dynamic>>();
+
+      final pdf = generateCostSharingStatementPdf(
+        fullName: fullName,
+        studentId: studentId,
+        program: program,
+        campus: campus,
+        academicYear: academicYear,
+        preparatorySchool: preparatorySchool,
+        tuitionFullCost: tuitionFull,
+        tuitionStudentShare: tuitionShare,
+        boardingCost: boarding,
+        foodCostMonthly: foodMonthly,
+        foodCostAnnual: foodAnnual,
+        totalDebt: totalDebt,
+        paymentHistory: paymentHistory,
+      );
+
+      if (!mounted) return;
+      await Printing.sharePdf(
+        bytes: await pdf.save(),
+        filename:
+            'Hawassa_University_Cost_Sharing_Statement_${DateTime.now().year}.pdf',
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cost-sharing statement downloaded successfully'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to generate cost-sharing statement: $e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final formatter = NumberFormat.currency(locale: 'en_ET', symbol: 'ETB ');
     final title = _selectedIndex == 0
         ? (_isWithdrawalCompleted
-            ? 'Dashboard Locked'
-            : (_debtData != null &&
-                    ((_debtData!['enrollmentStatus'] as String?) ?? '')
-                        .toUpperCase() ==
-                        'WITHDRAWN'
-                ? 'HU Student — Withdrawn'
-                : 'HU Student Debt System'))
+              ? 'Dashboard Locked'
+              : (_debtData != null &&
+                        ((_debtData!['enrollmentStatus'] as String?) ?? '')
+                                .toUpperCase() ==
+                            'WITHDRAWN'
+                    ? 'HU Student — Withdrawn'
+                    : 'HU Student Debt System'))
         : _selectedIndex == 1
         ? 'Cost Statement'
         : _selectedIndex == 2
