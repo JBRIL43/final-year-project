@@ -58,6 +58,32 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
+// Database health check
+app.get('/api/health/db', async (req, res) => {
+  try {
+    const pool = require('./config/db');
+    const result = await pool.query(
+      `SELECT COUNT(*) as table_count FROM information_schema.tables WHERE table_schema = 'public'`
+    );
+    const tableCount = parseInt(result.rows[0].table_count);
+    res.json({
+      status: 'OK',
+      database: 'connected',
+      tables_in_schema: tableCount,
+      tables_expected: 13,
+      schema_ready: tableCount >= 13,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'ERROR',
+      database: 'disconnected',
+      error: error.message,
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Backend running on http://0.0.0.0:${PORT}`);
