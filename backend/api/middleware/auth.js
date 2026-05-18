@@ -72,9 +72,11 @@ async function authenticateRequest(req, res, next) {
 
     next();
   } catch (error) {
-    console.error('Authentication failed:', {
+    console.error('❌ Authentication failed:', {
       message: error.message,
       code: error.code || error.errorInfo?.code || null,
+      fullError: error instanceof Error ? error.toString() : String(error),
+      firebaseAdminConfigured: !!(firebaseAdmin && firebaseAdmin.apps && firebaseAdmin.apps.length > 0),
     });
     return res.status(401).json({ error: 'Unauthorized' });
   }
