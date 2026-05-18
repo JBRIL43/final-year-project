@@ -34,6 +34,7 @@ export default function AddStudentModal({ open, onClose, onStudentAdded }: AddSt
     payment_model: 'post_graduation',
     pre_payment_amount: '',
     pre_payment_date: '',
+    preparatory_school: '',
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -82,6 +83,7 @@ export default function AddStudentModal({ open, onClose, onStudentAdded }: AddSt
         pre_payment_date: formData.payment_model === 'post_graduation' ? null : formData.pre_payment_date || null,
         pre_payment_clearance: false,
         campus: formData.campus || 'Main Campus',
+        preparatory_school: formData.preparatory_school || null,
       });
 
       onStudentAdded();
@@ -153,6 +155,15 @@ export default function AddStudentModal({ open, onClose, onStudentAdded }: AddSt
           <MenuItem value="Main Campus">Main Campus</MenuItem>
           <MenuItem value="IoT Campus">IoT Campus</MenuItem>
         </TextField>
+        <TextField
+          margin="dense"
+          label="Preparatory School"
+          fullWidth
+          value={formData.preparatory_school}
+          onChange={(e) => handleChange('preparatory_school', e.target.value)}
+          disabled={loading}
+          placeholder="School where preparatory program was completed"
+        />
         <TextField
           margin="dense"
           label="Enrollment Year"

@@ -898,6 +898,7 @@ router.post('/students', async (req, res) => {
       pre_payment_amount = 0,
       pre_payment_date = null,
       pre_payment_clearance = false,
+      preparatory_school = null,
     } = req.body;
 
     if (!student_number || !full_name || !email || !department || !enrollment_year) {
@@ -983,6 +984,7 @@ router.post('/students', async (req, res) => {
       'pre_payment_amount',
       'pre_payment_date',
       'pre_payment_clearance',
+      'preparatory_school',
       'created_at',
       'updated_at',
     ]);
@@ -1014,6 +1016,10 @@ router.post('/students', async (req, res) => {
       addStudentColumn('pre_payment_amount', normalizedPrePaymentAmount);
       addStudentColumn('pre_payment_date', pre_payment_date || null);
       addStudentColumn('pre_payment_clearance', Boolean(pre_payment_clearance));
+    }
+
+    if (preparatory_school) {
+      addStudentColumn('preparatory_school', String(preparatory_school).trim());
     }
 
     if (availableStudentColumns.has('created_at')) {

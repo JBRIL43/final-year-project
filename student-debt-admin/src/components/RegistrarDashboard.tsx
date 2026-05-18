@@ -31,6 +31,7 @@ import api from '../services/api';
 import { generateClearanceCertificate, pdfMake } from '../utils/clearanceCertificate';
 import { exportToExcel, formatStudentDataForExport } from '../utils/excelExport';
 import { importFromExcel, validateStudentImportData, type ImportedRow } from '../utils/excelImport';
+import CostSharingDialog from './CostSharingDialog';
 
 interface StudentForClearance {
   student_id: number;
@@ -61,6 +62,7 @@ export default function RegistrarDashboard() {
     message: '',
     severity: 'success',
   });
+  const [costSharingTarget, setCostSharingTarget] = useState<{ id: number; name: string } | null>(null);
 
   const loadStudents = async () => {
     setLoading(true);
@@ -320,14 +322,24 @@ export default function RegistrarDashboard() {
                         Process Withdrawal
                       </Button>
                     ) : (
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        disabled={String(s.clearance_status || '').toUpperCase() !== 'CLEARED'}
-                        onClick={() => handleGenerateCertificate(s.student_id)}
-                      >
-                        Certificate
-                      </Button>
+                      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          disabled={String(s.clearance_status || '').toUpperCase() !== 'CLEARED'}
+                          onClick={() => handleGenerateCertificate(s.student_id)}
+                        >
+                          Certificate
+                        </Button>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          color="secondary"
+                          onClick={() => setCostSharingTarget({ id: s.student_id, name: s.full_name })}
+                        >
+                          Cost-Sharing
+                        </Button>
+                      </Box>
                     )}
                   </TableCell>
                 </TableRow>
@@ -373,6 +385,17 @@ export default function RegistrarDashboard() {
           <Button onClick={() => setImportDialogOpen(false)}>Cancel</Button>
         </DialogActions>
       </Dialog>
+
+      {/* Cost-Sharing Dialog */}
+      {costSharingTarget && (
+        <CostSharingDialog
+          open={true}
+          studentId={costSharingTarget.id}
+          studentName={costSharingTarget.name}
+          onClose={() => setCostSharingTarget(null)}
+          onSaved={() => loadStudents()}
+        />
+      )}
     </Box>
   );
 }

@@ -671,6 +671,8 @@ router.get('/students/:id/details', async (req, res) => {
       'student_number',
       'full_name',
       'email',
+      'phone',
+      'tin',
       'department',
       'campus',
       'enrollment_status',
@@ -683,6 +685,8 @@ router.get('/students/:id/details', async (req, res) => {
       'pre_payment_clearance',
       'graduation_date',
       'withdrawal_requested_at',
+      'enrollment_year',
+      'preparatory_school',
       'updated_at',
     ]);
 
@@ -724,12 +728,19 @@ router.get('/students/:id/details', async (req, res) => {
       : 'NULL::timestamp';
     const updatedAtExpr = studentColumns.has('updated_at') ? 's.updated_at' : 'NULL::timestamp';
 
+    const phoneExpr = studentColumns.has('phone') ? 's.phone' : "NULL::text";
+    const tinExpr = studentColumns.has('tin') ? 's.tin' : "NULL::text";
+    const enrollmentYearExpr = studentColumns.has('enrollment_year') ? 's.enrollment_year' : 'NULL::integer';
+    const preparatorySchoolExpr = studentColumns.has('preparatory_school') ? 's.preparatory_school' : "NULL::text";
+
     const studentResult = await pool.query(
       `SELECT
          s.student_id,
          s.student_number,
          ${fullNameExpr} AS full_name,
          ${emailExpr} AS email,
+         ${phoneExpr} AS phone,
+         ${tinExpr} AS tin,
          ${departmentExpr} AS department,
          ${campusExpr} AS campus,
          ${enrollmentStatusExpr} AS enrollment_status,
@@ -742,6 +753,8 @@ router.get('/students/:id/details', async (req, res) => {
          ${prePaymentClearanceExpr} AS pre_payment_clearance,
          ${graduationDateExpr} AS graduation_date,
          ${withdrawalRequestedAtExpr} AS withdrawal_requested_at,
+         ${enrollmentYearExpr} AS enrollment_year,
+         ${preparatorySchoolExpr} AS preparatory_school,
          ${updatedAtExpr} AS updated_at
        FROM public.students s
        WHERE s.student_id = $1
@@ -800,12 +813,34 @@ router.get('/students/:id/details', async (req, res) => {
       : debtBalance;
     const hasOutstandingBalance = currentBalance !== null && currentBalance > 0;
 
+    // ── Fetch historical payments ───────────────────────────────────────────
+    let historicalPayments = [];
+    try {
+      const hpTableExists = (
+        await pool.query(`SELECT to_regclass('public.historical_payments') AS t`)
+      ).rows[0]?.t;
+
+      if (hpTableExists) {
+        const hpResult = await pool.query(
+          `SELECT academic_year, amount_in_birr, receipt_no, payment_date
+           FROM public.historical_payments
+           WHERE student_id = $1
+           ORDER BY academic_year ASC`,
+          [studentId]
+        );
+        historicalPayments = hpResult.rows;
+      }
+    } catch (hpErr) {
+      console.warn('Could not fetch historical payments:', hpErr.message);
+    }
+
     res.json({
       success: true,
       student: {
         ...student,
         payment_model: paymentModel,
         latest_debt: latestDebt,
+        historical_payments: historicalPayments,
         debt_summary: {
           has_debt_record: Boolean(latestDebt),
           current_balance: currentBalance,
@@ -823,6 +858,149 @@ router.get('/students/:id/details', async (req, res) => {
   } catch (error) {
     console.error('Registrar student details error:', error);
     res.status(500).json({ error: 'Failed to load student details' });
+  }
+});
+
+// ── Historical Payments Management ───────────────────────────────────────────
+
+// GET /api/registrar/students/:id/historical-payments
+router.get('/students/:id/historical-payments', async (req, res) => {
+  try {
+    const studentId = Number(req.params.id);
+    if (!Number.isFinite(studentId) || studentId <= 0) {
+      return res.status(400).json({ error: 'Invalid student id' });
+    }
+
+    const hpTableExists = (
+      await pool.query(`SELECT to_regclass('public.historical_payments') AS t`)
+    ).rows[0]?.t;
+
+    if (!hpTableExists) {
+      return res.json({ success: true, historical_payments: [] });
+    }
+
+    const result = await pool.query(
+      `SELECT id, academic_year, amount_in_birr, receipt_no, payment_date, payment_method, notes,
+              recorded_by, created_at, updated_at
+       FROM public.historical_payments
+       WHERE student_id = $1
+       ORDER BY academic_year ASC`,
+      [studentId]
+    );
+
+    res.json({ success: true, historical_payments: result.rows });
+  } catch (error) {
+    console.error('Fetch historical payments error:', error);
+    res.status(500).json({ error: 'Failed to fetch historical payments' });
+  }
+});
+
+// PUT /api/registrar/students/:id/historical-payments — upsert historical payments
+router.put('/students/:id/historical-payments', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const studentId = Number(req.params.id);
+    if (!Number.isFinite(studentId) || studentId <= 0) {
+      return res.status(400).json({ error: 'Invalid student id' });
+    }
+
+    const payments = Array.isArray(req.body?.payments) ? req.body.payments : [];
+
+    // Verify student exists
+    const studentCheck = await client.query(
+      'SELECT student_id FROM public.students WHERE student_id = $1 LIMIT 1',
+      [studentId]
+    );
+    if (studentCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    const recordedBy = req.user?.user_id || null;
+
+    await client.query('BEGIN');
+
+    const upserted = [];
+    for (const hp of payments) {
+      const academicYear = String(hp.academic_year || '').trim();
+      const amountInBirr = Number(hp.amount_in_birr || 0);
+      const receiptNo = hp.receipt_no ? String(hp.receipt_no).trim() : null;
+      const paymentMethod = hp.payment_method ? String(hp.payment_method).trim() : null;
+      const notes = hp.notes ? String(hp.notes).trim() : null;
+
+      if (!academicYear) continue;
+
+      const result = await client.query(
+        `INSERT INTO public.historical_payments
+           (student_id, academic_year, amount_in_birr, receipt_no, payment_method, notes, recorded_by, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+         ON CONFLICT (student_id, academic_year)
+         DO UPDATE SET
+           amount_in_birr = EXCLUDED.amount_in_birr,
+           receipt_no = EXCLUDED.receipt_no,
+           payment_method = EXCLUDED.payment_method,
+           notes = EXCLUDED.notes,
+           recorded_by = EXCLUDED.recorded_by,
+           updated_at = NOW()
+         RETURNING id, academic_year, amount_in_birr, receipt_no`,
+        [studentId, academicYear, amountInBirr, receiptNo, paymentMethod, notes, recordedBy]
+      );
+
+      upserted.push(result.rows[0]);
+    }
+
+    await client.query('COMMIT');
+    res.json({ success: true, message: `Saved ${upserted.length} historical payments`, payments: upserted });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Upsert historical payments error:', error);
+    res.status(500).json({ error: 'Failed to save historical payments' });
+  } finally {
+    client.release();
+  }
+});
+
+// PUT /api/registrar/students/:id/profile — update preparatory_school and other profile fields
+router.put('/students/:id/profile', async (req, res) => {
+  try {
+    const studentId = Number(req.params.id);
+    if (!Number.isFinite(studentId) || studentId <= 0) {
+      return res.status(400).json({ error: 'Invalid student id' });
+    }
+
+    const fields = req.body || {};
+    const setClauses = [];
+    const values = [];
+    let paramIndex = 1;
+
+    const allowedFields = ['preparatory_school', 'tin', 'phone'];
+    for (const field of allowedFields) {
+      if (fields[field] !== undefined) {
+        setClauses.push(`${field} = $${paramIndex}`);
+        values.push(fields[field] === '' ? null : String(fields[field]).trim());
+        paramIndex++;
+      }
+    }
+
+    if (setClauses.length === 0) {
+      return res.status(400).json({ error: 'No valid fields to update' });
+    }
+
+    setClauses.push(`updated_at = NOW()`);
+    values.push(studentId);
+
+    const result = await pool.query(
+      `UPDATE public.students SET ${setClauses.join(', ')} WHERE student_id = $${paramIndex} RETURNING student_id, preparatory_school, tin, phone`,
+      values
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    res.json({ success: true, student: result.rows[0] });
+  } catch (error) {
+    console.error('Update student profile error:', error);
+    res.status(500).json({ error: 'Failed to update student profile' });
   }
 });
 
