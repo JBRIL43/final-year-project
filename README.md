@@ -97,6 +97,7 @@ Key environment variables:
 | `CHAPA_PUBLIC_KEY` | Chapa API public key |
 | `CHAPA_ENCRYPTION_KEY` | Chapa encryption key |
 | `API_BASE_URL` | Public URL of this server (used as Chapa callback and return URLs; defaults to the Render production URL) |
+| `SYNC_SECRET` | Secret for the Firebase→Supabase sync endpoints (default: `hu-sync-2025`) |
 
 ### Render Deployment
 
@@ -124,6 +125,43 @@ cd student-debt-admin
 npm install
 npm run dev
 ```
+
+## Auth API
+
+### Firebase → Supabase User Sync
+
+Syncs all Firebase Auth users into the `public.users` table. Useful after bulk user imports or when local seed UIDs need to be resolved to real Firebase UIDs. Roles are guessed from the email address and should be verified manually in the database after sync.
+
+Two variants are available:
+
+| Method | Path | Auth mechanism |
+|--------|------|----------------|
+| `GET` | `/api/auth/sync-firebase-users?secret=<secret>` | `secret` query parameter — browser-friendly |
+| `POST` | `/api/auth/sync-firebase-users` | `x-sync-secret` request header |
+
+The secret defaults to `hu-sync-2025` and can be overridden with the `SYNC_SECRET` environment variable.
+
+**GET example** (open in a browser or curl):
+```
+GET /api/auth/sync-firebase-users?secret=hu-sync-2025
+```
+
+**POST example**:
+```bash
+curl -X POST https://<host>/api/auth/sync-firebase-users \
+  -H "x-sync-secret: hu-sync-2025"
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "summary": { "total": 42, "inserted": 3, "updated": 1, "skipped": 38, "errors": 0 },
+  "details": { "inserted": [...], "updated": [...], "skipped": [...], "errors": [] }
+}
+```
+
+> **Note**: Add `SYNC_SECRET` to your environment variables in production to replace the default secret.
 
 ## Payment API
 
