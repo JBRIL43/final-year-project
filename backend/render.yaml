@@ -11,25 +11,25 @@ services:
       - key: PORT
         value: 10000
 
-      # ── Database ──────────────────────────────────────────────────────
-      # Set the Supabase connection string in the Render dashboard → Environment tab
+      # ── Database ───────────────────────────────────────────────────────────
+      # REQUIRED: Set this in Render dashboard → Environment tab
+      # Format: postgres://USER:PASSWORD@HOST:PORT/DATABASE?sslmode=require
+      # Get this from your Supabase project → Settings → Database → Connection string (URI)
       - key: SUPABASE_DATABASE_URL
         sync: false
 
-      # ── CORS ──────────────────────────────────────────────────────────
+      # ── CORS ──────────────────────────────────────────────────────────────
       - key: CLIENT_URL
         value: https://student-debt-admin.onrender.com
 
-      # ── Chapa Payment Gateway (Test Keys) ─────────────────────────────
+      # ── Chapa Payment Gateway (Test Keys) ─────────────────────────────────
       - key: CHAPA_SECRET_KEY
         value: CHASECK_TEST-Me9xqMfgtr6dCcVCDMqzrqK1JXHrRv6s
       - key: CHAPA_PUBLIC_KEY
         value: CHAPUBK_TEST-EP4Y8Ip5eOOGqQcB0UgJJvbWCrovB3oh
       - key: CHAPA_ENCRYPTION_KEY
         value: QVZb9CKnE9grnw1OjfeG4RGP
-      - key: CHAPA_BASE_URL
-        value: https://api.chapa.co/v1
 
-      # ── API base URL (used in Chapa callback_url) ─────────────────────
+      # ── API base URL (used in Chapa callbacks) ─────────────────────────────
       - key: API_BASE_URL
         value: https://final-year-project-r2h8.onrender.com
