@@ -28,7 +28,7 @@ const connectionString = normalizeConnectionString(rawConnectionString);
 
 const shouldUseSsl =
   process.env.DB_SSL === 'true' ||
-  /render|neon|supabase|railway|cloud|amazonaws|azure/i.test(connectionString || '');
+  /render|neon|supabase|railway|cloud|amazonaws|azure|pooler/i.test(connectionString || '');
 
 const connectionLabel = process.env.SUPABASE_DATABASE_URL
   ? 'SUPABASE_DATABASE_URL'
