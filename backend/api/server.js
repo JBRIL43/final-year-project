@@ -56,6 +56,64 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
+// Full health check — verifies DB connection and Firebase auth
+app.get('/api/health/full', async (req, res) => {
+  const pool = require('./config/db');
+  const firebaseAdmin = require('./config/firebaseAdmin');
+  const results = { status: 'OK', timestamp: new Date().toISOString(), checks: {} };
+
+  // DB check
+  try {
+    const dbRes = await pool.query('SELECT NOW() AS now, COUNT(*) AS user_count FROM public.users');
+    results.checks.database = {
+      status: 'connected',
+      server_time: dbRes.rows[0].now,
+      user_count: Number(dbRes.rows[0].user_count),
+    };
+  } catch (e) {
+    results.checks.database = { status: 'error', message: e.message };
+    results.status = 'DEGRADED';
+  }
+
+  // Firebase check
+  try {
+    if (firebaseAdmin && firebaseAdmin.apps.length > 0) {
+      const app = firebaseAdmin.apps[0];
+      results.checks.firebase = {
+        status: 'initialized',
+        project_id: app.options?.credential?.projectId || 'unknown',
+      };
+    } else {
+      results.checks.firebase = { status: 'not_initialized' };
+      results.status = 'DEGRADED';
+    }
+  } catch (e) {
+    results.checks.firebase = { status: 'error', message: e.message };
+    results.status = 'DEGRADED';
+  }
+
+  // Seed data check
+  try {
+    const seedCheck = await pool.query(
+      `SELECT
+         (SELECT COUNT(*) FROM public.users WHERE role != 'student') AS admin_users,
+         (SELECT COUNT(*) FROM public.students) AS students,
+         (SELECT COUNT(*) FROM public.debt_records) AS debt_records,
+         (SELECT COUNT(*) FROM public.semester_amounts) AS semester_amounts`
+    );
+    results.checks.seed_data = {
+      admin_users: Number(seedCheck.rows[0].admin_users),
+      students: Number(seedCheck.rows[0].students),
+      debt_records: Number(seedCheck.rows[0].debt_records),
+      semester_amounts: Number(seedCheck.rows[0].semester_amounts),
+    };
+  } catch (e) {
+    results.checks.seed_data = { status: 'error', message: e.message };
+  }
+
+  res.status(results.status === 'OK' ? 200 : 503).json(results);
+});
+
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Backend running on http://0.0.0.0:${PORT}`);
