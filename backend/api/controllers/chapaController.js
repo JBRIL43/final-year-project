@@ -263,13 +263,6 @@ exports.verifyPayment = async (req, res) => {
       txRef,
     });
   } catch (error) {
-    if (error.statusCode) {
-      return res.status(error.statusCode).json({
-        error: error.message,
-        code: error.statusCode === 400 ? 'SPOOF_HEADERS_REJECTED' : 'UNAUTHORIZED',
-      });
-    }
-
     console.error('Chapa verify error:', error.message);
     res.status(500).json({ error: `Failed to verify payment: ${error.message}` });
   }
@@ -440,14 +433,6 @@ exports.verifyAndApproveAdmin = async (req, res) => {
       client.release();
     }
   } catch (error) {
-    if (error.statusCode) {
-      return res.status(error.statusCode).json({
-        error: error.message,
-        verified: false,
-        code: error.statusCode === 400 ? 'SPOOF_HEADERS_REJECTED' : 'UNAUTHORIZED',
-      });
-    }
-
     console.error('Chapa admin verify error:', error.message);
     res.status(500).json({ error: error.message, verified: false });
   }
