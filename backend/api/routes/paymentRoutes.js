@@ -12,27 +12,43 @@ router.post('/record', recordPayment);
 router.get('/history', getStudentPayments);
 
 // Finance: submit/update proof URL for a manual payment
-router.patch('/:paymentId/proof', async (req, res) => {
-  const { paymentId } = req.params;
-  const { proof_url } = req.body;
-  if (!proof_url) return res.status(400).json({ error: 'proof_url is required' });
-  const pool = require('../config/db');
-  try {
-    // Ensure column exists
-    await pool.query(`
-      ALTER TABLE public.payment_history
-      ADD COLUMN IF NOT EXISTS proof_url TEXT
-    `);
-    const result = await pool.query(
-      `UPDATE public.payment_history SET proof_url = $1 WHERE payment_id = $2 RETURNING payment_id`,
-      [proof_url, Number(paymentId)]
-    );
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Payment not found' });
-    res.json({ success: true });
-  } catch (e) {
-    res.status(500).json({ error: 'Failed to update proof' });
+router.patch(
+  '/:paymentId/proof',
+  authenticateRequest,
+  requireRoles(['admin', 'finance']),
+  async (req, res) => {
+    const paymentId = Number(req.params.paymentId);
+    const proof_url = String(req.body?.proof_url || '').trim();
+
+    if (!Number.isFinite(paymentId) || paymentId <= 0) {
+      return res.status(400).json({ error: 'Invalid paymentId' });
+    }
+    if (!proof_url) {
+      return res.status(400).json({ error: 'proof_url is required' });
+    }
+
+    const pool = require('../config/db');
+    try {
+      await pool.query(`
+        ALTER TABLE public.payment_history
+        ADD COLUMN IF NOT EXISTS proof_url TEXT
+      `);
+      const result = await pool.query(
+        `UPDATE public.payment_history
+         SET proof_url = $1
+         WHERE payment_id = $2
+         RETURNING payment_id`,
+        [proof_url, paymentId]
+      );
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Payment not found' });
+      }
+      res.json({ success: true });
+    } catch (e) {
+      res.status(500).json({ error: 'Failed to update proof' });
+    }
   }
-});
+);
 
 // Chapa payment integration
 router.post('/chapa/initialize', chapaController.initializePayment);
