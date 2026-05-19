@@ -289,7 +289,13 @@ exports.verifyPayment = async (req, res) => {
 // ── GET /api/payment/chapa/verify-admin ──────────────────────────────────────
 // Finance verifies a Chapa transaction — auto-approves and updates debt if confirmed
 exports.verifyAndApproveAdmin = async (req, res) => {
-  const { txRef, paymentId } = req.query;
+  const txRef = String(req.query.txRef || '').trim();
+  const paymentId = Number(req.query.paymentId);
+
+  if (!txRef || !Number.isFinite(paymentId) || paymentId <= 0) {
+    return res.status(400).json({ error: 'txRef and paymentId are required', verified: false });
+  }
+
   try {
     const chapaRes = await chapaRequest('GET', `/transaction/verify/${encodeURIComponent(txRef)}`);
 
@@ -304,15 +310,16 @@ exports.verifyAndApproveAdmin = async (req, res) => {
       return res.json({ success: true, status: chapaStatus, verified: false });
     }
 
-    // Auto-approve: update payment to SUCCESS and reduce debt balance
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
 
       const paymentRes = await client.query(
-        `SELECT payment_id, debt_id, amount FROM public.payment_history
-         WHERE payment_id = $1 FOR UPDATE`,
-        [Number(paymentId)]
+        `SELECT payment_id, debt_id, amount, status, transaction_ref
+         FROM public.payment_history
+         WHERE payment_id = $1
+         FOR UPDATE`,
+        [paymentId]
       );
 
       if (paymentRes.rows.length === 0) {
@@ -321,6 +328,33 @@ exports.verifyAndApproveAdmin = async (req, res) => {
       }
 
       const payment = paymentRes.rows[0];
+      const normalizedStatus = String(payment.status || '').toUpperCase();
+
+      if (normalizedStatus === 'SUCCESS' || normalizedStatus === 'APPROVED') {
+        await client.query('COMMIT');
+        return res.json({
+          success: true,
+          status: 'success',
+          verified: true,
+          message: 'Payment already approved',
+        });
+      }
+
+      if (normalizedStatus !== 'PENDING') {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          error: `Payment is not pending (status: ${payment.status})`,
+          verified: false,
+        });
+      }
+
+      if (payment.transaction_ref && String(payment.transaction_ref).trim() !== txRef) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          error: 'Transaction reference does not match payment record',
+          verified: false,
+        });
+      }
 
       // Store Chapa receipt URL as proof_url so finance can view it later
       // Try all known Chapa internal reference field names from their verify response
@@ -330,15 +364,6 @@ exports.verifyAndApproveAdmin = async (req, res) => {
         || txData?.id
         || txData?.tx_ref
         || String(txRef);
-      console.log('Chapa txData fields:', JSON.stringify(Object.keys(txData || {})));
-      console.log('Chapa txData sample:', JSON.stringify({
-        chapa_ref: txData?.chapa_ref,
-        reference: txData?.reference,
-        chapa_transfer_id: txData?.chapa_transfer_id,
-        id: txData?.id,
-        tx_ref: txData?.tx_ref,
-      }));
-      console.log('Chapa chapaRef resolved:', chapaRef);
       const receiptUrl = `https://chapa.link/payment-receipt/${encodeURIComponent(chapaRef)}`;
 
       // Ensure proof_url column exists
@@ -347,12 +372,22 @@ exports.verifyAndApproveAdmin = async (req, res) => {
         ADD COLUMN IF NOT EXISTS proof_url TEXT
       `);
 
-      await client.query(
+      const approveResult = await client.query(
         `UPDATE public.payment_history
          SET status = 'SUCCESS', proof_url = COALESCE(proof_url, $2)
-         WHERE payment_id = $1`,
+         WHERE payment_id = $1
+           AND UPPER(COALESCE(status, '')) = 'PENDING'
+         RETURNING payment_id`,
         [payment.payment_id, receiptUrl]
       );
+
+      if (approveResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({
+          error: 'Payment is no longer pending',
+          verified: false,
+        });
+      }
 
       // Reduce debt balance
       const debtRes = await client.query(
@@ -390,7 +425,7 @@ exports.verifyAndApproveAdmin = async (req, res) => {
         console.error('Chapa admin verify notification failed:', notifErr);
       }
 
-      res.json({ success: true, status: 'success', verified: true, receiptUrl, _debug: { keys: Object.keys(txData || {}), txData } });
+      res.json({ success: true, status: 'success', verified: true, receiptUrl });
     } catch (dbErr) {
       await client.query('ROLLBACK');
       throw dbErr;

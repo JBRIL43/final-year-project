@@ -1,6 +1,7 @@
 const express = require('express');
 const { recordPayment, getStudentPayments } = require('../controllers/paymentController');
 const chapaController = require('../controllers/chapaController');
+const { authenticateRequest, requireRoles } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -38,7 +39,12 @@ router.post('/chapa/initialize', chapaController.initializePayment);
 router.post('/chapa/verify', chapaController.verifyPayment);
 
 // Finance-side: verify a Chapa transaction by txRef and auto-approve if confirmed
-router.get('/chapa/verify-admin', (req, res) => chapaController.verifyAndApproveAdmin(req, res));
+router.get(
+  '/chapa/verify-admin',
+  authenticateRequest,
+  requireRoles(['admin', 'finance']),
+  chapaController.verifyAndApproveAdmin
+);
 
 // Chapa return URL — user lands here after completing payment in browser
 // The app detects the resume lifecycle event and calls /verify automatically

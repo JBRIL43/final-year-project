@@ -1,0 +1,32 @@
+---
+description: Mindmemo — load full project context before any work
+globs: projects/mindmemo/**
+alwaysApply: false
+---
+
+# Mindmemo project context
+
+You are in **Mindmemo** (`projects/mindmemo/`). Chat history is not the source of truth—files are.
+
+## Before any task
+
+Read **in order**:
+
+1. `projects/mindmemo/CONTEXT.md` — master context (workspace, workflow, file index)
+2. `projects/mindmemo/STATUS.md` — current phase and **next step**
+3. `projects/mindmemo/PROJECT_LOG.md` — session history (newest first)
+4. `projects/mindmemo/CLAUDE.md` — routing by task
+5. `projects/mindmemo/standards/CONTEXT.md`
+6. `projects/mindmemo/planning/docs/project-origin.md`
+
+Then the active workspace `CONTEXT.md` (`planning/`, `spec-definition/`, `development/`, or `publishing/`).
+
+**Flutter code:** also `flutter-standards/CONTEXT.md`, `development/packages/ALLOWED_PACKAGES.md`, and the active feature spec in `spec-definition/features/`.
+
+**Continue work from:** `STATUS.md` → section “What is next” (unless the user overrides).
+
+## Before ending a session
+
+Update `STATUS.md` and append `PROJECT_LOG.md`. If you wrote code, append `development/logs/implementation-log.md`.
+
+Do not contradict on-device-only privacy or lazy LLM loading without an ADR and `PROJECT_LOG.md` entry.

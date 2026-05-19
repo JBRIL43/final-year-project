@@ -72,8 +72,13 @@ exports.getPendingPayments = async (req, res) => {
 exports.verifyPayment = async (req, res) => {
   let client;
   try {
-    const { paymentId, verifiedBy, action } = req.body;
-    
+    const { paymentId, action } = req.body;
+    const verifiedBy = req.user?.user_id ?? null;
+
+    if (!paymentId) {
+      return res.status(400).json({ error: 'paymentId is required' });
+    }
+
     if (!['APPROVE', 'REJECT'].includes(action)) {
       return res.status(400).json({ error: 'Action must be APPROVE or REJECT' });
     }
