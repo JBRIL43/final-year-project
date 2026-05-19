@@ -18,6 +18,10 @@ services:
       - key: SUPABASE_DATABASE_URL
         sync: false
 
+      # REQUIRED in production — long random value; used for POST /api/auth/sync-firebase-users
+      - key: SYNC_SECRET
+        sync: false
+
       # ── CORS ──────────────────────────────────────────────────────────────
       - key: CLIENT_URL
         value: https://student-debt-admin.onrender.com

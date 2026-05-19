@@ -128,28 +128,20 @@ npm run dev
 
 ## Auth API
 
-### Firebase → Supabase User Sync
+### Firebase → database user sync
 
-Syncs all Firebase Auth users into the `public.users` table. Useful after bulk user imports or when local seed UIDs need to be resolved to real Firebase UIDs. Roles are guessed from the email address and should be verified manually in the database after sync.
+Syncs all Firebase Auth users into the `public.users` table. New users are inserted with role `student`; assign staff roles manually in the database after sync.
 
-Two variants are available:
+| Method | Path | Auth |
+|--------|------|------|
+| `POST` | `/api/auth/sync-firebase-users` | Header `x-sync-secret: <SYNC_SECRET>` |
 
-| Method | Path | Auth mechanism |
-|--------|------|----------------|
-| `GET` | `/api/auth/sync-firebase-users?secret=<secret>` | `secret` query parameter — browser-friendly |
-| `POST` | `/api/auth/sync-firebase-users` | `x-sync-secret` request header |
+`SYNC_SECRET` is **required in production** (server fails to start if unset). There is no GET route — do not put secrets in URLs.
 
-The secret defaults to `hu-sync-2025` and can be overridden with the `SYNC_SECRET` environment variable.
-
-**GET example** (open in a browser or curl):
-```
-GET /api/auth/sync-firebase-users?secret=hu-sync-2025
-```
-
-**POST example**:
+**Example**:
 ```bash
 curl -X POST https://<host>/api/auth/sync-firebase-users \
-  -H "x-sync-secret: hu-sync-2025"
+  -H "x-sync-secret: $SYNC_SECRET"
 ```
 
 **Response**:
@@ -161,7 +153,7 @@ curl -X POST https://<host>/api/auth/sync-firebase-users \
 }
 ```
 
-> **Note**: Add `SYNC_SECRET` to your environment variables in production to replace the default secret.
+> **Note**: Generate a long random `SYNC_SECRET` in Render → Environment. Rotate if the old default was ever used in production.
 
 ## Payment API
 

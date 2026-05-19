@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const express = require('express');
 const pool = require('../config/db');
 const firebaseAdmin = require('../config/firebaseAdmin');
@@ -5,9 +6,38 @@ const { authenticateRequest } = require('../middleware/auth');
 
 const router = express.Router();
 
-// ── Firebase → Supabase sync ──────────────────────────────────────────────────
-// GET  /api/auth/sync-firebase-users?secret=hu-sync-2025  (browser-friendly)
-// POST /api/auth/sync-firebase-users  with header x-sync-secret: hu-sync-2025
+function getSyncSecret() {
+  const secret = process.env.SYNC_SECRET?.trim();
+  if (secret) {
+    return secret;
+  }
+
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'SYNC_SECRET environment variable is required in production. Set it in Render/host env and redeploy.'
+    );
+  }
+
+  return null;
+}
+
+function syncSecretMatches(provided, expected) {
+  const providedBuf = Buffer.from(String(provided || ''));
+  const expectedBuf = Buffer.from(String(expected || ''));
+
+  if (providedBuf.length !== expectedBuf.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(providedBuf, expectedBuf);
+}
+
+// Fail fast in production when the module loads (server startup).
+getSyncSecret();
+
+// ── Firebase → database user sync (admin operation) ───────────────────────────
+// POST /api/auth/sync-firebase-users  with header: x-sync-secret: <SYNC_SECRET>
+// No GET route — secrets must not appear in URLs, logs, or browser history.
 
 async function runSync(res) {
   if (!firebaseAdmin || firebaseAdmin.apps.length === 0) {
@@ -25,12 +55,15 @@ async function runSync(res) {
       nextPageToken = listResult.pageToken;
     } while (nextPageToken);
 
-    console.log(`Syncing ${firebaseUsers.length} Firebase users to Supabase`);
+    console.log(`Syncing ${firebaseUsers.length} Firebase users to database`);
 
     for (const fbUser of firebaseUsers) {
       try {
         const email = fbUser.email?.toLowerCase().trim();
-        if (!email) { results.skipped.push({ uid: fbUser.uid, reason: 'no_email' }); continue; }
+        if (!email) {
+          results.skipped.push({ uid: fbUser.uid, reason: 'no_email' });
+          continue;
+        }
 
         const displayName = fbUser.displayName || email.split('@')[0];
 
@@ -54,20 +87,13 @@ async function runSync(res) {
           continue;
         }
 
-        // Guess role from email — fix manually in Supabase after sync
-        let role = 'student';
-        const e = email.toLowerCase();
-        if (e.includes('admin'))      role = 'admin';
-        else if (e.includes('finance'))    role = 'finance';
-        else if (e.includes('registrar'))  role = 'registrar';
-        else if (e.includes('dept') || e.includes('head')) role = 'department_head';
-
+        // Default new users to student; assign staff roles manually in the database.
         await pool.query(
           `INSERT INTO public.users (firebase_uid, email, full_name, role, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, NOW(), NOW())`,
-          [fbUser.uid, email, displayName, role]
+           VALUES ($1, $2, $3, 'student', NOW(), NOW())`,
+          [fbUser.uid, email, displayName]
         );
-        results.inserted.push({ email, uid: fbUser.uid, role });
+        results.inserted.push({ email, uid: fbUser.uid, role: 'student' });
       } catch (err) {
         results.errors.push({ uid: fbUser.uid, error: err.message });
       }
@@ -90,19 +116,20 @@ async function runSync(res) {
   }
 }
 
-router.get('/sync-firebase-users', async (req, res) => {
-  const secret = process.env.SYNC_SECRET || 'hu-sync-2025';
-  if (req.query.secret !== secret) {
-    return res.status(403).send('Forbidden — add ?secret=hu-sync-2025');
-  }
-  return runSync(res);
-});
-
 router.post('/sync-firebase-users', async (req, res) => {
-  const secret = process.env.SYNC_SECRET || 'hu-sync-2025';
-  if (req.headers['x-sync-secret'] !== secret) {
+  const secret = getSyncSecret();
+
+  if (!secret) {
+    return res.status(503).json({
+      error: 'Firebase sync is disabled. Set SYNC_SECRET in the server environment.',
+    });
+  }
+
+  const provided = String(req.headers['x-sync-secret'] || '').trim();
+  if (!syncSecretMatches(provided, secret)) {
     return res.status(403).json({ error: 'Forbidden' });
   }
+
   return runSync(res);
 });
 
