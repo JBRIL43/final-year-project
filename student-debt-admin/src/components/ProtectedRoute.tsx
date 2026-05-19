@@ -11,9 +11,9 @@ interface ProtectedRouteProps {
 const DEFAULT_ALLOWED_ROLES: UserRole[] = ['admin', 'finance', 'registrar', 'department_head']
 
 export default function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
-  const { user, loading, role } = useAuth()
+  const { user, loading, profileLoading, profileReady, role } = useAuth()
 
-  if (loading) {
+  if (loading || (user && profileLoading)) {
     return (
       <Box
         sx={{
@@ -44,18 +44,28 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
     return <Navigate to="/login" replace />
   }
 
-  // If user is authenticated but role resolved to 'student', they may not be
-  // in Supabase yet. Show a helpful message instead of silently redirecting.
-  if (role === 'student' && user) {
+  if (user && profileReady && role === 'student') {
     return (
-      <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100vh', gap: 2, p: 3, textAlign: 'center' }}>
-        <CircularProgress />
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '100vh',
+          gap: 2,
+          p: 3,
+          textAlign: 'center',
+        }}
+      >
         <Box>
           <strong>Account not configured</strong>
           <br />
-          You are logged in as <strong>{user.email}</strong> but your account has not been set up in the system yet.
-          <br /><br />
-          Ask your administrator to run the Firebase sync and assign your role in Supabase.
+          You are logged in as <strong>{user.email}</strong> but your account has not been set up
+          for the admin dashboard yet.
+          <br />
+          <br />
+          Ask your administrator to run the Firebase sync and assign your role in the database.
         </Box>
       </Box>
     )

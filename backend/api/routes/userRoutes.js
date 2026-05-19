@@ -82,64 +82,54 @@ router.get('/me', authenticateRequest, async (req, res) => {
   });
 });
 
-router.post('/fcm-token', async (req, res) => {
+router.post('/fcm-token', authenticateRequest, async (req, res) => {
   try {
     await ensureUsersFcmTokenColumn();
 
-    const { userId, firebaseUid, email, displayName, role, fcmToken } = req.body;
+    const { fcmToken } = req.body;
+    const firebaseUid = req.auth?.uid;
+    const email = String(req.user?.email || req.auth?.email || '')
+      .trim()
+      .toLowerCase();
 
-    if (!fcmToken || (!userId && !firebaseUid && !email)) {
-      return res.status(400).json({
-        error: 'fcmToken and one identifier (userId, firebaseUid, or email) are required',
-      });
+    if (!fcmToken) {
+      return res.status(400).json({ error: 'fcmToken is required' });
     }
 
-    let result = { rows: [] };
-
-    if (userId) {
-      result = await pool.query(
-        `UPDATE public.users
-         SET fcm_token = $1,
-             firebase_uid = COALESCE($2, firebase_uid)
-         WHERE user_id = $3
-         RETURNING user_id, email`,
-        [fcmToken, firebaseUid || null, userId]
-      );
+    if (!firebaseUid || !email) {
+      return res.status(400).json({ error: 'Authenticated user must have uid and email' });
     }
 
-    if (result.rows.length === 0 && firebaseUid) {
-      result = await pool.query(
-        `UPDATE public.users
-         SET fcm_token = $1
-         WHERE firebase_uid = $2
-         RETURNING user_id, email`,
-        [fcmToken, firebaseUid]
-      );
-    }
+    let result = await pool.query(
+      `UPDATE public.users
+       SET fcm_token = $1,
+           firebase_uid = COALESCE(firebase_uid, $2)
+       WHERE firebase_uid = $2
+          OR LOWER(email) = LOWER($3)
+       RETURNING user_id, email, role`,
+      [fcmToken, firebaseUid, email]
+    );
 
-    if (result.rows.length === 0 && email) {
-      result = await pool.query(
-        `UPDATE public.users
-         SET fcm_token = $1,
-             firebase_uid = COALESCE($2, firebase_uid)
-         WHERE LOWER(email) = LOWER($3)
-         RETURNING user_id, email`,
-        [fcmToken, firebaseUid || null, email]
-      );
-    }
+    if (result.rows.length === 0) {
+      const callerRole = req.user?.role || 'student';
 
-    if (result.rows.length === 0 && email && firebaseUid && role) {
-      const fullName = displayName || email.split('@')[0] || email;
+      if (callerRole !== 'student') {
+        return res.status(404).json({
+          error:
+            'User not found in database. Admin and staff accounts must be provisioned before login.',
+        });
+      }
+
+      const fullName = req.auth?.name || req.user?.full_name || email.split('@')[0] || email;
+
       result = await pool.query(
         `INSERT INTO public.users (firebase_uid, email, full_name, role, fcm_token)
-         VALUES ($1, $2, $3, $4, $5)
+         VALUES ($1, $2, $3, 'student', $4)
          ON CONFLICT (email) DO UPDATE
-         SET firebase_uid = EXCLUDED.firebase_uid,
-             full_name = COALESCE(NULLIF(EXCLUDED.full_name, ''), public.users.full_name),
-             role = EXCLUDED.role,
+         SET firebase_uid = COALESCE(public.users.firebase_uid, EXCLUDED.firebase_uid),
              fcm_token = EXCLUDED.fcm_token
-         RETURNING user_id, email`,
-        [firebaseUid, email, fullName, role, fcmToken]
+         RETURNING user_id, email, role`,
+        [firebaseUid, email, fullName, fcmToken]
       );
     }
 

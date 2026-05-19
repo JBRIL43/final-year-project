@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth'
 import { auth } from '../lib/firebase'
-import { API_BASE_URL } from '../services/api'
+import api, { setAuthToken } from '../services/api'
 
 export type UserRole = 'student' | 'finance' | 'registrar' | 'department_head' | 'admin'
 
@@ -16,7 +16,12 @@ interface UserProfile {
 
 interface AuthContextType {
   user: User | null
+  /** Firebase auth state not yet known */
   loading: boolean
+  /** `/api/user/me` in flight for signed-in user */
+  profileLoading: boolean
+  /** `/api/user/me` finished (success or failure) */
+  profileReady: boolean
   isAdmin: boolean
   role: UserRole
   department: string | null
@@ -27,6 +32,8 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
+  profileLoading: false,
+  profileReady: false,
   isAdmin: false,
   role: 'student',
   department: null,
@@ -38,89 +45,58 @@ export function useAuth() {
   return useContext(AuthContext)
 }
 
+export function getRoleHome(role: UserRole): string {
+  if (role === 'registrar') return '/registrar'
+  if (role === 'department_head') return '/department'
+  if (role === 'student') return '/login'
+  return '/reports'
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+  const [profileLoading, setProfileLoading] = useState(false)
+  const [profileReady, setProfileReady] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
   const [role, setRole] = useState<UserRole>('student')
   const [department, setDepartment] = useState<string | null>(null)
   const [profile, setProfile] = useState<UserProfile | null>(null)
 
-  const logout = async () => {
-    await signOut(auth)
-    localStorage.removeItem('firebase_id_token')
-    setUser(null)
-    setIsAdmin(false)
+  const resetProfileState = () => {
+    setProfile(null)
     setRole('student')
     setDepartment(null)
-    setProfile(null)
+    setIsAdmin(false)
+    setProfileReady(false)
+    setProfileLoading(false)
   }
 
-  const loadProfile = async (token: string, firebaseUser: User): Promise<UserProfile> => {
-    // Try to get profile from backend
-    const response = await fetch(`${API_BASE_URL}/api/user/me`, {
-      method: 'GET',
+  const logout = async () => {
+    await signOut(auth)
+    setAuthToken(null)
+    setUser(null)
+    resetProfileState()
+  }
+
+  const loadProfile = async (token: string): Promise<UserProfile> => {
+    const response = await api.get<{ success: boolean; user: UserProfile }>('/api/user/me', {
       headers: { Authorization: `Bearer ${token}` },
     })
 
-    if (response.ok) {
-      const data = (await response.json()) as { success: boolean; user: UserProfile }
-      const p = data.user
-
-      // If backend returned student role but this is an admin dashboard login,
-      // the user may not be in Supabase yet — try to upsert via FCM token endpoint
-      if (p.role === 'student' && p.user_id === null) {
-        await tryUpsertUser(token, firebaseUser)
-        // Re-fetch after upsert
-        const retry = await fetch(`${API_BASE_URL}/api/user/me`, {
-          method: 'GET',
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        if (retry.ok) {
-          const retryData = (await retry.json()) as { success: boolean; user: UserProfile }
-          return retryData.user
-        }
-      }
-      return p
-    }
-
-    // Backend unreachable — return minimal profile from Firebase
-    return {
-      user_id: null,
-      email: firebaseUser.email,
-      role: 'student',
-      department: null,
-      full_name: firebaseUser.displayName,
-    }
-  }
-
-  // Upsert user into Supabase via the FCM token endpoint (works without a role)
-  const tryUpsertUser = async (token: string, firebaseUser: User) => {
-    try {
-      await fetch(`${API_BASE_URL}/api/user/fcm-token`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          firebaseUid: firebaseUser.uid,
-          email: firebaseUser.email,
-          displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0],
-          role: 'student', // will be corrected manually in Supabase
-          fcmToken: 'web-placeholder',
-        }),
-      })
-    } catch {
-      // non-blocking
-    }
+    return response.data.user
   }
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
-        try {
-          const idToken = await currentUser.getIdToken()
-          localStorage.setItem('firebase_id_token', idToken)
+        setProfileLoading(true)
+        setProfileReady(false)
 
-          const currentProfile = await loadProfile(idToken, currentUser)
+        try {
+          const idToken = await currentUser.getIdToken(true)
+          setAuthToken(idToken)
+
+          const currentProfile = await loadProfile(idToken)
           const resolvedRole = currentProfile?.role || 'student'
 
           setUser(currentUser)
@@ -131,27 +107,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch (error) {
           console.error('Failed to resolve auth profile:', error)
           setUser(currentUser)
-          setProfile(null)
-          setRole('student')
-          setDepartment(null)
-          setIsAdmin(false)
+          resetProfileState()
+          setProfile({
+            user_id: null,
+            email: currentUser.email,
+            role: 'student',
+            department: null,
+            full_name: currentUser.displayName,
+          })
+        } finally {
+          setProfileLoading(false)
+          setProfileReady(true)
+          setLoading(false)
         }
       } else {
-        localStorage.removeItem('firebase_id_token')
+        setAuthToken(null)
         setUser(null)
-        setIsAdmin(false)
-        setRole('student')
-        setDepartment(null)
-        setProfile(null)
+        resetProfileState()
+        setLoading(false)
       }
-      setLoading(false)
     })
 
     return () => unsubscribe()
-  }, []) // eslint-disable-line
+  }, [])
 
   return (
-    <AuthContext.Provider value={{ user, loading, isAdmin, role, department, profile, logout }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        profileLoading,
+        profileReady,
+        isAdmin,
+        role,
+        department,
+        profile,
+        logout,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   )

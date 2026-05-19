@@ -22,7 +22,7 @@ import WithdrawalApprovalDashboard from './components/WithdrawalApprovalDashboar
 import FinanceReportsDashboard from './components/FinanceReportsDashboard'
 
 function AppRoutes() {
-  const { loading, role } = useAuth()
+  const { loading, profileLoading, user, role } = useAuth()
 
   const roleHome =
     role === 'registrar'
@@ -41,7 +41,7 @@ function AppRoutes() {
       ? '/login'
       : '/reports'
 
-  if (loading) {
+  if (loading || (user && profileLoading)) {
     return (
       <Box
         sx={{

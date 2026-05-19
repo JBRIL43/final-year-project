@@ -27,4 +27,15 @@ api.interceptors.request.use((config) => {
   return config
 })
 
+/** Keep axios and localStorage in sync (call after getIdToken). */
+export function setAuthToken(token: string | null) {
+  if (token) {
+    localStorage.setItem('firebase_id_token', token)
+    api.defaults.headers.common.Authorization = `Bearer ${token}`
+  } else {
+    localStorage.removeItem('firebase_id_token')
+    delete api.defaults.headers.common.Authorization
+  }
+}
+
 export default api

@@ -92,20 +92,6 @@ export default function SemesterAmountsDashboard() {
     loadAmounts()
   }, [])
 
-  const handleSaveNew = async () => {
-    try {
-      await api.post('/api/admin/semester-amounts', newAmount)
-      setSnackbar({ open: true, message: 'Semester amount configuration saved', severity: 'success' })
-      setNewAmount(buildDefaultNewAmount())
-      await loadAmounts()
-    } catch (err: any) {
-      setSnackbar({
-        open: true,
-        message: err.response?.data?.error || 'Failed to save semester amount configuration',
-        severity: 'error',
-      })
-    }
-  }
 
   const openEditor = (amount?: SemesterAmount) => {
     if (amount) {
@@ -193,101 +179,6 @@ export default function SemesterAmountsDashboard() {
         </Typography>
 
         <Grid container spacing={2}>
-          <Grid size={{ xs: 12, md: 4 }}>
-            <TextField
-              fullWidth
-              label="Academic Year"
-              value={newAmount.academic_year}
-              onChange={(e) => setNewAmount((prev) => ({ ...prev, academic_year: e.target.value }))}
-              placeholder="2025/2026"
-            />
-          </Grid>
-          <Grid size={{ xs: 12, md: 4 }}>
-            <FormControl fullWidth>
-              <InputLabel>Campus</InputLabel>
-              <Select
-                value={newAmount.campus}
-                label="Campus"
-                onChange={(e) => setNewAmount((prev) => ({ ...prev, campus: String(e.target.value) }))}
-              >
-                <MenuItem value="Main Campus">Main Campus</MenuItem>
-                <MenuItem value="IoT Campus">IoT Campus</MenuItem>
-              </Select>
-            </FormControl>
-          </Grid>
-          <Grid size={{ xs: 12, md: 4 }}>
-            <TextField
-              fullWidth
-              label="Program Type"
-              value={newAmount.program_type}
-              onChange={(e) => setNewAmount((prev) => ({ ...prev, program_type: e.target.value }))}
-              placeholder="Engineering"
-            />
-          </Grid>
-          <Grid size={{ xs: 12, md: 3 }}>
-            <TextField
-              fullWidth
-              label="Tuition (Yearly)"
-              type="number"
-              value={newAmount.tuition_cost_per_year}
-              onChange={(e) =>
-                setNewAmount((prev) => ({ ...prev, tuition_cost_per_year: Number.parseFloat(e.target.value) || 0 }))
-              }
-            />
-          </Grid>
-          <Grid size={{ xs: 12, md: 3 }}>
-            <TextField
-              fullWidth
-              label="Boarding (Yearly)"
-              type="number"
-              value={newAmount.boarding_cost_per_year}
-              onChange={(e) =>
-                setNewAmount((prev) => ({ ...prev, boarding_cost_per_year: Number.parseFloat(e.target.value) || 0 }))
-              }
-            />
-          </Grid>
-          <Grid size={{ xs: 12, md: 2 }}>
-            <TextField
-              fullWidth
-              label="Food (Monthly)"
-              type="number"
-              value={newAmount.food_cost_per_month}
-              onChange={(e) =>
-                setNewAmount((prev) => ({ ...prev, food_cost_per_month: Number.parseFloat(e.target.value) || 0 }))
-              }
-            />
-          </Grid>
-          <Grid size={{ xs: 12, md: 2 }}>
-            <TextField
-              fullWidth
-              label="Health Insurance"
-              type="number"
-              value={newAmount.health_insurance_fee}
-              onChange={(e) =>
-                setNewAmount((prev) => ({ ...prev, health_insurance_fee: Number.parseFloat(e.target.value) || 0 }))
-              }
-            />
-          </Grid>
-          <Grid size={{ xs: 12, md: 2 }}>
-            <TextField
-              fullWidth
-              label="Other Fees"
-              type="number"
-              value={newAmount.other_fees}
-              onChange={(e) =>
-                setNewAmount((prev) => ({ ...prev, other_fees: Number.parseFloat(e.target.value) || 0 }))
-              }
-            />
-          </Grid>
-          <Grid size={{ xs: 12, md: 4 }}>
-            <TextField
-              fullWidth
-              label="Effective From"
-              type="date"
-              value={newAmount.effective_from}
-              onChange={(e) => setNewAmount((prev) => ({ ...prev, effective_from: e.target.value }))}
-            />
-          </Grid>
           <Grid size={{ xs: 12 }}>
             <Button variant="contained" startIcon={<AddIcon />} onClick={() => openEditor()}>
               Add Semester Configuration

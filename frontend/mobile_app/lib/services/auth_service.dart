@@ -13,7 +13,7 @@ class AuthService {
       email: email,
       password: password,
     );
-    await _sendFcmTokenToBackend(credential.user, role: 'STUDENT');
+    await _sendFcmTokenToBackend(credential.user);
     return credential;
   }
 
@@ -22,14 +22,11 @@ class AuthService {
       email: email,
       password: password,
     );
-    await _sendFcmTokenToBackend(credential.user, role: 'FINANCE_OFFICER');
+    await _sendFcmTokenToBackend(credential.user);
     return credential;
   }
 
-  Future<void> _sendFcmTokenToBackend(
-    User? user, {
-    required String role,
-  }) async {
+  Future<void> _sendFcmTokenToBackend(User? user) async {
     if (user == null) return;
 
     try {
@@ -38,15 +35,16 @@ class AuthService {
         return;
       }
 
+      final idToken = await user.getIdToken();
+
       await http
           .post(
             Uri.parse('${ApiConfig.preferredBaseUrl}/api/user/fcm-token'),
-            headers: {'Content-Type': 'application/json'},
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $idToken',
+            },
             body: jsonEncode({
-              'firebaseUid': user.uid,
-              'email': user.email,
-              'displayName': user.displayName,
-              'role': role,
               'fcmToken': fcmToken,
             }),
           )
