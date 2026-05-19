@@ -86,6 +86,15 @@ router.post('/fcm-token', authenticateRequest, async (req, res) => {
   try {
     await ensureUsersFcmTokenColumn();
 
+    const forbiddenFields = ['role', 'firebaseUid', 'email', 'userId', 'displayName'];
+    const sentForbidden = forbiddenFields.filter((key) => req.body?.[key] != null);
+    if (sentForbidden.length > 0) {
+      return res.status(400).json({
+        error: 'Only fcmToken is accepted; identity and role come from the Bearer token',
+        rejectedFields: sentForbidden,
+      });
+    }
+
     const { fcmToken } = req.body;
     const firebaseUid = req.auth?.uid;
     const email = String(req.user?.email || req.auth?.email || '')
