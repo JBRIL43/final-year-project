@@ -19,14 +19,6 @@ class DebtService {
       headers['Authorization'] = 'Bearer $idToken';
     }
 
-    if (user?.uid != null && user!.uid.isNotEmpty) {
-      headers['x-firebase-uid'] = user.uid;
-    }
-
-    if (user?.email != null && user!.email!.isNotEmpty) {
-      headers['x-user-email'] = user.email!;
-    }
-
     for (final baseUrl in _candidateBaseUrls()) {
       try {
         final response = await http
@@ -63,14 +55,6 @@ class DebtService {
 
     if (idToken != null && idToken.isNotEmpty) {
       headers['Authorization'] = 'Bearer $idToken';
-    }
-
-    if (user?.uid != null && user!.uid.isNotEmpty) {
-      headers['x-firebase-uid'] = user.uid;
-    }
-
-    if (user?.email != null && user!.email!.isNotEmpty) {
-      headers['x-user-email'] = user.email!;
     }
 
     for (final baseUrl in _candidateBaseUrls()) {
@@ -123,12 +107,6 @@ class DebtService {
 
     if (idToken != null && idToken.isNotEmpty) {
       headers['Authorization'] = 'Bearer $idToken';
-    }
-    if (user?.uid != null && user!.uid.isNotEmpty) {
-      headers['x-firebase-uid'] = user.uid;
-    }
-    if (user?.email != null && user!.email!.isNotEmpty) {
-      headers['x-user-email'] = user.email!;
     }
 
     for (final baseUrl in _candidateBaseUrls()) {

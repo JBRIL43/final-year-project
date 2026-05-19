@@ -16,14 +16,6 @@ class StudentStatementService {
       headers['Authorization'] = 'Bearer $idToken';
     }
 
-    if (user?.uid != null && user!.uid.isNotEmpty) {
-      headers['x-firebase-uid'] = user.uid;
-    }
-
-    if (user?.email != null && user!.email!.isNotEmpty) {
-      headers['x-user-email'] = user.email!;
-    }
-
     return headers;
   }
 

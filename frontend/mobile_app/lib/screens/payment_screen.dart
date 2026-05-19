@@ -53,8 +53,6 @@ class _PaymentScreenState extends State<PaymentScreen> with WidgetsBindingObserv
     return {
       'Content-Type': 'application/json',
       if (token != null) 'Authorization': 'Bearer $token',
-      if (user?.uid != null) 'x-firebase-uid': user!.uid,
-      if (user?.email != null) 'x-user-email': user!.email!,
     };
   }
 

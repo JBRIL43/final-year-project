@@ -1,6 +1,7 @@
 const pool = require('../config/db');
 const { sendPaymentNotification } = require('../utils/notifications');
 const firebaseAdmin = require('../config/firebaseAdmin');
+const { verifyBearerIdentity } = require('../utils/firebaseIdentity');
 
 function resolveStatusMode(sampleStatus) {
   const value = String(sampleStatus || '').trim();
@@ -16,35 +17,9 @@ function resolveStatusMode(sampleStatus) {
 }
 
 async function resolveStudentFromRequest(req) {
-  const authHeader = req.headers.authorization || '';
-  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
-
-  let firebaseUid = null;
-  let email = null;
-
-  if (token && firebaseAdmin && firebaseAdmin.apps.length > 0) {
-    try {
-      const decoded = await firebaseAdmin.auth().verifyIdToken(token);
-      firebaseUid = decoded.uid || null;
-      email = decoded.email || null;
-    } catch (error) {
-      console.warn('Token verification failed for /api/payment/record:', error.message);
-    }
-  }
-
-  if (!firebaseUid) {
-    const headerUid = req.headers['x-firebase-uid'];
-    if (headerUid) {
-      firebaseUid = String(headerUid).trim();
-    }
-  }
-
-  if (!email) {
-    const headerEmail = req.headers['x-user-email'];
-    if (headerEmail) {
-      email = String(headerEmail).trim().toLowerCase();
-    }
-  }
+  const identity = await verifyBearerIdentity(req);
+  const firebaseUid = identity.uid;
+  const email = identity.email;
 
   if (!firebaseUid && !email) {
     return null;
@@ -429,6 +404,13 @@ exports.recordPayment = async (req, res) => {
       payment: createdPayment,
     });
   } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({
+        error: error.message,
+        code: error.statusCode === 400 ? 'SPOOF_HEADERS_REJECTED' : 'UNAUTHORIZED',
+      });
+    }
+
     if (client) {
       await client.query('ROLLBACK');
     }
@@ -506,6 +488,13 @@ exports.getStudentPayments = async (req, res) => {
       hasPending,
     });
   } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({
+        error: error.message,
+        code: error.statusCode === 400 ? 'SPOOF_HEADERS_REJECTED' : 'UNAUTHORIZED',
+      });
+    }
+
     console.error('Fetch student payments error:', error);
     res.status(500).json({
       error: 'Failed to load payment history',

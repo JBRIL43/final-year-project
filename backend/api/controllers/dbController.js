@@ -1,5 +1,5 @@
 const pool = require('../config/db');
-const firebaseAdmin = require('../config/firebaseAdmin');
+const { verifyBearerIdentity } = require('../utils/firebaseIdentity');
 
 function normalizePaymentModel(value) {
   const normalized = String(value || '').trim().toLowerCase().replace(/[-\s]+/g, '_');
@@ -10,39 +10,14 @@ function normalizePaymentModel(value) {
 }
 
 async function resolveStudentFromRequest(req) {
-  const authHeader = req.headers.authorization || '';
-  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
-
-  let firebaseUid = null;
-  let email = null;
-
-  if (token && firebaseAdmin && firebaseAdmin.apps.length > 0) {
-    try {
-      const decoded = await firebaseAdmin.auth().verifyIdToken(token);
-      firebaseUid = decoded.uid || null;
-      email = decoded.email || null;
-    } catch (error) {
-      console.warn('Token verification failed for /api/debt/balance:', error.message);
-    }
-  }
-
-  // Development fallback when Firebase verification is unavailable.
-  if (!firebaseUid) {
-    const headerUid = req.headers['x-firebase-uid'];
-    if (headerUid) {
-      firebaseUid = String(headerUid).trim();
-    }
-  }
-
-  if (!email) {
-    const headerEmail = req.headers['x-user-email'];
-    if (headerEmail) {
-      email = String(headerEmail).trim().toLowerCase();
-    }
-  }
+  const identity = await verifyBearerIdentity(req);
+  const firebaseUid = identity.uid;
+  const email = identity.email;
 
   if (!firebaseUid && !email) {
-    return null;
+    const err = new Error('Unable to resolve logged-in student');
+    err.statusCode = 401;
+    throw err;
   }
 
   const userResult = await pool.query(
@@ -197,6 +172,13 @@ exports.getDebtBalance = async (req, res) => {
     });
 
   } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({
+        error: error.message,
+        code: error.statusCode === 400 ? 'SPOOF_HEADERS_REJECTED' : 'UNAUTHORIZED',
+      });
+    }
+
     console.error('Debt balance error:', {
       message: error.message,
       code: error.code,
@@ -207,9 +189,9 @@ exports.getDebtBalance = async (req, res) => {
       constraint: error.constraint,
       stack: error.stack,
     });
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to fetch debt balance',
-      code: 'SERVER_ERROR'
+      code: 'SERVER_ERROR',
     });
   }
 };

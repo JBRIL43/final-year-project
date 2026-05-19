@@ -1,6 +1,7 @@
 const pool = require('../config/db');
 const firebaseAdmin = require('../config/firebaseAdmin');
 const { normalizeRole } = require('../utils/roles');
+const { rejectClientIdentityHeaders } = require('../utils/firebaseIdentity');
 
 async function getAvailableUserColumns() {
   const result = await pool.query(
@@ -41,6 +42,10 @@ async function resolveAppUserByIdentity(uid, email) {
 
 async function authenticateRequest(req, res, next) {
   try {
+    if (rejectClientIdentityHeaders(req, res)) {
+      return;
+    }
+
     const authHeader = req.headers.authorization || '';
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
 
@@ -53,7 +58,7 @@ async function authenticateRequest(req, res, next) {
     }
 
     const decoded = await firebaseAdmin.auth().verifyIdToken(token);
-    const email = decoded.email || req.headers['x-user-email'] || null;
+    const email = decoded.email ? String(decoded.email).trim().toLowerCase() : null;
     const appUser = await resolveAppUserByIdentity(decoded.uid, email);
 
     req.auth = {

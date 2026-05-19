@@ -35,6 +35,7 @@ async function notifyDepartmentHead(studentId) {
 const express = require('express');
 const pool = require('../config/db');
 const firebaseAdmin = require('../config/firebaseAdmin');
+const { verifyBearerIdentity } = require('../utils/firebaseIdentity');
 
 const router = express.Router();
 
@@ -53,30 +54,18 @@ async function getAvailableColumns(tableName, columns) {
 
 async function authenticateToken(req, res, next) {
   try {
-    const authHeader = req.headers.authorization || '';
-    const token = authHeader.startsWith('Bearer ')
-      ? authHeader.slice(7).trim()
-      : null;
-
     let firebaseUid = null;
     let email = null;
 
-    if (token && firebaseAdmin && firebaseAdmin.apps.length > 0) {
-      try {
-        const decoded = await firebaseAdmin.auth().verifyIdToken(token);
-        firebaseUid = decoded.uid || null;
-        email = decoded.email || null;
-      } catch (error) {
-        console.warn('Token verification failed for /api/student/*:', error.message);
-      }
-    }
-
-    if (!firebaseUid && req.headers['x-firebase-uid']) {
-      firebaseUid = String(req.headers['x-firebase-uid']).trim();
-    }
-
-    if (!email && req.headers['x-user-email']) {
-      email = String(req.headers['x-user-email']).trim().toLowerCase();
+    try {
+      const identity = await verifyBearerIdentity(req);
+      firebaseUid = identity.uid;
+      email = identity.email;
+    } catch (error) {
+      return res.status(error.statusCode || 401).json({
+        error: error.message || 'Authentication required',
+        code: 'UNAUTHORIZED',
+      });
     }
 
     if (!firebaseUid && !email) {
