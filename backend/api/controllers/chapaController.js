@@ -2,6 +2,7 @@ const https = require('https');
 const pool = require('../config/db');
 const firebaseAdmin = require('../config/firebaseAdmin');
 const { sendPaymentNotification } = require('../utils/notifications');
+const { verifyBearerIdentity } = require('../utils/firebaseIdentity');
 
 const CHAPA_BASE_URL = 'https://api.chapa.co/v1';
 
@@ -46,28 +47,9 @@ function chapaRequest(method, path, body = null) {
 }
 
 async function resolveStudentFromRequest(req) {
-  const authHeader = req.headers.authorization || '';
-  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
-
-  let firebaseUid = null;
-  let email = null;
-
-  if (token && firebaseAdmin && firebaseAdmin.apps.length > 0) {
-    try {
-      const decoded = await firebaseAdmin.auth().verifyIdToken(token);
-      firebaseUid = decoded.uid || null;
-      email = decoded.email || null;
-    } catch (e) {
-      console.warn('Chapa: token verification failed:', e.message);
-    }
-  }
-
-  if (!firebaseUid && req.headers['x-firebase-uid']) {
-    firebaseUid = String(req.headers['x-firebase-uid']).trim();
-  }
-  if (!email && req.headers['x-user-email']) {
-    email = String(req.headers['x-user-email']).trim().toLowerCase();
-  }
+  const identity = await verifyBearerIdentity(req);
+  const firebaseUid = identity.uid;
+  const email = identity.email;
 
   if (!firebaseUid && !email) return null;
 
