@@ -348,10 +348,28 @@ exports.verifyAndApproveAdmin = async (req, res) => {
         });
       }
 
-      if (payment.transaction_ref && String(payment.transaction_ref).trim() !== txRef) {
+      const storedTxRef = String(payment.transaction_ref || '').trim();
+      if (!storedTxRef) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          error: 'Payment has no transaction reference on record; cannot approve against Chapa',
+          verified: false,
+        });
+      }
+
+      if (storedTxRef !== txRef) {
         await client.query('ROLLBACK');
         return res.status(400).json({
           error: 'Transaction reference does not match payment record',
+          verified: false,
+        });
+      }
+
+      const chapaTxRef = String(txData?.tx_ref || '').trim();
+      if (chapaTxRef && chapaTxRef !== txRef) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          error: 'Chapa transaction reference does not match the requested txRef',
           verified: false,
         });
       }
