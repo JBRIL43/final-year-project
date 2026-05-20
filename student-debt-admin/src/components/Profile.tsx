@@ -1,10 +1,9 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 import {
   Box,
   Button,
   Card,
   CardContent,
-  CardHeader,
   Divider,
   Grid,
   TextField,
@@ -76,16 +75,19 @@ export default function Profile() {
         User Profile
       </Typography>
       <Card sx={{ mt: 2, borderRadius: 3, boxShadow: '0 8px 24px rgba(0,0,0,0.05)' }}>
-        <CardHeader
-          title="Profile Information"
-          subheader="Manage your account profile details"
-          titleTypographyProps={{ fontWeight: 800 }}
-        />
+        <Box sx={{ p: 3, pb: 2 }}>
+          <Typography variant="h6" sx={{ fontWeight: 800 }}>
+            Profile Information
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Manage your account profile details
+          </Typography>
+        </Box>
         <Divider />
         <CardContent>
           <Box component="form" onSubmit={handleSave} noValidate>
             <Grid container spacing={3}>
-              <Grid item xs={12}>
+              <Grid size={{ xs: 12 }}>
                 <TextField
                   fullWidth
                   label="Email Address"
@@ -94,7 +96,7 @@ export default function Profile() {
                   helperText="Your email address cannot be changed."
                 />
               </Grid>
-              <Grid item xs={12}>
+              <Grid size={{ xs: 12 }}>
                 <TextField
                   fullWidth
                   label="Role"
@@ -104,7 +106,7 @@ export default function Profile() {
                 />
               </Grid>
               {profile?.department && (
-                <Grid item xs={12}>
+                <Grid size={{ xs: 12 }}>
                   <TextField
                     fullWidth
                     label="Department"
@@ -113,7 +115,7 @@ export default function Profile() {
                   />
                 </Grid>
               )}
-              <Grid item xs={12}>
+              <Grid size={{ xs: 12 }}>
                 <TextField
                   fullWidth
                   label="Full Name"
@@ -123,7 +125,7 @@ export default function Profile() {
                   placeholder="Enter your full name"
                 />
               </Grid>
-              <Grid item xs={12}>
+              <Grid size={{ xs: 12 }}>
                 <Button
                   type="submit"
                   variant="contained"

@@ -14,6 +14,8 @@ import {
   Typography,
   Collapse,
   IconButton,
+  Menu,
+  MenuItem,
 } from '@mui/material'
 import {
   Dashboard as DashboardIcon,
@@ -33,7 +35,7 @@ import {
   ExpandLess,
   ExpandMore,
 } from '@mui/icons-material'
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 
 const drawerWidth = 270
@@ -60,8 +62,6 @@ function buildNavItems(role: string): NavItem[] {
     return [
       { type: 'link', label: 'Student Clearance & Status', to: '/registrar', icon: <AccountBalanceIcon /> },
       { type: 'link', label: 'Graduate Management', to: '/graduates', icon: <SchoolIcon /> },
-      { type: 'link', label: 'Edit Profile', to: '/profile', icon: <ManageAccountsIcon /> },
-      { type: 'link', label: 'Change Password', to: '/change-password', icon: <LockResetIcon /> },
     ]
   }
 
@@ -69,8 +69,6 @@ function buildNavItems(role: string): NavItem[] {
     return [
       { type: 'link', label: 'Department Dashboard', to: '/department', icon: <ApartmentIcon /> },
       { type: 'link', label: 'Cost Configuration', to: '/cost-config', icon: <ReceiptLongIcon /> },
-      { type: 'link', label: 'Edit Profile', to: '/profile', icon: <ManageAccountsIcon /> },
-      { type: 'link', label: 'Change Password', to: '/change-password', icon: <LockResetIcon /> },
     ]
   }
 
@@ -108,8 +106,6 @@ function buildNavItems(role: string): NavItem[] {
           { label: 'Finance Reports', to: '/finance-reports', icon: <DescriptionIcon /> },
         ],
       },
-      { type: 'link', label: 'Edit Profile', to: '/profile', icon: <ManageAccountsIcon /> },
-      { type: 'link', label: 'Change Password', to: '/change-password', icon: <LockResetIcon /> },
     ]
   }
 
@@ -136,8 +132,6 @@ function buildNavItems(role: string): NavItem[] {
         { label: 'System Logs', to: '/system-logs', icon: <HistoryIcon /> },
       ],
     },
-    { type: 'link', label: 'Edit Profile', to: '/profile', icon: <ManageAccountsIcon /> },
-    { type: 'link', label: 'Change Password', to: '/change-password', icon: <LockResetIcon /> },
   ]
 }
 
@@ -161,7 +155,28 @@ export default function AdminLayout({ children }: { children?: ReactNode }) {
   const navItems = buildNavItems(role)
   const roleLabel = getRoleLabel(role)
   const location = useLocation()
+  const navigate = useNavigate()
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
+  const isMenuOpen = Boolean(anchorEl)
+
+  const handleAccountClick = (event: React.MouseEvent<HTMLElement>) => {
+    setAnchorEl(event.currentTarget)
+  }
+
+  const handleMenuClose = () => {
+    setAnchorEl(null)
+  }
+
+  const handleEditProfile = () => {
+    handleMenuClose()
+    navigate('/profile')
+  }
+
+  const handleChangePassword = () => {
+    handleMenuClose()
+    navigate('/change-password')
+  }
 
   const isGroupActive = (group: NavGroupItem) => {
     return group.items.some((item) => {
@@ -188,6 +203,7 @@ export default function AdminLayout({ children }: { children?: ReactNode }) {
   }
 
   const handleLogout = async () => {
+    handleMenuClose()
     try {
       await logout()
     } catch (error) {
@@ -353,19 +369,27 @@ export default function AdminLayout({ children }: { children?: ReactNode }) {
           </Typography>
           <Paper
             elevation={0}
+            onClick={handleAccountClick}
             sx={{
               mt: 1.5,
               p: 1.5,
               borderRadius: 3,
               border: '1px solid #e7ebf2',
               bgcolor: '#fff',
+              cursor: 'pointer',
+              transition: 'background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease',
+              '&:hover': {
+                bgcolor: '#f8fafc',
+                borderColor: '#cbd5e1',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.03)',
+              },
             }}
           >
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
               <Avatar sx={{ bgcolor: '#e5edff', color: '#1d4ed8', fontWeight: 800 }}>
                 {getInitials(displayName)}
               </Avatar>
-              <Box sx={{ minWidth: 0 }}>
+              <Box sx={{ minWidth: 0, flexGrow: 1 }}>
                 <Typography variant="body2" sx={{ fontWeight: 800 }} noWrap>
                   {email}
                 </Typography>
@@ -375,15 +399,43 @@ export default function AdminLayout({ children }: { children?: ReactNode }) {
               </Box>
             </Box>
           </Paper>
-          <Button
-            variant="outlined"
-            color="inherit"
-            fullWidth
-            onClick={handleLogout}
-            sx={{ mt: 1.5, borderColor: '#d6deea', textTransform: 'none', fontWeight: 700 }}
+
+          <Menu
+            anchorEl={anchorEl}
+            open={isMenuOpen}
+            onClose={handleMenuClose}
+            anchorOrigin={{
+              vertical: 'top',
+              horizontal: 'center',
+            }}
+            transformOrigin={{
+              vertical: 'bottom',
+              horizontal: 'center',
+            }}
+            slotProps={{
+              paper: {
+                sx: {
+                  width: 238,
+                  borderRadius: 3,
+                  mt: -1,
+                  boxShadow: '0 12px 30px rgba(15, 23, 42, 0.1)',
+                  border: '1px solid #e2e8f0',
+                  p: 0.5,
+                }
+              }
+            }}
           >
-            Logout
-          </Button>
+            <MenuItem onClick={handleEditProfile} sx={{ borderRadius: 2, py: 1.25, px: 2, fontWeight: 600, fontSize: 14 }}>
+              Edit Profile
+            </MenuItem>
+            <MenuItem onClick={handleChangePassword} sx={{ borderRadius: 2, py: 1.25, px: 2, fontWeight: 600, fontSize: 14 }}>
+              Change Password
+            </MenuItem>
+            <Divider sx={{ my: 1, borderColor: '#e2e8f0' }} />
+            <MenuItem onClick={handleLogout} sx={{ borderRadius: 2, py: 1.25, px: 2, color: 'error.main', fontWeight: 600, fontSize: 14 }}>
+              Logout
+            </MenuItem>
+          </Menu>
         </Box>
       </Drawer>
 
