@@ -14,6 +14,7 @@ const registrarRoutes = require('./routes/registrarRoutes');
 const departmentRoutes = require('./routes/departmentRoutes');
 const faydaRoutes = require('./routes/faydaRoutes');
 const semesterAmountsRoutes = require('./routes/semesterAmountsRoutes');
+const reportRoutes = require('./routes/reportRoutes');
 const {
   globalLimiter,
   authLimiter,
@@ -154,6 +155,7 @@ app.use('/api/admin/erca/debtors', reportLimiter);
 app.use('/api/admin/analytics/debt-overview', reportLimiter);
 app.use('/api/admin/debt/reconcile', reportLimiter);
 app.use('/api/admin/payments/pending', reportLimiter);
+app.use('/api/admin/reports', reportLimiter);
 
 // Routes
 app.use('/api/debt', debtRoutes);
@@ -161,6 +163,7 @@ app.use('/api/payment', paymentRoutes);
 app.use('/api/verification', verificationRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/admin/system-logs', systemLogRoutes);
+app.use('/api/admin/reports', reportRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/notifications', notificationRoutes);

@@ -599,9 +599,12 @@ router.get('/graduates/delinquent', async (req, res) => {
   }
 });
 
-// GET /api/admin/erca/debtors — export debtor list for ERCA
-router.get('/erca/debtors', async (req, res) => {
+// GET /api/admin/erca/debtors[.csv] — export debtor list for ERCA
+router.get(['/erca/debtors', '/erca/debtors.csv'], async (req, res) => {
   try {
+    const { startDate, endDate, campus } = req.query;
+    const isCsv = req.path.endsWith('.csv') || req.query.format === 'csv';
+
     const studentCols = await getAvailableColumns('students', [
       'full_name',
       'student_number',
@@ -645,6 +648,32 @@ router.get('/erca/debtors', async (req, res) => {
     const campusExpr = hasCampus ? 's.campus' : "'Main Campus'::text";
     const needsUsersJoin = !hasStudentFullName || !hasStudentEmail;
 
+    let whereClauses = [
+      "UPPER(COALESCE(s.clearance_status, '')) = 'PENDING'",
+      "dr.current_balance > 0",
+      "s.graduation_date IS NOT NULL",
+      "s.repayment_start_date IS NOT NULL",
+      "s.repayment_start_date <= NOW()"
+    ];
+    let values = [];
+
+    if (hasPaymentModel) {
+      whereClauses.push("LOWER(COALESCE(s.payment_model, 'post_graduation')) = 'post_graduation'");
+    }
+
+    if (startDate) {
+      values.push(startDate);
+      whereClauses.push(`s.graduation_date >= $${values.length}`);
+    }
+    if (endDate) {
+      values.push(endDate);
+      whereClauses.push(`s.graduation_date <= $${values.length}`);
+    }
+    if (campus) {
+      values.push(campus);
+      whereClauses.push(`LOWER(COALESCE(s.campus, 'main campus')) = LOWER($${values.length})`);
+    }
+
     const result = await pool.query(
       `SELECT
          ${fullNameExpr} AS full_name,
@@ -660,12 +689,7 @@ router.get('/erca/debtors', async (req, res) => {
        FROM public.students s
        JOIN public.debt_records dr ON s.student_id = dr.student_id
        ${needsUsersJoin ? 'LEFT JOIN public.users u ON s.user_id = u.user_id' : ''}
-       WHERE UPPER(COALESCE(s.clearance_status, '')) = 'PENDING'
-         AND dr.current_balance > 0
-         AND s.graduation_date IS NOT NULL
-         AND s.repayment_start_date IS NOT NULL
-         AND s.repayment_start_date <= NOW()
-        ${hasPaymentModel ? "AND LOWER(COALESCE(s.payment_model, 'post_graduation')) = 'post_graduation'" : ''}
+       WHERE ${whereClauses.join(' AND ')}
        GROUP BY
          s.student_id,
          s.student_number,
@@ -677,8 +701,18 @@ router.get('/erca/debtors', async (req, res) => {
          ${campusExpr},
          s.graduation_date,
          s.repayment_start_date
-       ORDER BY s.repayment_start_date ASC, s.student_id ASC`
+       ORDER BY s.repayment_start_date ASC, s.student_id ASC`,
+      values
     );
+
+    if (isCsv) {
+      const csvCols = ['full_name', 'student_number', 'email', 'phone', 'tin', 'total_debt', 'program', 'campus', 'graduation_date', 'repayment_start_date'];
+      const header = csvCols.join(',');
+      const body = result.rows.map(r => csvCols.map(c => `"${String(r[c] || '').replace(/"/g, '""')}"`).join(',')).join('\n');
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="ERCA_Debtors_${new Date().toISOString().slice(0, 10)}.csv"`);
+      return res.send('\ufeff' + header + '\n' + body);
+    }
 
     res.json({
       success: true,

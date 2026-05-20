@@ -18,6 +18,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TextField,
   Typography,
 } from '@mui/material'
 import {
@@ -330,15 +331,26 @@ function WithdrawalsView({ rows }: { rows: WithdrawalRow[] }) {
 
 // ─── CSV path map ─────────────────────────────────────────────────────────────
 
-function csvPath(type: ReportType, months: number): string {
-  switch (type) {
-    case 'monthly': return `/api/admin/reports/monthly-collections.csv?months=${months}`
-    case 'outstanding': return '/api/admin/reports/outstanding-debt.csv'
-    case 'default': return '/api/admin/reports/default-rate.csv'
-    case 'methods': return '/api/admin/reports/payment-methods.csv'
-    case 'withdrawals': return '/api/admin/reports/withdrawal-settlements.csv'
-    case 'erca': return '/api/admin/erca/debtors.csv'
-  }
+function csvPath(type: ReportType, filters: { months: number; startDate: string; endDate: string; campus: string; program: string }): string {
+  const params = new URLSearchParams()
+  if (filters.startDate) params.append('startDate', filters.startDate)
+  if (filters.endDate) params.append('endDate', filters.endDate)
+  if (filters.campus) params.append('campus', filters.campus)
+  if (filters.program) params.append('program', filters.program)
+
+  const baseUrl = `/api/admin/reports/${
+    type === 'monthly' ? 'monthly-collections' :
+    type === 'outstanding' ? 'outstanding-debt' :
+    type === 'default' ? 'default-rate' :
+    type === 'methods' ? 'payment-methods' :
+    type === 'withdrawals' ? 'withdrawal-settlements' :
+    'monthly-collections'
+  }.csv`
+
+  if (type === 'monthly') params.append('months', String(filters.months))
+
+  const queryString = params.toString()
+  return `${baseUrl}${queryString ? '?' + queryString : ''}`
 }
 
 function csvFilename(type: ReportType): string {
@@ -358,6 +370,10 @@ function csvFilename(type: ReportType): string {
 export default function FinanceReportsDashboard() {
   const [reportType, setReportType] = useState<ReportType>('monthly')
   const [months, setMonths] = useState(12)
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
+  const [campus, setCampus] = useState('')
+  const [program, setProgram] = useState('')
   const [loading, setLoading] = useState(false)
   const [generated, setGenerated] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -374,25 +390,34 @@ export default function FinanceReportsDashboard() {
     setLoading(true)
     setError(null)
     setGenerated(false)
+
+    const params = new URLSearchParams()
+    if (startDate) params.append('startDate', startDate)
+    if (endDate) params.append('endDate', endDate)
+    if (campus) params.append('campus', campus)
+    if (program) params.append('program', program)
+
     try {
       if (reportType === 'monthly') {
-        const r = await api.get<{ rows: MonthlyRow[] }>(`/api/admin/reports/monthly-collections?months=${safeMonths}`)
+        params.append('months', String(safeMonths))
+        const r = await api.get<{ rows: MonthlyRow[] }>(`/api/admin/reports/monthly-collections?${params.toString()}`)
         setMonthly(r.data.rows || [])
       } else if (reportType === 'outstanding') {
-        const r = await api.get<{ rows: OutstandingRow[] }>('/api/admin/reports/outstanding-debt')
+        const r = await api.get<{ rows: OutstandingRow[] }>(`/api/admin/reports/outstanding-debt?${params.toString()}`)
         setOutstanding(r.data.rows || [])
       } else if (reportType === 'default') {
-        const r = await api.get<{ totals: DefaultTotals }>('/api/admin/reports/default-rate')
+        const r = await api.get<{ totals: DefaultTotals }>(`/api/admin/reports/default-rate?${params.toString()}`)
         setDefaultRate(r.data.totals || null)
       } else if (reportType === 'methods') {
-        const r = await api.get<{ rows: MethodRow[] }>('/api/admin/reports/payment-methods')
+        const r = await api.get<{ rows: MethodRow[] }>(`/api/admin/reports/payment-methods?${params.toString()}`)
         setMethods(r.data.rows || [])
       } else if (reportType === 'withdrawals') {
-        const r = await api.get<{ rows: WithdrawalRow[] }>('/api/admin/reports/withdrawal-settlements')
+        const r = await api.get<{ rows: WithdrawalRow[] }>(`/api/admin/reports/withdrawal-settlements?${params.toString()}`)
         setWithdrawals(r.data.rows || [])
       } else if (reportType === 'erca') {
         // ERCA is CSV-only — trigger download directly
-        downloadCsvUrl(csvPath('erca', safeMonths), csvFilename('erca'))
+        const path = `/api/admin/erca/debtors.csv?${params.toString()}`
+        downloadCsvUrl(path, csvFilename('erca'))
         setLoading(false)
         return
       }
@@ -423,60 +448,114 @@ export default function FinanceReportsDashboard() {
 
       {/* Controls */}
       <Paper elevation={0} sx={{ p: 2.5, border: '1px solid #e7ebf2', borderRadius: 3, mb: 3 }}>
-        <Stack
-          direction={{ xs: 'column', sm: 'row' }}
-          spacing={2}
-          sx={{ alignItems: { xs: 'stretch', sm: 'flex-end' } }}
-        >
-          <FormControl size="small" sx={{ minWidth: 280 }}>
-            <InputLabel>Report Type</InputLabel>
-            <Select
-              value={reportType}
-              label="Report Type"
-              onChange={(e) => { setReportType(e.target.value as ReportType); setGenerated(false); setError(null) }}
-            >
-              {REPORT_OPTIONS.map((o) => (
-                <MenuItem key={o.value} value={o.value}>
-                  <Box>
-                    <Typography variant="body2" fontWeight={700}>{o.label}</Typography>
-                    <Typography variant="caption" color="text.secondary">{o.description}</Typography>
-                  </Box>
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-
-          {reportType === 'monthly' && (
-            <FormControl size="small" sx={{ minWidth: 140 }}>
-              <InputLabel>Period</InputLabel>
-              <Select value={months} label="Period" onChange={(e) => setMonths(Number(e.target.value))}>
-                {[3, 6, 12, 24, 36].map((m) => (
-                  <MenuItem key={m} value={m}>{m} months</MenuItem>
+        <Stack spacing={2}>
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            spacing={2}
+            sx={{ alignItems: { xs: 'stretch', sm: 'flex-end' } }}
+          >
+            <FormControl size="small" sx={{ minWidth: 280 }}>
+              <InputLabel>Report Type</InputLabel>
+              <Select
+                value={reportType}
+                label="Report Type"
+                onChange={(e) => { setReportType(e.target.value as ReportType); setGenerated(false); setError(null) }}
+              >
+                {REPORT_OPTIONS.map((o) => (
+                  <MenuItem key={o.value} value={o.value}>
+                    <Box>
+                      <Typography variant="body2" fontWeight={700}>{o.label}</Typography>
+                      <Typography variant="caption" color="text.secondary">{o.description}</Typography>
+                    </Box>
+                  </MenuItem>
                 ))}
               </Select>
             </FormControl>
-          )}
 
-          <Stack direction="row" spacing={1.5}>
-            <Button
-              variant="contained"
-              onClick={generate}
-              disabled={loading}
-              startIcon={loading ? <CircularProgress size={16} color="inherit" /> : <AssessmentIcon />}
-              sx={{ px: 3 }}
-            >
-              {loading ? 'Generating…' : 'Generate Report'}
-            </Button>
-
-            {generated && reportType !== 'erca' && (
-              <Button
-                variant="outlined"
-                startIcon={<DownloadOutlinedIcon />}
-                onClick={() => downloadCsvUrl(csvPath(reportType, safeMonths), csvFilename(reportType))}
-              >
-                Export CSV
-              </Button>
+            {reportType === 'monthly' && (
+              <FormControl size="small" sx={{ minWidth: 140 }}>
+                <InputLabel>Period</InputLabel>
+                <Select value={months} label="Period" onChange={(e) => setMonths(Number(e.target.value))}>
+                  {[3, 6, 12, 24, 36].map((m) => (
+                    <MenuItem key={m} value={m}>{m} months</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
             )}
+
+            <Stack direction="row" spacing={1.5}>
+              <Button
+                variant="contained"
+                onClick={generate}
+                disabled={loading}
+                startIcon={loading ? <CircularProgress size={16} color="inherit" /> : <AssessmentIcon />}
+                sx={{ px: 3 }}
+              >
+                {loading ? 'Generating…' : 'Generate Report'}
+              </Button>
+
+              {generated && reportType !== 'erca' && (
+                <Button
+                  variant="outlined"
+                  startIcon={<DownloadOutlinedIcon />}
+                  onClick={() => downloadCsvUrl(csvPath(reportType, { months, startDate, endDate, campus, program }), csvFilename(reportType))}
+                >
+                  Export CSV
+                </Button>
+              )}
+            </Stack>
+          </Stack>
+
+          {/* Filters Row */}
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+            <TextField
+              label="Start Date"
+              type="date"
+              size="small"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              sx={{ minWidth: 150 }}
+            />
+            <TextField
+              label="End Date"
+              type="date"
+              size="small"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              sx={{ minWidth: 150 }}
+            />
+            <FormControl size="small" sx={{ minWidth: 180 }}>
+              <InputLabel>Campus</InputLabel>
+              <Select
+                value={campus}
+                label="Campus"
+                onChange={(e) => setCampus(e.target.value)}
+              >
+                <MenuItem value=""><em>All Campuses</em></MenuItem>
+                <MenuItem value="Main Campus">Main Campus</MenuItem>
+                <MenuItem value="Referral Hospital">Referral Hospital</MenuItem>
+                <MenuItem value="Agriculture Campus">Agriculture Campus</MenuItem>
+                <MenuItem value="IoT Campus">IoT Campus</MenuItem>
+              </Select>
+            </FormControl>
+            <TextField
+              label="Program/Dept"
+              size="small"
+              value={program}
+              onChange={(e) => setProgram(e.target.value)}
+              placeholder="e.g. Computer Science"
+              sx={{ minWidth: 200 }}
+            />
+            <Button
+              size="small"
+              variant="text"
+              onClick={() => { setStartDate(''); setEndDate(''); setCampus(''); setProgram('') }}
+              sx={{ alignSelf: 'center' }}
+            >
+              Clear Filters
+            </Button>
           </Stack>
         </Stack>
 
