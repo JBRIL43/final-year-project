@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { invalidatePaymentCaches } = require('../utils/cache');
 const { sendPaymentNotification } = require('../utils/notifications');
 
 function resolveStatusMode(sampleStatus) {
@@ -216,6 +217,10 @@ exports.verifyPayment = async (req, res) => {
     }
 
     await client.query('COMMIT');
+
+    if (action === 'APPROVE') {
+      await invalidatePaymentCaches();
+    }
 
     if (action === 'APPROVE' && studentUserId) {
       await sendPaymentNotification(

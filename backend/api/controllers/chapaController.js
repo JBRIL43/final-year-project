@@ -1,7 +1,9 @@
+const crypto = require('crypto');
 const https = require('https');
 const pool = require('../config/db');
 const firebaseAdmin = require('../config/firebaseAdmin');
 const { sendPaymentNotification } = require('../utils/notifications');
+const { invalidatePaymentCaches } = require('../utils/cache');
 const { verifyBearerIdentity } = require('../utils/firebaseIdentity');
 
 const CHAPA_BASE_URL = 'https://api.chapa.co/v1';
@@ -14,6 +16,14 @@ function getChapaKey() {
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
+
+async function ensureTransactionRefUniqueIndex() {
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_payment_history_transaction_ref
+      ON public.payment_history (transaction_ref)
+      WHERE transaction_ref IS NOT NULL AND BTRIM(transaction_ref) <> ''
+  `);
+}
 
 function chapaRequest(method, path, body = null) {
   return new Promise((resolve, reject) => {
@@ -101,7 +111,7 @@ exports.initializePayment = async (req, res) => {
       last_name: lastName,
       tx_ref: txRef,
       callback_url: `${apiBase}/api/payment/chapa/webhook`,
-      return_url: returnUrl || `${apiBase}/api/payment/chapa/return`,
+      return_url: resolveReturnUrl(returnUrl),
       customization: {
         title: 'HU Debt Payment',
         description: `Ref ${txRef}`,
@@ -134,6 +144,8 @@ exports.initializePayment = async (req, res) => {
     }
 
     const debtId = debtRes.rows[0].debt_id;
+
+    await ensureTransactionRefUniqueIndex();
 
     // Check if payment_history has a student_id column
     const colCheck = await pool.query(
@@ -174,6 +186,148 @@ exports.initializePayment = async (req, res) => {
   }
 };
 
+function resolveReturnUrl(clientReturnUrl) {
+  const apiBase = process.env.API_BASE_URL || 'https://final-year-project-r2h8.onrender.com';
+  const defaultReturn = `${apiBase}/api/payment/chapa/return`;
+
+  if (!clientReturnUrl) {
+    return defaultReturn;
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(String(clientReturnUrl).trim());
+  } catch {
+    return defaultReturn;
+  }
+
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    return defaultReturn;
+  }
+
+  const allowedHosts = new Set(
+    [
+      new URL(apiBase).host,
+      process.env.MOBILE_APP_URL ? new URL(process.env.MOBILE_APP_URL).host : null,
+      process.env.CLIENT_URL ? new URL(process.env.CLIENT_URL).host : null,
+      'localhost',
+      '127.0.0.1',
+      ...(process.env.ALLOWED_RETURN_URLS
+        ? process.env.ALLOWED_RETURN_URLS.split(',').map((value) => {
+            try {
+              return new URL(value.trim()).host;
+            } catch {
+              return value.trim();
+            }
+          })
+        : []),
+    ].filter(Boolean)
+  );
+
+  if (!allowedHosts.has(parsed.host)) {
+    return defaultReturn;
+  }
+
+  return parsed.toString();
+}
+
+async function paymentHistoryHasStudentId() {
+  const colCheck = await pool.query(
+    `SELECT column_name FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'payment_history'
+       AND column_name = 'student_id' LIMIT 1`
+  );
+  return colCheck.rows.length > 0;
+}
+
+function txRefBelongsToStudent(txRef, studentId) {
+  const normalized = String(txRef || '').trim();
+  const expectedPrefix = `HU-${studentId}-`;
+  return normalized.startsWith(expectedPrefix);
+}
+
+function verifyChapaWebhookSignature(req) {
+  const secret = process.env.CHAPA_WEBHOOK_SECRET || process.env.CHAPA_SECRET_KEY;
+  if (!secret) {
+    console.error('Chapa webhook secret is not configured');
+    return false;
+  }
+
+  const signature =
+    req.headers['x-chapa-signature']
+    || req.headers['chapa-signature']
+    || req.headers['Chapa-Signature'];
+
+  if (!signature) {
+    return false;
+  }
+
+  const payload = JSON.stringify(req.body || {});
+  const expected = crypto.createHmac('sha256', secret).update(payload).digest('hex');
+
+  try {
+    const received = Buffer.from(String(signature), 'utf8');
+    const computed = Buffer.from(expected, 'utf8');
+    if (received.length !== computed.length) {
+      return false;
+    }
+    return crypto.timingSafeEqual(received, computed);
+  } catch {
+    return false;
+  }
+}
+
+// ── POST /api/payment/chapa/webhook ──────────────────────────────────────────
+// Confirms payment with Chapa; keeps finance approval flow (status stays PENDING on success).
+exports.handleWebhook = async (req, res) => {
+  try {
+    if (!verifyChapaWebhookSignature(req)) {
+      return res.status(401).json({ error: 'Invalid webhook signature' });
+    }
+
+    const txRef = String(
+      req.body?.tx_ref || req.body?.trx_ref || req.body?.reference || ''
+    ).trim();
+    const chapaStatus = String(req.body?.status || req.body?.event || '').toLowerCase();
+
+    if (!txRef) {
+      return res.status(400).json({ error: 'tx_ref is required' });
+    }
+
+    if (chapaStatus === 'success' || chapaStatus === 'charge.success') {
+      const updateResult = await pool.query(
+        `UPDATE public.payment_history
+         SET status = 'PENDING'
+         WHERE transaction_ref = $1
+           AND UPPER(COALESCE(status, '')) NOT IN ('SUCCESS', 'APPROVED')
+         RETURNING payment_id`,
+        [txRef]
+      );
+
+      return res.json({
+        received: true,
+        updated: updateResult.rows.length > 0,
+        paymentId: updateResult.rows[0]?.payment_id || null,
+      });
+    }
+
+    if (chapaStatus === 'failed' || chapaStatus === 'cancelled' || chapaStatus === 'charge.failed') {
+      await pool.query(
+        `UPDATE public.payment_history
+         SET status = 'FAILED'
+         WHERE transaction_ref = $1
+           AND UPPER(COALESCE(status, '')) = 'PENDING'`,
+        [txRef]
+      );
+    }
+
+    return res.json({ received: true, status: chapaStatus || 'ignored' });
+  } catch (error) {
+    console.error('Chapa webhook error:', error.message);
+    return res.status(500).json({ error: 'Webhook processing failed' });
+  }
+};
+
 // ── POST /api/payment/chapa/verify ───────────────────────────────────────────
 exports.verifyPayment = async (req, res) => {
   try {
@@ -188,6 +342,12 @@ exports.verifyPayment = async (req, res) => {
       return res.status(401).json({ error: 'Unable to resolve student' });
     }
 
+    if (!txRefBelongsToStudent(txRef, student.student_id)) {
+      return res.status(403).json({ error: 'Transaction does not belong to this account' });
+    }
+
+    const hasStudentId = await paymentHistoryHasStudentId();
+
     const chapaRes = await chapaRequest('GET', `/transaction/verify/${encodeURIComponent(txRef)}`);
 
     console.log('Chapa verify response:', chapaRes.status, JSON.stringify(chapaRes.body));
@@ -201,10 +361,24 @@ exports.verifyPayment = async (req, res) => {
 
     if (chapaStatus !== 'success') {
       if (chapaStatus === 'failed' || chapaStatus === 'cancelled') {
-        await pool.query(
-          `UPDATE public.payment_history SET status = 'FAILED' WHERE transaction_ref = $1`,
-          [txRef]
-        );
+        if (hasStudentId) {
+          await pool.query(
+            `UPDATE public.payment_history
+             SET status = 'FAILED'
+             WHERE transaction_ref = $1 AND student_id = $2`,
+            [txRef, student.student_id]
+          );
+        } else {
+          await pool.query(
+            `UPDATE public.payment_history ph
+             SET status = 'FAILED'
+             FROM public.debt_records dr
+             WHERE ph.transaction_ref = $1
+               AND ph.debt_id = dr.debt_id
+               AND dr.student_id = $2`,
+            [txRef, student.student_id]
+          );
+        }
       }
       return res.status(400).json({
         error: `Payment not successful. Status: ${chapaStatus}`,
@@ -212,13 +386,25 @@ exports.verifyPayment = async (req, res) => {
       });
     }
 
-    const updateResult = await pool.query(
-      `UPDATE public.payment_history
-       SET status = 'PENDING'
-       WHERE transaction_ref = $1
-       RETURNING payment_id, debt_id, amount`,
-      [txRef]
-    );
+    const updateResult = hasStudentId
+      ? await pool.query(
+        `UPDATE public.payment_history
+         SET status = 'PENDING'
+         WHERE transaction_ref = $1
+           AND student_id = $2
+         RETURNING payment_id, debt_id, amount`,
+        [txRef, student.student_id]
+      )
+      : await pool.query(
+        `UPDATE public.payment_history ph
+         SET status = 'PENDING'
+         FROM public.debt_records dr
+         WHERE ph.transaction_ref = $1
+           AND ph.debt_id = dr.debt_id
+           AND dr.student_id = $2
+         RETURNING ph.payment_id, ph.debt_id, ph.amount`,
+        [txRef, student.student_id]
+      );
 
     if (updateResult.rows.length === 0) {
       return res.status(404).json({ error: 'Payment record not found for this transaction' });
@@ -403,6 +589,7 @@ exports.verifyAndApproveAdmin = async (req, res) => {
       }
 
       await client.query('COMMIT');
+      await invalidatePaymentCaches();
 
       // Notify student
       try {

@@ -7,7 +7,7 @@ import { getRoleHome, useAuth } from '../contexts/AuthContext'
 
 export default function Login() {
   const navigate = useNavigate()
-  const { user, profileLoading, profileReady, role } = useAuth()
+  const { user, profileLoading, profileReady, profileError, role } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -108,6 +108,11 @@ export default function Login() {
 
         <Box component="form" onSubmit={handleLogin}>
           <Stack spacing={2}>
+            {profileError && !error && (
+              <Alert severity="warning">
+                Session could not be verified ({profileError}). Please sign in again.
+              </Alert>
+            )}
             {error && <Alert severity="error">{error}</Alert>}
             <TextField
               label="Email"

@@ -3,6 +3,14 @@ const pool = require('../config/db');
 const firebaseAdmin = require('../config/firebaseAdmin');
 const { authenticateRequest, requireRoles } = require('../middleware/auth');
 const { sendPaymentNotification } = require('../utils/notifications');
+const { auditLog } = require('../utils/auditLog');
+const { createFirebaseUserWithReset } = require('../utils/securePassword');
+const {
+  CACHE_KEYS,
+  cacheGet,
+  cacheSet,
+  invalidatePaymentCaches,
+} = require('../utils/cache');
 
 const router = express.Router();
 
@@ -158,16 +166,14 @@ async function createOrResolveFirebaseUid({ studentNumber, email, fullName }) {
   }
 
   try {
-    const userRecord = await firebaseAdmin.auth().createUser({
+    const { uid } = await createFirebaseUserWithReset({
+      firebaseAdmin,
       email: String(email).trim(),
-      emailVerified: false,
-      password: '12345678',
       displayName: String(fullName).trim(),
-      disabled: false,
     });
 
     return {
-      uid: userRecord.uid,
+      uid,
       source: 'created',
       reason: null,
     };
@@ -363,12 +369,10 @@ router.post('/users', authenticateRequest, requireRoles(['admin']), async (req, 
       return res.status(500).json({ error: 'Firebase Admin is not configured' });
     }
 
-    const userRecord = await firebaseAdmin.auth().createUser({
+    const { uid, passwordResetLink } = await createFirebaseUserWithReset({
+      firebaseAdmin,
       email,
-      emailVerified: false,
-      password: '12345678',
       displayName: email.split('@')[0],
-      disabled: false,
     });
 
     let insertResult;
@@ -378,11 +382,11 @@ router.post('/users', authenticateRequest, requireRoles(['admin']), async (req, 
         `INSERT INTO public.users (firebase_uid, email, full_name, role, department, created_at)
          VALUES ($1, $2, $3, $4, $5, NOW())
          RETURNING user_id, email, role, department`,
-        [userRecord.uid, email, email.split('@')[0], role, department]
+        [uid, email, email.split('@')[0], role, department]
       );
     } catch (dbError) {
       try {
-        await firebaseAdmin.auth().deleteUser(userRecord.uid);
+        await firebaseAdmin.auth().deleteUser(uid);
       } catch (cleanupError) {
         console.error('Failed to clean up Firebase user after DB insert error:', cleanupError.message);
       }
@@ -390,11 +394,19 @@ router.post('/users', authenticateRequest, requireRoles(['admin']), async (req, 
       throw dbError;
     }
 
+    await auditLog(
+      req,
+      'admin.user.create',
+      { type: 'user', id: insertResult.rows[0].user_id },
+      null,
+      insertResult.rows[0]
+    );
+
     res.status(201).json({
       success: true,
       message: 'Admin user created successfully',
       user: insertResult.rows[0],
-      defaultPassword: '12345678',
+      passwordResetLink,
     });
   } catch (error) {
     console.error('Create admin user error:', error);
@@ -1886,27 +1898,33 @@ router.delete('/cost-shares/:id', async (req, res) => {
 // GET /api/admin/analytics/debt-overview — debt & collection summary
 router.get('/analytics/debt-overview', async (req, res) => {
   try {
-    // Total collections (approved/success payments across schema variants)
+    const cached = await cacheGet(CACHE_KEYS.analyticsDebtOverview);
+    if (cached) {
+      return res.json(cached);
+    }
+
     const collectionsResult = await pool.query(`
       SELECT COALESCE(SUM(amount), 0) AS total_collections
       FROM payment_history
       WHERE UPPER(COALESCE(status, '')) IN ('APPROVED', 'SUCCESS')
     `);
 
-    // Total outstanding debt (unpaid balances)
     const debtResult = await pool.query(`
       SELECT COALESCE(SUM(current_balance), 0) AS outstanding_debt
       FROM debt_records
       WHERE current_balance > 0
     `);
 
-    res.json({
+    const payload = {
       success: true,
       data: {
         totalCollections: parseFloat(collectionsResult.rows[0].total_collections),
         outstandingDebt: parseFloat(debtResult.rows[0].outstanding_debt),
       },
-    });
+    };
+
+    await cacheSet(CACHE_KEYS.analyticsDebtOverview, payload, 60);
+    res.json(payload);
   } catch (error) {
     console.error('Debt analytics error:', error);
     res.status(500).json({ error: 'Failed to fetch debt analytics' });
@@ -2351,28 +2369,45 @@ router.post('/payments/:id/approve', async (req, res) => {
     // Start transaction on a single client connection
     await client.query('BEGIN');
 
-    // Get payment and student info
     const paymentRes = await client.query(
       `SELECT
+         payment_id,
          amount,
          status,
          ${hasPhStudentId ? 'student_id' : 'NULL::integer AS student_id'},
          ${hasPhDebtId ? 'debt_id' : 'NULL::integer AS debt_id'}
        FROM payment_history
        WHERE payment_id = $1
-         AND UPPER(COALESCE(status, '')) = 'PENDING'`,
+       FOR UPDATE`,
       [id]
     );
+
     if (paymentRes.rows.length === 0) {
       await client.query('ROLLBACK');
-      return res.status(404).json({ error: 'Pending payment not found' });
+      return res.status(404).json({ error: 'Payment not found' });
     }
 
-    const { student_id, debt_id, amount, status } = paymentRes.rows[0];
+    const payment = paymentRes.rows[0];
+    const normalizedStatus = String(payment.status || '').toUpperCase();
+
+    if (normalizedStatus === 'SUCCESS' || normalizedStatus === 'APPROVED') {
+      await client.query('COMMIT');
+      return res.json({
+        success: true,
+        message: 'Payment already approved',
+        idempotent: true,
+      });
+    }
+
+    if (normalizedStatus !== 'PENDING') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: `Payment is not pending (status: ${payment.status})` });
+    }
+
+    const { student_id, debt_id, amount, status } = payment;
     const statusMode = resolveStatusMode(status);
 
-    // Update payment status
-    const paymentSetClauses = [`status = $1`];
+    const paymentSetClauses = ['status = $1'];
     const paymentValues = [statusMode.approved];
     let paymentParamIndex = 2;
 
@@ -2386,42 +2421,86 @@ router.post('/payments/:id/approve', async (req, res) => {
     }
     paymentValues.push(id);
 
-    await client.query(
+    const approveResult = await client.query(
       `UPDATE payment_history
        SET ${paymentSetClauses.join(', ')}
-       WHERE payment_id = $${paymentParamIndex}`,
+       WHERE payment_id = $${paymentParamIndex}
+         AND UPPER(COALESCE(status, '')) = 'PENDING'
+       RETURNING payment_id`,
       paymentValues
     );
 
-    // Reduce student's current debt balance
-    const debtSetClauses = ['current_balance = GREATEST(0, current_balance - $1)'];
-    if (hasDebtUpdatedAt) {
-      debtSetClauses.push('updated_at = NOW()');
-    } else if (hasDebtLastUpdated) {
-      debtSetClauses.push('last_updated = NOW()');
+    if (approveResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'Payment is no longer pending' });
     }
 
-    let debtWhereClause = '';
-    let debtWhereValue;
     if (hasPhDebtId && debt_id != null) {
-      debtWhereClause = 'debt_id = $2';
-      debtWhereValue = debt_id;
+      const debtLock = await client.query(
+        `SELECT debt_id, current_balance
+         FROM debt_records
+         WHERE debt_id = $1
+         FOR UPDATE`,
+        [debt_id]
+      );
+
+      if (debtLock.rows.length > 0) {
+        const debtSetClauses = ['current_balance = GREATEST(0, current_balance - $1)'];
+        if (hasDebtUpdatedAt) {
+          debtSetClauses.push('updated_at = NOW()');
+        } else if (hasDebtLastUpdated) {
+          debtSetClauses.push('last_updated = NOW()');
+        }
+
+        await client.query(
+          `UPDATE debt_records
+           SET ${debtSetClauses.join(', ')}
+           WHERE debt_id = $2`,
+          [amount, debt_id]
+        );
+      }
     } else if (hasDebtStudentId && student_id != null) {
-      debtWhereClause = 'student_id = $2';
-      debtWhereValue = student_id;
+      const debtLock = await client.query(
+        `SELECT debt_id, current_balance
+         FROM debt_records
+         WHERE student_id = $1
+         ORDER BY debt_id DESC
+         LIMIT 1
+         FOR UPDATE`,
+        [student_id]
+      );
+
+      if (debtLock.rows.length > 0) {
+        const debtSetClauses = ['current_balance = GREATEST(0, current_balance - $1)'];
+        if (hasDebtUpdatedAt) {
+          debtSetClauses.push('updated_at = NOW()');
+        } else if (hasDebtLastUpdated) {
+          debtSetClauses.push('last_updated = NOW()');
+        }
+
+        await client.query(
+          `UPDATE debt_records
+           SET ${debtSetClauses.join(', ')}
+           WHERE debt_id = $2`,
+          [amount, debtLock.rows[0].debt_id]
+        );
+      }
     } else {
       await client.query('ROLLBACK');
       return res.status(500).json({ error: 'Unable to resolve debt record for this payment' });
     }
 
-    await client.query(
-      `UPDATE debt_records
-       SET ${debtSetClauses.join(', ')}
-       WHERE ${debtWhereClause}`,
-      [amount, debtWhereValue]
-    );
-
     await client.query('COMMIT');
+    await invalidatePaymentCaches();
+
+    await auditLog(
+      req,
+      'payment.approve',
+      { type: 'payment', id },
+      { status: payment.status, amount: payment.amount },
+      { status: statusMode.approved, amount: payment.amount },
+      { notes }
+    );
 
     res.json({ success: true, message: 'Payment approved and debt updated' });
   } catch (error) {

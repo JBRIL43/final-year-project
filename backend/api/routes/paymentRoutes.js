@@ -51,8 +51,9 @@ router.patch(
 );
 
 // Chapa payment integration
-router.post('/chapa/initialize', chapaController.initializePayment);
-router.post('/chapa/verify', chapaController.verifyPayment);
+router.post('/chapa/webhook', chapaController.handleWebhook);
+router.post('/chapa/initialize', authenticateRequest, chapaController.initializePayment);
+router.post('/chapa/verify', authenticateRequest, chapaController.verifyPayment);
 
 // Finance-side: verify a Chapa transaction by txRef and auto-approve if confirmed
 router.get(

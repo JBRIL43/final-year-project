@@ -1,6 +1,6 @@
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { CircularProgress, Box } from '@mui/material'
-import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { AuthProvider, useAuth, getRoleHome } from './contexts/AuthContext'
 import ProtectedRoute from './components/ProtectedRoute'
 import AdminLayout from './components/AdminLayout'
 import Login from './pages/Login'
@@ -22,16 +22,8 @@ import WithdrawalApprovalDashboard from './components/WithdrawalApprovalDashboar
 import FinanceReportsDashboard from './components/FinanceReportsDashboard'
 
 function AppRoutes() {
-  const { loading, profileLoading, user, role } = useAuth()
+  const { loading, profileLoading, profileReady, user, role } = useAuth()
 
-  const roleHome =
-    role === 'registrar'
-      ? '/registrar'
-      : role === 'department_head'
-      ? '/department'
-      : role === 'student'
-      ? '/login'
-      : '/'
   const defaultHome =
     role === 'registrar'
       ? '/registrar'
@@ -41,7 +33,7 @@ function AppRoutes() {
       ? '/login'
       : '/reports'
 
-  if (loading || (user && profileLoading)) {
+  if (loading || (user && (profileLoading || !profileReady))) {
     return (
       <Box
         sx={{
@@ -66,7 +58,12 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<Navigate to={defaultHome} replace />} />
+        <Route
+          index
+          element={
+            profileReady ? <Navigate to={defaultHome} replace /> : <CircularProgress />
+          }
+        />
         <Route
           path="students"
           element={
@@ -236,7 +233,16 @@ function AppRoutes() {
           }
         />
       </Route>
-      <Route path="*" element={<Navigate to={roleHome} replace />} />
+      <Route
+        path="*"
+        element={
+          user && profileReady ? (
+            <Navigate to={getRoleHome(role)} replace />
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
     </Routes>
   )
 }

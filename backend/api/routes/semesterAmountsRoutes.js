@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../config/db');
 const { authenticateRequest, requireRoles } = require('../middleware/auth');
+const { CACHE_KEYS, cacheGet, cacheSet, cacheDel } = require('../utils/cache');
 
 const router = express.Router();
 
@@ -9,6 +10,11 @@ router.use(authenticateRequest);
 // GET /api/admin/semester-amounts — list all semester amount configurations
 router.get('/', requireRoles(['admin', 'finance', 'department_head']), async (req, res) => {
   try {
+    const cached = await cacheGet(CACHE_KEYS.semesterAmountsAll);
+    if (cached) {
+      return res.json(cached);
+    }
+
     const result = await pool.query(
       `SELECT
          id,
@@ -27,7 +33,9 @@ router.get('/', requireRoles(['admin', 'finance', 'department_head']), async (re
        ORDER BY academic_year DESC, campus ASC, program_type ASC`
     );
 
-    return res.json({ success: true, amounts: result.rows });
+    const payload = { success: true, amounts: result.rows };
+    await cacheSet(CACHE_KEYS.semesterAmountsAll, payload, 120);
+    return res.json(payload);
   } catch (error) {
     console.error('Semester amounts fetch error:', error);
     return res.status(500).json({ error: 'Failed to load semester amounts' });
@@ -99,6 +107,7 @@ router.post('/', requireRoles(['admin', 'finance']), async (req, res) => {
       ]
     );
 
+    await cacheDel(CACHE_KEYS.semesterAmountsAll);
     return res.status(201).json({ success: true, amount: result.rows[0] });
   } catch (error) {
     console.error('Semester amount creation error:', error);
@@ -188,6 +197,7 @@ router.put('/:id', requireRoles(['admin', 'finance']), async (req, res) => {
       return res.status(404).json({ error: 'Semester amount configuration not found' });
     }
 
+    await cacheDel(CACHE_KEYS.semesterAmountsAll);
     return res.json({ success: true, amount: result.rows[0] });
   } catch (error) {
     console.error('Semester amount update error:', error);
@@ -220,6 +230,7 @@ router.delete('/:id', requireRoles(['admin', 'finance']), async (req, res) => {
       return res.status(404).json({ error: 'Semester amount configuration not found' });
     }
 
+    await cacheDel(CACHE_KEYS.semesterAmountsAll);
     return res.json({ success: true, message: 'Semester amount deleted successfully' });
   } catch (error) {
     console.error('Semester amount deletion error:', error);

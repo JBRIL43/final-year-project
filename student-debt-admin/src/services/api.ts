@@ -1,4 +1,6 @@
 import axios from 'axios'
+import { auth } from '../lib/firebase'
+import { signOut } from 'firebase/auth'
 
 const envApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim()
 const isLocalHost =
@@ -37,5 +39,24 @@ export function setAuthToken(token: string | null) {
     delete api.defaults.headers.common.Authorization
   }
 }
+
+let handlingUnauthorized = false
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const status = error?.response?.status
+    if (status === 401 && auth.currentUser && !handlingUnauthorized) {
+      handlingUnauthorized = true
+      try {
+        setAuthToken(null)
+        await signOut(auth)
+      } finally {
+        handlingUnauthorized = false
+      }
+    }
+    return Promise.reject(error)
+  }
+)
 
 export default api

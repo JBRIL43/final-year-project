@@ -20,8 +20,10 @@ interface AuthContextType {
   loading: boolean
   /** `/api/user/me` in flight for signed-in user */
   profileLoading: boolean
-  /** `/api/user/me` finished (success or failure) */
+  /** `/api/user/me` finished successfully */
   profileReady: boolean
+  /** Set when profile load failed after retries (before sign-out completes) */
+  profileError: string | null
   isAdmin: boolean
   role: UserRole
   department: string | null
@@ -34,6 +36,7 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   profileLoading: false,
   profileReady: false,
+  profileError: null,
   isAdmin: false,
   role: 'student',
   department: null,
@@ -52,11 +55,28 @@ export function getRoleHome(role: UserRole): string {
   return '/reports'
 }
 
+const PROFILE_RETRY_ATTEMPTS = 2
+const PROFILE_RETRY_DELAY_MS = 500
+
+function delay(ms: number) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms)
+  })
+}
+
+async function fetchUserProfile(idToken: string): Promise<UserProfile> {
+  const response = await api.get<{ success: boolean; user: UserProfile }>('/api/user/me', {
+    headers: { Authorization: `Bearer ${idToken}` },
+  })
+  return response.data.user
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [profileLoading, setProfileLoading] = useState(false)
   const [profileReady, setProfileReady] = useState(false)
+  const [profileError, setProfileError] = useState<string | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [role, setRole] = useState<UserRole>('student')
   const [department, setDepartment] = useState<string | null>(null)
@@ -69,6 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsAdmin(false)
     setProfileReady(false)
     setProfileLoading(false)
+    setProfileError(null)
   }
 
   const logout = async () => {
@@ -78,12 +99,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     resetProfileState()
   }
 
-  const loadProfile = async (token: string): Promise<UserProfile> => {
-    const response = await api.get<{ success: boolean; user: UserProfile }>('/api/user/me', {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+  const loadProfileWithRetry = async (firebaseUser: User): Promise<UserProfile> => {
+    let lastError: unknown = null
 
-    return response.data.user
+    for (let attempt = 0; attempt < PROFILE_RETRY_ATTEMPTS; attempt += 1) {
+      try {
+        const idToken = await firebaseUser.getIdToken(attempt > 0)
+        setAuthToken(idToken)
+        return await fetchUserProfile(idToken)
+      } catch (error) {
+        lastError = error
+        if (attempt < PROFILE_RETRY_ATTEMPTS - 1) {
+          await delay(PROFILE_RETRY_DELAY_MS * (attempt + 1))
+        }
+      }
+    }
+
+    throw lastError
   }
 
   useEffect(() => {
@@ -91,12 +123,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (currentUser) {
         setProfileLoading(true)
         setProfileReady(false)
+        setProfileError(null)
 
         try {
-          const idToken = await currentUser.getIdToken(true)
-          setAuthToken(idToken)
-
-          const currentProfile = await loadProfile(idToken)
+          const currentProfile = await loadProfileWithRetry(currentUser)
           const resolvedRole = currentProfile?.role || 'student'
 
           setUser(currentUser)
@@ -104,20 +134,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setRole(resolvedRole)
           setDepartment(currentProfile?.department || null)
           setIsAdmin(resolvedRole !== 'student')
+          setProfileReady(true)
         } catch (error) {
-          console.error('Failed to resolve auth profile:', error)
-          setUser(currentUser)
+          const message =
+            (error as { response?: { data?: { error?: string } } })?.response?.data?.error
+            || (error as Error)?.message
+            || 'Failed to load account profile'
+
+          console.error('Failed to resolve auth profile after retries:', error)
+          setProfileError(message)
+
+          // Do not keep a half-authenticated session with a guessed student role
+          await signOut(auth)
+          setAuthToken(null)
+          setUser(null)
           resetProfileState()
-          setProfile({
-            user_id: null,
-            email: currentUser.email,
-            role: 'student',
-            department: null,
-            full_name: currentUser.displayName,
-          })
         } finally {
           setProfileLoading(false)
-          setProfileReady(true)
           setLoading(false)
         }
       } else {
@@ -138,6 +171,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         profileLoading,
         profileReady,
+        profileError,
         isAdmin,
         role,
         department,

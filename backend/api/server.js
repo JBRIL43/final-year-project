@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const debtRoutes = require('./routes/debtRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 const verificationRoutes = require('./routes/verificationRoutes');
@@ -13,56 +14,68 @@ const registrarRoutes = require('./routes/registrarRoutes');
 const departmentRoutes = require('./routes/departmentRoutes');
 const faydaRoutes = require('./routes/faydaRoutes');
 const semesterAmountsRoutes = require('./routes/semesterAmountsRoutes');
+const {
+  globalLimiter,
+  authLimiter,
+  reportLimiter,
+} = require('./middleware/rateLimit');
+const {
+  requestIdMiddleware,
+  notFoundHandler,
+  globalErrorHandler,
+} = require('./middleware/errorHandler');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Render / reverse proxy — required for per-IP rate limiting
+app.set('trust proxy', 1);
+app.use(requestIdMiddleware);
+
 const allowedOrigins = [
   process.env.CLIENT_URL,
+  process.env.MOBILE_APP_URL,
   'https://student-debt-admin.onrender.com',
   'http://localhost:3000',
+  'http://localhost:5173',
+  ...(process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',').map((value) => value.trim())
+    : []),
 ].filter(Boolean);
+const uniqueAllowedOrigins = [...new Set(allowedOrigins)];
 
 const corsOptions = {
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
+    // Native/mobile and curl often omit Origin; CORS applies to browsers only.
+    if (!origin) {
       return callback(null, true);
     }
-    return callback(new Error('Not allowed by CORS'));
+    if (uniqueAllowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('Not allowed by CORS'), false);
   },
   credentials: true,
 };
 
-// Middleware
-app.use(cors(corsOptions));
-app.use(express.json());
+// Security headers (HSTS, X-Content-Type-Options, etc.)
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  })
+);
 
-// Routes
-app.use('/api/debt', debtRoutes);
-app.use('/api/payment', paymentRoutes);
-app.use('/api/verification', verificationRoutes);
-app.use('/api/auth', authRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api/user', userRoutes);
-app.use('/api/notifications', notificationRoutes);
-app.use('/api/student', studentRoutes);
-app.use('/api/registrar', registrarRoutes);
-app.use('/api/admin/fayda', faydaRoutes);
-app.use('/api/admin/semester-amounts', semesterAmountsRoutes);
-app.use('/api/department', departmentRoutes);
-
-// Health check
+// Health checks before strict CORS (load balancers/probes often omit Origin)
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
-// Full health check — verifies DB connection and Firebase auth
 app.get('/api/health/full', async (req, res) => {
   const pool = require('./config/db');
   const firebaseAdmin = require('./config/firebaseAdmin');
   const results = { status: 'OK', timestamp: new Date().toISOString(), checks: {} };
 
-  // DB check
   try {
     const dbRes = await pool.query('SELECT NOW() AS now, COUNT(*) AS user_count FROM public.users');
     results.checks.database = {
@@ -75,13 +88,12 @@ app.get('/api/health/full', async (req, res) => {
     results.status = 'DEGRADED';
   }
 
-  // Firebase check
   try {
     if (firebaseAdmin && firebaseAdmin.apps.length > 0) {
-      const app = firebaseAdmin.apps[0];
+      const firebaseApp = firebaseAdmin.apps[0];
       results.checks.firebase = {
         status: 'initialized',
-        project_id: app.options?.credential?.projectId || 'unknown',
+        project_id: firebaseApp.options?.credential?.projectId || 'unknown',
       };
     } else {
       results.checks.firebase = { status: 'not_initialized' };
@@ -92,7 +104,6 @@ app.get('/api/health/full', async (req, res) => {
     results.status = 'DEGRADED';
   }
 
-  // Seed data check
   try {
     const seedCheck = await pool.query(
       `SELECT
@@ -113,6 +124,41 @@ app.get('/api/health/full', async (req, res) => {
 
   res.status(results.status === 'OK' ? 200 : 503).json(results);
 });
+
+app.use(cors(corsOptions));
+app.use((err, req, res, next) => {
+  if (err && String(err.message).includes('CORS')) {
+    return res.status(403).json({ error: 'Not allowed by CORS' });
+  }
+  return next(err);
+});
+app.use(express.json());
+
+// Rate limits (health routes above are excluded)
+app.use('/api/', globalLimiter);
+app.use('/api/auth/', authLimiter);
+app.use('/api/verification/pending', reportLimiter);
+app.use('/api/admin/erca/debtors', reportLimiter);
+app.use('/api/admin/analytics/debt-overview', reportLimiter);
+app.use('/api/admin/debt/reconcile', reportLimiter);
+app.use('/api/admin/payments/pending', reportLimiter);
+
+// Routes
+app.use('/api/debt', debtRoutes);
+app.use('/api/payment', paymentRoutes);
+app.use('/api/verification', verificationRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/user', userRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/student', studentRoutes);
+app.use('/api/registrar', registrarRoutes);
+app.use('/api/admin/fayda', faydaRoutes);
+app.use('/api/admin/semester-amounts', semesterAmountsRoutes);
+app.use('/api/department', departmentRoutes);
+
+app.use(notFoundHandler);
+app.use(globalErrorHandler);
 
 // Start server
 app.listen(PORT, '0.0.0.0', () => {

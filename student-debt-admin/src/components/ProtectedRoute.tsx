@@ -13,7 +13,7 @@ const DEFAULT_ALLOWED_ROLES: UserRole[] = ['admin', 'finance', 'registrar', 'dep
 export default function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
   const { user, loading, profileLoading, profileReady, role } = useAuth()
 
-  if (loading || (user && profileLoading)) {
+  if (loading || (user && (profileLoading || !profileReady))) {
     return (
       <Box
         sx={{

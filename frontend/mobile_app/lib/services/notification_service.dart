@@ -4,16 +4,23 @@ import 'package:http/http.dart' as http;
 import 'api_config.dart';
 
 class NotificationService {
+  static Future<Map<String, String>> _authHeaders() async {
+    final user = FirebaseAuth.instance.currentUser;
+    final token = await user?.getIdToken(true);
+    return {
+      'Content-Type': 'application/json',
+      if (token != null) 'Authorization': 'Bearer $token',
+    };
+  }
+
   static Future<List<dynamic>> getNotifications() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return [];
 
     final response = await http
         .get(
-          Uri.parse(
-            '${ApiConfig.preferredBaseUrl}/api/notifications?firebaseUid=${Uri.encodeComponent(user.uid)}',
-          ),
-          headers: {'Content-Type': 'application/json'},
+          Uri.parse('${ApiConfig.preferredBaseUrl}/api/notifications'),
+          headers: await _authHeaders(),
         )
         .timeout(const Duration(seconds: 8));
 
@@ -36,8 +43,7 @@ class NotificationService {
           Uri.parse(
             '${ApiConfig.preferredBaseUrl}/api/notifications/$notificationId/read',
           ),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'firebaseUid': user.uid}),
+          headers: await _authHeaders(),
         )
         .timeout(const Duration(seconds: 8));
 
@@ -55,8 +61,7 @@ class NotificationService {
     final response = await http
         .patch(
           Uri.parse('${ApiConfig.preferredBaseUrl}/api/notifications/read-all'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'firebaseUid': user.uid}),
+          headers: await _authHeaders(),
         )
         .timeout(const Duration(seconds: 8));
 
@@ -76,8 +81,7 @@ class NotificationService {
           Uri.parse(
             '${ApiConfig.preferredBaseUrl}/api/notifications/$notificationId',
           ),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'firebaseUid': user.uid}),
+          headers: await _authHeaders(),
         )
         .timeout(const Duration(seconds: 8));
 
@@ -95,8 +99,7 @@ class NotificationService {
     final response = await http
         .delete(
           Uri.parse('${ApiConfig.preferredBaseUrl}/api/notifications'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'firebaseUid': user.uid}),
+          headers: await _authHeaders(),
         )
         .timeout(const Duration(seconds: 8));
 

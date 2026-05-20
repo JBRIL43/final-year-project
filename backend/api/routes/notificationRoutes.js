@@ -7,31 +7,54 @@ const { authenticateRequest } = require('../middleware/auth');
 
 const router = express.Router();
 
+router.use(authenticateRequest);
+
+function getAuthenticatedFirebaseUid(req, res) {
+  const uid = req.auth?.uid;
+  if (!uid) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return null;
+  }
+  return uid;
+}
+
+function rejectClientFirebaseUid(req, res) {
+  const clientUid = req.query?.firebaseUid ?? req.body?.firebaseUid;
+  if (clientUid != null && clientUid !== '') {
+    res.status(400).json({
+      error: 'firebaseUid must not be sent by client; use Authorization Bearer token',
+    });
+    return true;
+  }
+  return false;
+}
+
 // Get unread notification count for the logged-in user
-router.get('/unread-count', authenticateRequest, async (req, res) => {
+router.get('/unread-count', async (req, res) => {
   try {
-    const userId = req.user?.user_id;
-    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    if (rejectClientFirebaseUid(req, res)) return;
+
+    const firebaseUid = getAuthenticatedFirebaseUid(req, res);
+    if (!firebaseUid) return;
+
     await ensureNotificationsTable();
     const count = await pool.query(
-      'SELECT COUNT(*) FROM notifications WHERE user_id = $1 AND is_read = false',
-      [userId]
+      'SELECT COUNT(*) FROM notifications WHERE firebase_uid = $1 AND is_read = false',
+      [firebaseUid]
     );
-    res.json({ count: parseInt(count.rows[0].count) });
+    res.json({ count: parseInt(count.rows[0].count, 10) });
   } catch (err) {
     console.error('Failed to load notifications', err);
     res.status(500).json({ error: 'Failed to load notifications' });
   }
 });
- 
 
 router.get('/', async (req, res) => {
   try {
-    const { firebaseUid } = req.query;
+    if (rejectClientFirebaseUid(req, res)) return;
 
-    if (!firebaseUid) {
-      return res.status(400).json({ error: 'firebaseUid is required' });
-    }
+    const firebaseUid = getAuthenticatedFirebaseUid(req, res);
+    if (!firebaseUid) return;
 
     await ensureNotificationsTable();
 
@@ -65,14 +88,37 @@ router.get('/', async (req, res) => {
   }
 });
 
+router.patch('/read-all', async (req, res) => {
+  try {
+    if (rejectClientFirebaseUid(req, res)) return;
+
+    const firebaseUid = getAuthenticatedFirebaseUid(req, res);
+    if (!firebaseUid) return;
+
+    await ensureNotificationsTable();
+
+    await pool.query(
+      `UPDATE public.notifications
+       SET is_read = TRUE, updated_at = NOW()
+       WHERE firebase_uid = $1 AND is_read = FALSE`,
+      [firebaseUid]
+    );
+
+    res.json({ success: true, message: 'All notifications marked as read' });
+  } catch (error) {
+    console.error('Mark all notifications read error:', error);
+    res.status(500).json({ error: 'Failed to mark notifications as read' });
+  }
+});
+
 router.patch('/:notificationId/read', async (req, res) => {
   try {
-    const { notificationId } = req.params;
-    const { firebaseUid } = req.body;
+    if (rejectClientFirebaseUid(req, res)) return;
 
-    if (!firebaseUid) {
-      return res.status(400).json({ error: 'firebaseUid is required' });
-    }
+    const firebaseUid = getAuthenticatedFirebaseUid(req, res);
+    if (!firebaseUid) return;
+
+    const { notificationId } = req.params;
 
     await ensureNotificationsTable();
 
@@ -95,38 +141,14 @@ router.patch('/:notificationId/read', async (req, res) => {
   }
 });
 
-router.patch('/read-all', async (req, res) => {
-  try {
-    const { firebaseUid } = req.body;
-
-    if (!firebaseUid) {
-      return res.status(400).json({ error: 'firebaseUid is required' });
-    }
-
-    await ensureNotificationsTable();
-
-    await pool.query(
-      `UPDATE public.notifications
-       SET is_read = TRUE, updated_at = NOW()
-       WHERE firebase_uid = $1 AND is_read = FALSE`,
-      [firebaseUid]
-    );
-
-    res.json({ success: true, message: 'All notifications marked as read' });
-  } catch (error) {
-    console.error('Mark all notifications read error:', error);
-    res.status(500).json({ error: 'Failed to mark notifications as read' });
-  }
-});
-
 router.delete('/:notificationId', async (req, res) => {
   try {
-    const { notificationId } = req.params;
-    const { firebaseUid } = req.body;
+    if (rejectClientFirebaseUid(req, res)) return;
 
-    if (!firebaseUid) {
-      return res.status(400).json({ error: 'firebaseUid is required' });
-    }
+    const firebaseUid = getAuthenticatedFirebaseUid(req, res);
+    if (!firebaseUid) return;
+
+    const { notificationId } = req.params;
 
     await ensureNotificationsTable();
 
@@ -150,11 +172,10 @@ router.delete('/:notificationId', async (req, res) => {
 
 router.delete('/', async (req, res) => {
   try {
-    const { firebaseUid } = req.body;
+    if (rejectClientFirebaseUid(req, res)) return;
 
-    if (!firebaseUid) {
-      return res.status(400).json({ error: 'firebaseUid is required' });
-    }
+    const firebaseUid = getAuthenticatedFirebaseUid(req, res);
+    if (!firebaseUid) return;
 
     await ensureNotificationsTable();
 

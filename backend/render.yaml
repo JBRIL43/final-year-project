@@ -22,9 +22,14 @@ services:
       - key: SYNC_SECRET
         sync: false
 
-      # ── CORS ──────────────────────────────────────────────────────────────
+      # ── CORS (comma-separated extra origins via ALLOWED_ORIGINS) ────────
       - key: CLIENT_URL
         value: https://student-debt-admin.onrender.com
+      # Optional: Flutter web or additional admin hosts
+      # - key: MOBILE_APP_URL
+      #   sync: false
+      # - key: ALLOWED_ORIGINS
+      #   value: https://example.com,http://localhost:5173
 
       # ── Chapa Payment Gateway (Test Keys) ─────────────────────────────────
       - key: CHAPA_SECRET_KEY
@@ -37,3 +42,7 @@ services:
       # ── API base URL (used in Chapa callbacks) ─────────────────────────────
       - key: API_BASE_URL
         value: https://final-year-project-r2h8.onrender.com
+
+      # Optional: Redis for shared cache across instances (Issue 11)
+      # - key: REDIS_URL
+      #   sync: false
