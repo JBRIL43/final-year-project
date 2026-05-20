@@ -1,12 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Box,
   Button,
+  LinearProgress,
   Paper,
   Typography,
   Alert,
   Snackbar,
-  LinearProgress,
+  Skeleton,
 } from '@mui/material';
 import SavingsOutlinedIcon from '@mui/icons-material/SavingsOutlined';
 import ShowChartOutlinedIcon from '@mui/icons-material/ShowChartOutlined';
@@ -14,41 +16,17 @@ import DonutLargeOutlinedIcon from '@mui/icons-material/DonutLargeOutlined';
 import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
 import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import api from '../services/api';
-
-interface DebtMetrics {
-  totalCollections: number;
-  outstandingDebt: number;
-}
+import { useDebtOverview } from '../hooks/useDebtOverview';
 
 export default function DebtOverviewDashboard() {
-  const [metrics, setMetrics] = useState<DebtMetrics | null>(null);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const { data: metrics, isLoading, isError } = useDebtOverview();
   const [reconciling, setReconciling] = useState(false);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
     open: false,
     message: '',
     severity: 'success',
   });
-
-  const loadMetrics = async () => {
-    try {
-      const res = await api.get<{ success: true; data: DebtMetrics }>('/api/admin/analytics/debt-overview');
-      setMetrics(res.data.data);
-    } catch (err) {
-      console.error('Failed to load debt metrics', err);
-      setSnackbar({
-        open: true,
-        message: '❌ Failed to load debt overview',
-        severity: 'error',
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadMetrics();
-  }, []);
 
   const handleReconcileDebt = async () => {
     if (!window.confirm('Recalculate debt for all active students based on semester amount configuration? This cannot be undone.')) {
@@ -63,7 +41,8 @@ export default function DebtOverviewDashboard() {
         message: res.data.message || '✅ Debt reconciliation completed',
         severity: 'success',
       });
-      loadMetrics();
+      // invalidateQueries already schedules a background refetch — no need to call refetch() too
+      await queryClient.invalidateQueries({ queryKey: ['analytics', 'debt-overview'] });
     } catch (err: any) {
       console.error('Debt reconciliation failed', err);
       setSnackbar({
@@ -89,10 +68,22 @@ export default function DebtOverviewDashboard() {
   return (
     <Box sx={{ p: 0 }}>
 
-      {loading ? (
+      {isError && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          Failed to load debt overview.{' '}
+          <Button size="small" onClick={() => queryClient.invalidateQueries({ queryKey: ['analytics', 'debt-overview'] })}>
+            Retry
+          </Button>
+        </Alert>
+      )}
+
+      {isLoading ? (
         <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' } }}>
           {[1, 2].map((i) => (
-            <Paper key={i} sx={{ p: 3, height: 140, backgroundColor: '#f5f7fb', borderRadius: 3 }} />
+            <Paper key={i} sx={{ p: 3, height: 140, borderRadius: 3 }}>
+              <Skeleton variant="text" width="60%" />
+              <Skeleton variant="text" width="40%" sx={{ mt: 2 }} height={40} />
+            </Paper>
           ))}
         </Box>
       ) : metrics ? (

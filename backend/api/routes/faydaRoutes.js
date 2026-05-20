@@ -1,6 +1,8 @@
 const express = require('express');
 const pool = require('../config/db');
 const { authenticateRequest, requireRoles } = require('../middleware/auth');
+const { auditLog } = require('../utils/auditLog');
+const { CACHE_KEYS, cacheGet, cacheSet, cacheDel } = require('../utils/cache');
 
 const router = express.Router();
 
@@ -38,6 +40,11 @@ router.use(authenticateRequest, requireRoles(['admin', 'finance']));
 // GET /api/admin/fayda/config — get Fayda configuration
 router.get('/config', async (req, res) => {
   try {
+    const cached = await cacheGet(CACHE_KEYS.faydaConfigMeta);
+    if (cached) {
+      return res.json(cached);
+    }
+
     const client = await pool.connect();
     try {
       await ensureFaydaConfigTable(client);
@@ -53,7 +60,9 @@ router.get('/config', async (req, res) => {
         return res.status(404).json({ error: 'Fayda configuration not found' });
       }
 
-      return res.json({ success: true, config: result.rows[0] });
+      const payload = { success: true, config: result.rows[0] };
+      await cacheSet(CACHE_KEYS.faydaConfigMeta, payload, 120);
+      return res.json(payload);
     } finally {
       client.release();
     }
@@ -94,6 +103,16 @@ router.put('/config', async (req, res) => {
       if (result.rows.length === 0) {
         return res.status(404).json({ error: 'Fayda configuration not found' });
       }
+
+      await cacheDel(CACHE_KEYS.faydaConfigMeta);
+
+      await auditLog(
+        req,
+        'fayda.config.update',
+        { type: 'fayda_config', id: result.rows[0].id },
+        null,
+        result.rows[0]
+      );
 
       return res.json({ success: true, message: 'Configuration updated successfully', config: result.rows[0] });
     } finally {
@@ -137,17 +156,23 @@ router.post('/sync', async (req, res) => {
         [now]
       );
 
+      const details = {
+        students_synced: studentCountRes.rows[0].count,
+        debt_records_synced: debtCountRes.rows[0].count,
+        payments_synced: paymentCountRes.rows[0].count,
+        sync_time: now.toISOString(),
+        institution_code: configResult.rows[0].institution_code,
+        api_endpoint: configResult.rows[0].api_endpoint,
+      };
+
+      await cacheDel(CACHE_KEYS.faydaConfigMeta);
+
+      await auditLog(req, 'fayda.sync', { type: 'fayda_config', id: 'latest' }, null, details);
+
       return res.json({
         success: true,
         message: `students=${studentCountRes.rows[0].count}, debts=${debtCountRes.rows[0].count}, payments=${paymentCountRes.rows[0].count}`,
-        details: {
-          students_synced: studentCountRes.rows[0].count,
-          debt_records_synced: debtCountRes.rows[0].count,
-          payments_synced: paymentCountRes.rows[0].count,
-          sync_time: now.toISOString(),
-          institution_code: configResult.rows[0].institution_code,
-          api_endpoint: configResult.rows[0].api_endpoint,
-        },
+        details,
       });
     } finally {
       client.release();

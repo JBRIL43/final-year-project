@@ -3,6 +3,7 @@ const express = require('express');
 const pool = require('../config/db');
 const firebaseAdmin = require('../config/firebaseAdmin');
 const { authenticateRequest } = require('../middleware/auth');
+const { auditLog } = require('../utils/auditLog');
 
 const router = express.Router();
 
@@ -39,7 +40,7 @@ getSyncSecret();
 // POST /api/auth/sync-firebase-users  with header: x-sync-secret: <SYNC_SECRET>
 // No GET route — secrets must not appear in URLs, logs, or browser history.
 
-async function runSync(res) {
+async function runSync(req, res) {
   if (!firebaseAdmin || firebaseAdmin.apps.length === 0) {
     return res.status(500).json({ error: 'Firebase Admin not configured' });
   }
@@ -99,15 +100,26 @@ async function runSync(res) {
       }
     }
 
+    const summary = {
+      total: firebaseUsers.length,
+      inserted: results.inserted.length,
+      updated: results.updated.length,
+      skipped: results.skipped.length,
+      errors: results.errors.length,
+    };
+
+    await auditLog(
+      req,
+      'auth.firebase.sync',
+      { type: 'system', id: 'firebase-users' },
+      null,
+      summary,
+      { actor: 'sync-secret' }
+    );
+
     return res.json({
       success: true,
-      summary: {
-        total: firebaseUsers.length,
-        inserted: results.inserted.length,
-        updated: results.updated.length,
-        skipped: results.skipped.length,
-        errors: results.errors.length,
-      },
+      summary,
       details: results,
     });
   } catch (err) {
@@ -130,7 +142,7 @@ router.post('/sync-firebase-users', async (req, res) => {
     return res.status(403).json({ error: 'Forbidden' });
   }
 
-  return runSync(res);
+  return runSync(req, res);
 });
 
 // ── Change password ───────────────────────────────────────────────────────────
@@ -185,6 +197,15 @@ router.post('/change-password', authenticateRequest, async (req, res) => {
     }
 
     await firebaseAdmin.auth().updateUser(targetUid, { password: String(newPassword) });
+
+    await auditLog(
+      req,
+      'auth.password.change',
+      { type: 'user', id: req.user?.user_id },
+      null,
+      { email }
+    );
+
     return res.json({ success: true, message: 'Password updated successfully' });
   } catch (error) {
     console.error('Password change error:', error);

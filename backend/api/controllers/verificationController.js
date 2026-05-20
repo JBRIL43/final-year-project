@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const { invalidatePaymentCaches } = require('../utils/cache');
+const { auditLog } = require('../utils/auditLog');
 const { sendPaymentNotification } = require('../utils/notifications');
 
 function resolveStatusMode(sampleStatus) {
@@ -221,6 +222,15 @@ exports.verifyPayment = async (req, res) => {
     if (action === 'APPROVE') {
       await invalidatePaymentCaches();
     }
+
+    await auditLog(
+      req,
+      action === 'APPROVE' ? 'payment.verify.approve' : 'payment.verify.reject',
+      { type: 'payment', id: paymentId },
+      { status: payment.status, amount: payment.amount },
+      { status: newStatus, amount: payment.amount },
+      { verifiedBy }
+    );
 
     if (action === 'APPROVE' && studentUserId) {
       await sendPaymentNotification(

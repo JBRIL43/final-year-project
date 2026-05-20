@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { CircularProgress, Box } from '@mui/material'
+import { Box } from '@mui/material'
 import { Navigate } from 'react-router-dom'
 import { type UserRole, useAuth } from '../contexts/AuthContext'
 
@@ -11,22 +11,10 @@ interface ProtectedRouteProps {
 const DEFAULT_ALLOWED_ROLES: UserRole[] = ['admin', 'finance', 'registrar', 'department_head']
 
 export default function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
-  const { user, loading, profileLoading, profileReady, role } = useAuth()
+  const { user, profileReady, role } = useAuth()
 
-  if (loading || (user && (profileLoading || !profileReady))) {
-    return (
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          height: '100vh',
-        }}
-      >
-        <CircularProgress />
-      </Box>
-    )
-  }
+  // AppRoutes already blocks the entire tree until loading + profileReady are settled,
+  // so by the time ProtectedRoute renders, auth state is fully known.
 
   const effectiveRoles = allowedRoles || DEFAULT_ALLOWED_ROLES
   const roleAllowed = effectiveRoles.includes(role)

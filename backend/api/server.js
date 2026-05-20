@@ -24,6 +24,9 @@ const {
   notFoundHandler,
   globalErrorHandler,
 } = require('./middleware/errorHandler');
+const { warnProductionConfig } = require('./config/startupChecks');
+
+warnProductionConfig();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -128,6 +131,12 @@ app.get('/api/health/full', async (req, res) => {
 app.use(cors(corsOptions));
 app.use((err, req, res, next) => {
   if (err && String(err.message).includes('CORS')) {
+    console.warn('[CORS] Rejected origin', {
+      origin: req.headers.origin || null,
+      method: req.method,
+      path: req.originalUrl,
+      requestId: req.requestId || null,
+    });
     return res.status(403).json({ error: 'Not allowed by CORS' });
   }
   return next(err);
@@ -163,6 +172,8 @@ app.use(globalErrorHandler);
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Backend running on http://0.0.0.0:${PORT}`);
+  console.log(`🌐 CORS allowlist (${uniqueAllowedOrigins.length}):`, uniqueAllowedOrigins.join(', ') || '(none)');
+  console.log('ℹ️  Requests without Origin are allowed (mobile/native clients); browser cross-origin requires allowlist match.');
 });
 
 /*

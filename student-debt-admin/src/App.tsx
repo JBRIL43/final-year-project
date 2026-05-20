@@ -20,6 +20,7 @@ import DatabaseHealthDashboard from './components/DatabaseHealthDashboard'
 import AdminUserManagement from './components/AdminUserManagement'
 import WithdrawalApprovalDashboard from './components/WithdrawalApprovalDashboard'
 import FinanceReportsDashboard from './components/FinanceReportsDashboard'
+import ApiErrorToast from './components/ApiErrorToast'
 
 function AppRoutes() {
   const { loading, profileLoading, profileReady, user, role } = useAuth()
@@ -60,9 +61,7 @@ function AppRoutes() {
       >
         <Route
           index
-          element={
-            profileReady ? <Navigate to={defaultHome} replace /> : <CircularProgress />
-          }
+          element={<Navigate to={defaultHome} replace />}
         />
         <Route
           path="students"
@@ -252,6 +251,7 @@ function App() {
     <AuthProvider>
       <HashRouter>
         <AppRoutes />
+        <ApiErrorToast />
       </HashRouter>
     </AuthProvider>
   )

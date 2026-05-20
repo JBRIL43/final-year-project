@@ -262,7 +262,8 @@ exports.recordPayment = async (req, res) => {
        FROM public.debt_records
        WHERE student_id = $1
        ORDER BY ${hasAcademicYear ? 'academic_year DESC NULLS LAST,' : ''} debt_id DESC
-       LIMIT 1`,
+       LIMIT 1
+       FOR UPDATE`,
       [resolvedStudent.studentId]
     );
 

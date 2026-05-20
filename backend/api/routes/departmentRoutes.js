@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../config/db');
 const { authenticateRequest, requireRoles } = require('../middleware/auth');
+const { auditLog } = require('../utils/auditLog');
 
 const router = express.Router();
 
@@ -224,6 +225,16 @@ router.post('/students/:id/withdrawal/approve', async (req, res) => {
     }
 
     const action = approved ? 'approved' : 'rejected';
+
+    await auditLog(
+      req,
+      approved ? 'withdrawal.approve' : 'withdrawal.reject',
+      { type: 'student', id: studentId },
+      null,
+      result.rows[0],
+      { department: department || null }
+    );
+
     return res.json({
       success: true,
       message: `Withdrawal request ${action} successfully.`,

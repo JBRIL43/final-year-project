@@ -2518,6 +2518,7 @@ router.post('/payments/:id/approve', async (req, res) => {
 
 // POST /api/admin/payments/:id/reject — reject a payment
 router.post('/payments/:id/reject', async (req, res) => {
+  const client = await pool.connect();
   try {
     const { id } = req.params;
     const { notes = '' } = req.body;
@@ -2526,19 +2527,32 @@ router.post('/payments/:id/reject', async (req, res) => {
     const hasReviewedAt = paymentCols.has('reviewed_at');
     const hasNotes = paymentCols.has('notes');
 
-    const paymentRes = await pool.query(
-      `SELECT status
+    await client.query('BEGIN');
+
+    const paymentRes = await client.query(
+      `SELECT payment_id, amount, status
        FROM payment_history
        WHERE payment_id = $1
-         AND UPPER(COALESCE(status, '')) = 'PENDING'`,
+       FOR UPDATE`,
       [id]
     );
 
     if (paymentRes.rows.length === 0) {
-      return res.status(404).json({ error: 'Pending payment not found' });
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Payment not found' });
     }
 
-    const statusMode = resolveStatusMode(paymentRes.rows[0].status);
+    const payment = paymentRes.rows[0];
+    const normalizedStatus = String(payment.status || '').toUpperCase();
+
+    if (normalizedStatus !== 'PENDING') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        error: `Payment is not pending (status: ${payment.status})`,
+      });
+    }
+
+    const statusMode = resolveStatusMode(payment.status);
     const setClauses = ['status = $1'];
     const values = [statusMode.rejected];
     let paramIndex = 2;
@@ -2553,21 +2567,42 @@ router.post('/payments/:id/reject', async (req, res) => {
     }
     values.push(id);
 
-    const result = await pool.query(
+    const result = await client.query(
       `UPDATE payment_history
        SET ${setClauses.join(', ')}
-       WHERE payment_id = $${paramIndex}`,
+       WHERE payment_id = $${paramIndex}
+         AND UPPER(COALESCE(status, '')) = 'PENDING'
+       RETURNING payment_id`,
       values
     );
 
-    if (result.rowCount === 0) {
-      return res.status(404).json({ error: 'Pending payment not found' });
+    if (result.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'Payment is no longer pending' });
     }
+
+    await client.query('COMMIT');
+
+    await auditLog(
+      req,
+      'payment.reject',
+      { type: 'payment', id },
+      { status: payment.status, amount: payment.amount },
+      { status: statusMode.rejected, amount: payment.amount },
+      { notes }
+    );
 
     res.json({ success: true, message: 'Payment rejected' });
   } catch (error) {
+    try {
+      await client.query('ROLLBACK');
+    } catch {
+      // ignore rollback errors
+    }
     console.error('Reject payment error:', error);
     res.status(500).json({ error: 'Failed to reject payment' });
+  } finally {
+    client.release();
   }
 });
 

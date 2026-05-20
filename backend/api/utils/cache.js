@@ -72,13 +72,28 @@ async function cacheDel(...keys) {
   }
 }
 
+async function redisScanDelete(pattern) {
+  const redis = await getRedisClient();
+  if (!redis) return;
+
+  const keysToDelete = [];
+  for await (const key of redis.scanIterator({ MATCH: pattern, COUNT: 100 })) {
+    keysToDelete.push(key);
+    if (keysToDelete.length >= 100) {
+      await redis.del(keysToDelete);
+      keysToDelete.length = 0;
+    }
+  }
+
+  if (keysToDelete.length > 0) {
+    await redis.del(keysToDelete);
+  }
+}
+
 async function cacheDelPattern(pattern) {
   const redis = await getRedisClient();
   if (redis) {
-    const keys = await redis.keys(pattern);
-    if (keys.length > 0) {
-      await redis.del(keys);
-    }
+    await redisScanDelete(pattern);
     return;
   }
 
@@ -93,6 +108,7 @@ async function cacheDelPattern(pattern) {
 const CACHE_KEYS = {
   semesterAmountsAll: 'semester_amounts:all',
   analyticsDebtOverview: 'analytics:debt-overview',
+  faydaConfigMeta: 'fayda:config:meta',
 };
 
 async function invalidatePaymentCaches() {

@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { auth } from '../lib/firebase'
 import { signOut } from 'firebase/auth'
+import { publishApiError } from './apiErrors'
 
 const envApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim()
 const isLocalHost =
@@ -55,6 +56,15 @@ api.interceptors.response.use(
         handlingUnauthorized = false
       }
     }
+    const apiMessage =
+      error?.response?.data?.error
+      || error?.message
+      || 'Request failed'
+
+    if (status && status >= 500) {
+      publishApiError(apiMessage)
+    }
+
     return Promise.reject(error)
   }
 )

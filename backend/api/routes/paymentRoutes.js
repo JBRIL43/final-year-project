@@ -6,10 +6,10 @@ const { authenticateRequest, requireRoles } = require('../middleware/auth');
 const router = express.Router();
 
 // UC-03: Record new payment (manual)
-router.post('/record', recordPayment);
+router.post('/record', authenticateRequest, recordPayment);
 
 // Student payment status/history
-router.get('/history', getStudentPayments);
+router.get('/history', authenticateRequest, getStudentPayments);
 
 // Finance: submit/update proof URL for a manual payment
 router.patch(
