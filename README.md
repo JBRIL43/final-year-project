@@ -224,7 +224,7 @@ On failure the response includes the error message returned by Chapa (or a gatew
 { "txRef": "HU-123-1234567890" }
 ```
 
-Both endpoints resolve the student from the `Authorization: Bearer <token>` header (or `x-firebase-uid` / `x-user-email` fallback headers). A successful verification creates a `PENDING` payment record and sends push notifications to the student and finance officers.
+Both endpoints require `Authorization: Bearer <Firebase ID token>`. Client identity headers (`x-firebase-uid`, `x-user-email`) are rejected. A successful verification creates a `PENDING` payment record and sends push notifications to the student and finance officers.
 
 > **Note**: The Chapa base URL (`https://api.chapa.co/v1`) is hardcoded in the controller and is not overridable via environment variable.
 

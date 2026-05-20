@@ -2,6 +2,7 @@ const express = require('express');
 const pool = require('../config/db');
 const { ensureUsersFcmTokenColumn } = require('../utils/notifications');
 const { authenticateRequest } = require('../middleware/auth');
+const { auditLog } = require('../utils/auditLog');
 
 const router = express.Router();
 
@@ -81,6 +82,15 @@ router.post('/fcm-token', authenticateRequest, async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'User not found' });
     }
+
+    await auditLog(
+      req,
+      'user.fcm_token.update',
+      { type: 'user', id: result.rows[0].user_id },
+      null,
+      { userId: result.rows[0].user_id, role: result.rows[0].role },
+      { source: 'mobile' }
+    );
 
     res.json({
       success: true,

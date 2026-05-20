@@ -3,7 +3,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
-import 'api_config.dart';
+import 'api_client.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -35,18 +35,12 @@ class AuthService {
         return;
       }
 
-      final idToken = await user.getIdToken();
-
+      final headers = await ApiClient.authHeaders();
       await http
           .post(
-            Uri.parse('${ApiConfig.preferredBaseUrl}/api/user/fcm-token'),
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer $idToken',
-            },
-            body: jsonEncode({
-              'fcmToken': fcmToken,
-            }),
+            Uri.parse('${ApiClient.preferredBaseUrl}/api/user/fcm-token'),
+            headers: headers,
+            body: jsonEncode({'fcmToken': fcmToken}),
           )
           .timeout(const Duration(seconds: 8));
     } catch (_) {

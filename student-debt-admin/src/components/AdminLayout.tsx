@@ -25,6 +25,7 @@ import {
   LockReset as LockResetIcon,
   Hub as HubIcon,
   MonitorHeart as MonitorHeartIcon,
+  History as HistoryIcon,
   ManageAccounts as ManageAccountsIcon,
   ExitToApp as ExitToAppIcon,
 } from '@mui/icons-material'
@@ -78,6 +79,7 @@ function buildNavItems(role: string) {
     // { label: 'ERCA Export', to: '/erca-export', icon: <DescriptionIcon /> },
     { label: 'Fayda Integration', to: '/fayda', icon: <HubIcon /> },
     { label: 'Database Health', to: '/database-health', icon: <MonitorHeartIcon /> },
+    { label: 'System Logs', to: '/system-logs', icon: <HistoryIcon /> },
     { label: 'Change Password', to: '/change-password', icon: <LockResetIcon /> },
   ]
 }

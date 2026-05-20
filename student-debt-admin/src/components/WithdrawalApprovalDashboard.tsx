@@ -217,7 +217,7 @@ function StatementDialog({
                 borderColor: canApprove ? '#86efac' : '#fdba74',
               }}
             >
-              <Stack direction="row" justifyContent="space-between" alignItems="center">
+              <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
                 <Typography fontWeight={700}>
                   {statement.type === 'semester' ? 'Current Balance' : 'Settlement Balance Due'}
                 </Typography>
@@ -311,7 +311,7 @@ function StatementDialog({
 
 function Row({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
   return (
-    <Stack direction="row" justifyContent="space-between" sx={{ py: 0.5 }}>
+    <Stack direction="row" sx={{ py: 0.5, justifyContent: 'space-between' }}>
       <Typography variant="body2" color="text.secondary">{label}</Typography>
       <Typography variant="body2" fontWeight={bold ? 700 : 400}>{value}</Typography>
     </Stack>
@@ -424,7 +424,10 @@ export default function WithdrawalApprovalDashboard() {
 
   return (
     <Box sx={{ p: { xs: 2, md: 3 } }}>
-      <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems={{ md: 'center' }} sx={{ mb: 3 }}>
+      <Stack
+        direction={{ xs: 'column', md: 'row' }}
+        sx={{ mb: 3, justifyContent: 'space-between', alignItems: { xs: 'stretch', md: 'center' } }}
+      >
         <Box>
           <Typography variant="h4" fontWeight={800} sx={{ mb: 0.5 }}>
             Withdrawal Approvals
@@ -509,7 +512,7 @@ export default function WithdrawalApprovalDashboard() {
                       />
                     </TableCell>
                     <TableCell align="right">
-                      <Stack direction="row" spacing={1} justifyContent="flex-end">
+                      <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
                         <Button
                           size="small"
                           variant="outlined"

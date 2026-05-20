@@ -3,6 +3,7 @@ const { sendPaymentNotification } = require('../utils/notifications');
 const firebaseAdmin = require('../config/firebaseAdmin');
 const { verifyBearerIdentity } = require('../utils/firebaseIdentity');
 const { hasColumn, getColumns } = require('../utils/schemaCache');
+const { auditLog } = require('../utils/auditLog');
 
 function resolveStatusMode(sampleStatus) {
   const value = String(sampleStatus || '').trim();
@@ -374,6 +375,20 @@ exports.recordPayment = async (req, res) => {
         }
       );
     }
+
+    await auditLog(
+      req,
+      'payment.record',
+      { type: 'payment', id: createdPayment.payment_id },
+      null,
+      {
+        paymentId: createdPayment.payment_id,
+        amount: normalizedAmount,
+        method: paymentMethod,
+        status: statusMode.pending,
+      },
+      { studentId: resolvedStudent.studentId }
+    );
 
     res.status(201).json({
       success: true,

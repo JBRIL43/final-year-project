@@ -323,11 +323,6 @@ function requireAdminOnly(req, res) {
 
 router.use(authenticateRequest, requireRoles(['admin', 'finance']));
 
-router.use((req, res, next) => {
-  const actor = req.user?.email || req.user?.user_id || 'unknown';
-  console.info(`[AUDIT] ${new Date().toISOString()} role=${req.user?.role || 'unknown'} actor=${actor} ${req.method} ${req.originalUrl}`);
-  next();
-});
 
 router.post('/users', authenticateRequest, requireRoles(['admin']), async (req, res) => {
   try {
@@ -1042,6 +1037,15 @@ router.post('/students', async (req, res) => {
     );
 
     await client.query('COMMIT');
+    await auditLog(
+      req,
+      'student.create',
+      { type: 'student', id: studentResult.rows[0].student_id },
+      null,
+      studentResult.rows[0],
+      { email, student_number }
+    );
+
     res.status(201).json({
       success: true,
       student: studentResult.rows[0],
@@ -2704,6 +2708,15 @@ router.delete('/students/:id', async (req, res) => {
     }
 
     await client.query('COMMIT');
+
+    await auditLog(
+      req,
+      'student.delete',
+      { type: 'student', id },
+      { student_id: Number(id), user_id: userId },
+      { userDeleted },
+      { userDeleted }
+    );
 
     res.json({
       success: true,

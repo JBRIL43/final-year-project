@@ -409,7 +409,7 @@ export default function FinanceReportsDashboard() {
   return (
     <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1100 }}>
       {/* Header */}
-      <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 0.5 }}>
+      <Stack direction="row" spacing={1.5} sx={{ mb: 0.5, alignItems: 'center' }}>
         <AssessmentIcon sx={{ color: '#2563eb', fontSize: 32 }} />
         <Box>
           <Typography variant="h4" fontWeight={800}>Finance Reports</Typography>
@@ -423,7 +423,11 @@ export default function FinanceReportsDashboard() {
 
       {/* Controls */}
       <Paper elevation={0} sx={{ p: 2.5, border: '1px solid #e7ebf2', borderRadius: 3, mb: 3 }}>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ sm: 'flex-end' }}>
+        <Stack
+          direction={{ xs: 'column', sm: 'row' }}
+          spacing={2}
+          sx={{ alignItems: { xs: 'stretch', sm: 'flex-end' } }}
+        >
           <FormControl size="small" sx={{ minWidth: 280 }}>
             <InputLabel>Report Type</InputLabel>
             <Select
@@ -489,7 +493,7 @@ export default function FinanceReportsDashboard() {
       {/* Report preview */}
       {generated && !loading && (
         <Box>
-          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+          <Stack direction="row" sx={{ mb: 2, justifyContent: 'space-between', alignItems: 'center' }}>
             <Typography variant="h6" fontWeight={800}>{selectedOption.label}</Typography>
             <Chip label={`Generated ${new Date().toLocaleTimeString()}`} size="small" color="success" variant="outlined" />
           </Stack>

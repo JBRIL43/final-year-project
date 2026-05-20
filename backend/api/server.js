@@ -24,6 +24,8 @@ const {
   notFoundHandler,
   globalErrorHandler,
 } = require('./middleware/errorHandler');
+const { systemLogMiddleware } = require('./middleware/systemLogMiddleware');
+const systemLogRoutes = require('./routes/systemLogRoutes');
 const { warnProductionConfig } = require('./config/startupChecks');
 
 warnProductionConfig();
@@ -142,6 +144,7 @@ app.use((err, req, res, next) => {
   return next(err);
 });
 app.use(express.json());
+app.use('/api', systemLogMiddleware);
 
 // Rate limits (health routes above are excluded)
 app.use('/api/', globalLimiter);
@@ -157,6 +160,7 @@ app.use('/api/debt', debtRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/verification', verificationRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/admin/system-logs', systemLogRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/notifications', notificationRoutes);

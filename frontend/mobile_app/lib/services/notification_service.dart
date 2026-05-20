@@ -1,112 +1,31 @@
 import 'dart:convert';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:http/http.dart' as http;
-import 'api_config.dart';
+
+import 'api_client.dart';
 
 class NotificationService {
-  static Future<Map<String, String>> _authHeaders() async {
-    final user = FirebaseAuth.instance.currentUser;
-    final token = await user?.getIdToken(true);
-    return {
-      'Content-Type': 'application/json',
-      if (token != null) 'Authorization': 'Bearer $token',
-    };
-  }
-
   static Future<List<dynamic>> getNotifications() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return [];
-
-    final response = await http
-        .get(
-          Uri.parse('${ApiConfig.preferredBaseUrl}/api/notifications'),
-          headers: await _authHeaders(),
-        )
-        .timeout(const Duration(seconds: 8));
-
-    if (response.statusCode != 200) {
-      throw Exception(
-        'Failed to load notifications (${response.statusCode}): ${response.body}',
-      );
-    }
-
+    final response = await ApiClient.getWithAuth('/api/notifications');
     final data = jsonDecode(response.body) as Map<String, dynamic>;
-    return (data['notifications'] as List<dynamic>? ?? []);
+    return data['notifications'] as List<dynamic>? ?? [];
   }
 
   static Future<void> markAsRead(int notificationId) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    final response = await http
-        .patch(
-          Uri.parse(
-            '${ApiConfig.preferredBaseUrl}/api/notifications/$notificationId/read',
-          ),
-          headers: await _authHeaders(),
-        )
-        .timeout(const Duration(seconds: 8));
-
-    if (response.statusCode != 200) {
-      throw Exception(
-        'Failed to mark notification as read (${response.statusCode}): ${response.body}',
-      );
-    }
+    await ApiClient.patchWithAuth('/api/notifications/$notificationId/read');
   }
 
-  static Future<void> markAllRead() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    final response = await http
-        .patch(
-          Uri.parse('${ApiConfig.preferredBaseUrl}/api/notifications/read-all'),
-          headers: await _authHeaders(),
-        )
-        .timeout(const Duration(seconds: 8));
-
-    if (response.statusCode != 200) {
-      throw Exception(
-        'Failed to mark notifications as read (${response.statusCode}): ${response.body}',
-      );
-    }
+  static Future<void> markAllAsRead() async {
+    await ApiClient.patchWithAuth('/api/notifications/read-all');
   }
+
+  static Future<void> markAllRead() => markAllAsRead();
 
   static Future<void> deleteNotification(int notificationId) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    final response = await http
-        .delete(
-          Uri.parse(
-            '${ApiConfig.preferredBaseUrl}/api/notifications/$notificationId',
-          ),
-          headers: await _authHeaders(),
-        )
-        .timeout(const Duration(seconds: 8));
-
-    if (response.statusCode != 200) {
-      throw Exception(
-        'Failed to delete notification (${response.statusCode}): ${response.body}',
-      );
-    }
+    await ApiClient.deleteWithAuth('/api/notifications/$notificationId');
   }
 
-  static Future<void> clearAll() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    final response = await http
-        .delete(
-          Uri.parse('${ApiConfig.preferredBaseUrl}/api/notifications'),
-          headers: await _authHeaders(),
-        )
-        .timeout(const Duration(seconds: 8));
-
-    if (response.statusCode != 200) {
-      throw Exception(
-        'Failed to clear notifications (${response.statusCode}): ${response.body}',
-      );
-    }
+  static Future<void> deleteAll() async {
+    await ApiClient.deleteWithAuth('/api/notifications');
   }
+
+  static Future<void> clearAll() => deleteAll();
 }

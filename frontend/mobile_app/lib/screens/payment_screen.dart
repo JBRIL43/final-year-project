@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:convert';
+import '../services/api_client.dart';
 import '../services/api_config.dart';
 
 class PaymentScreen extends StatefulWidget {
@@ -48,12 +49,7 @@ class _PaymentScreenState extends State<PaymentScreen> with WidgetsBindingObserv
   }
 
   Future<Map<String, String>> _authHeaders() async {
-    final user = FirebaseAuth.instance.currentUser;
-    final token = await user?.getIdToken(true);
-    return {
-      'Content-Type': 'application/json',
-      if (token != null) 'Authorization': 'Bearer $token',
-    };
+    return ApiClient.authHeaders(forceRefresh: true);
   }
 
   // ── Chapa flow ─────────────────────────────────────────────────────────────

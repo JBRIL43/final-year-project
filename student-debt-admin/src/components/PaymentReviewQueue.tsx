@@ -211,7 +211,7 @@ export default function PaymentReviewQueue() {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
+      <Stack direction="row" sx={{ mb: 3, justifyContent: 'space-between', alignItems: 'center' }}>
         <Box>
           <Typography variant="h4" fontWeight={800}>Payment Review Queue</Typography>
           <Typography variant="body2" color="text.secondary">
@@ -368,7 +368,7 @@ export default function PaymentReviewQueue() {
                           Verify & Approve
                         </Button>
                       ) : (
-                        <Stack direction="row" spacing={1} justifyContent="flex-end">
+                        <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
                           <Button
                             size="small"
                             variant="contained"

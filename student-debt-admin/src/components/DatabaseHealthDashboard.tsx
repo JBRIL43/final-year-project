@@ -65,7 +65,7 @@ export default function DatabaseHealthDashboard() {
       </Typography>
 
       <Paper elevation={0} sx={{ border: '1px solid #e7ebf2', borderRadius: 3, p: 3 }}>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems="center" sx={{ mb: 2 }}>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mb: 2, alignItems: 'center' }}>
           <MonitorHeartOutlinedIcon color={health.status === 'healthy' ? 'success' : 'error'} />
           <Chip
             label={health.status === 'healthy' ? 'Healthy' : 'Unhealthy'}

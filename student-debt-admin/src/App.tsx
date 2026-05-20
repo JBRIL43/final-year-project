@@ -17,6 +17,7 @@ import ChangePassword from './components/ChangePassword'
 import FaydaIntegrationDashboard from './components/FaydaIntegrationDashboard'
 import SemesterAmountsDashboard from './components/SemesterAmountsDashboard'
 import DatabaseHealthDashboard from './components/DatabaseHealthDashboard'
+import SystemLogsDashboard from './components/SystemLogsDashboard'
 import AdminUserManagement from './components/AdminUserManagement'
 import WithdrawalApprovalDashboard from './components/WithdrawalApprovalDashboard'
 import FinanceReportsDashboard from './components/FinanceReportsDashboard'
@@ -228,6 +229,14 @@ function AppRoutes() {
           element={
             <ProtectedRoute allowedRoles={['admin', 'finance']}>
               <DatabaseHealthDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="system-logs"
+          element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <SystemLogsDashboard />
             </ProtectedRoute>
           }
         />

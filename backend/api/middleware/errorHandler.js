@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { recordSystemLog } = require('../utils/systemLog');
 
 function requestIdMiddleware(req, res, next) {
   req.id = req.headers['x-request-id'] || crypto.randomUUID();
@@ -28,6 +29,17 @@ function globalErrorHandler(err, req, res, _next) {
     status,
     message: err.message,
     stack: isProduction ? undefined : err.stack,
+  });
+
+  recordSystemLog({
+    req,
+    action: `error.${status}`,
+    category: 'system',
+    severity: status >= 500 ? 'error' : 'warning',
+    success: false,
+    errorMessage: err.message,
+    statusCode: status,
+    metadata: { handler: 'globalErrorHandler' },
   });
 
   res.status(status).json({
