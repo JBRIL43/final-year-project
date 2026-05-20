@@ -1,4 +1,4 @@
-import { ReactNode } from 'react'
+import { ReactNode, useState } from 'react'
 import {
   Avatar,
   Badge,
@@ -12,6 +12,8 @@ import {
   ListItemText,
   Paper,
   Typography,
+  Collapse,
+  IconButton,
 } from '@mui/material'
 import {
   Dashboard as DashboardIcon,
@@ -28,59 +30,114 @@ import {
   History as HistoryIcon,
   ManageAccounts as ManageAccountsIcon,
   ExitToApp as ExitToAppIcon,
+  ExpandLess,
+  ExpandMore,
 } from '@mui/icons-material'
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 
 const drawerWidth = 270
 
-function buildNavItems(role: string) {
+interface NavLinkItem {
+  type: 'link'
+  label: string
+  to: string
+  icon: ReactNode
+}
+
+interface NavGroupItem {
+  type: 'group'
+  label: string
+  icon: ReactNode
+  id: string
+  items: { label: string; to: string; icon: ReactNode }[]
+}
+
+type NavItem = NavLinkItem | NavGroupItem
+
+function buildNavItems(role: string): NavItem[] {
   if (role === 'registrar') {
     return [
-      { label: 'Student Clearance & Status', to: '/registrar', icon: <AccountBalanceIcon /> },
-      { label: 'Graduate Management', to: '/graduates', icon: <SchoolIcon /> },
-      { label: 'Change Password', to: '/change-password', icon: <LockResetIcon /> },
+      { type: 'link', label: 'Student Clearance & Status', to: '/registrar', icon: <AccountBalanceIcon /> },
+      { type: 'link', label: 'Graduate Management', to: '/graduates', icon: <SchoolIcon /> },
+      { type: 'link', label: 'Edit Profile', to: '/profile', icon: <ManageAccountsIcon /> },
+      { type: 'link', label: 'Change Password', to: '/change-password', icon: <LockResetIcon /> },
     ]
   }
 
   if (role === 'department_head') {
     return [
-      { label: 'Department Dashboard', to: '/department', icon: <ApartmentIcon /> },
-      { label: 'Cost Configuration', to: '/cost-config', icon: <ReceiptLongIcon /> },
-      { label: 'Change Password', to: '/change-password', icon: <LockResetIcon /> },
+      { type: 'link', label: 'Department Dashboard', to: '/department', icon: <ApartmentIcon /> },
+      { type: 'link', label: 'Cost Configuration', to: '/cost-config', icon: <ReceiptLongIcon /> },
+      { type: 'link', label: 'Edit Profile', to: '/profile', icon: <ManageAccountsIcon /> },
+      { type: 'link', label: 'Change Password', to: '/change-password', icon: <LockResetIcon /> },
     ]
   }
 
   if (role === 'finance') {
     return [
-      { label: 'Dashboard', to: '/', icon: <DashboardIcon /> },
-      { label: 'Student Financial Data', to: '/manage-users', icon: <SchoolIcon /> },
-      { label: 'Delinquent Graduates', to: '/graduates/delinquent', icon: <WarningIcon /> },
-      { label: 'Payment Review', to: '/payment-review', icon: <ReceiptLongIcon /> },
-      { label: 'Withdrawal Approvals', to: '/withdrawal-approvals', icon: <ExitToAppIcon /> },
-      { label: 'Semester Amounts', to: '/semester-amounts', icon: <ReceiptLongIcon /> },
-      { label: 'ERCA Export', to: '/erca-export', icon: <DescriptionIcon /> },
-      { label: 'Finance Reports', to: '/finance-reports', icon: <DescriptionIcon /> },
-      { label: 'Change Password', to: '/change-password', icon: <LockResetIcon /> },
+      { type: 'link', label: 'Dashboard', to: '/', icon: <DashboardIcon /> },
+      {
+        type: 'group',
+        label: 'Students & Graduates',
+        icon: <SchoolIcon />,
+        id: 'students_graduates',
+        items: [
+          { label: 'Student Financial Data', to: '/manage-users', icon: <SchoolIcon /> },
+          { label: 'Delinquent Graduates', to: '/graduates/delinquent', icon: <WarningIcon /> },
+        ],
+      },
+      {
+        type: 'group',
+        label: 'Approvals & Config',
+        icon: <AccountBalanceIcon />,
+        id: 'approvals_config',
+        items: [
+          { label: 'Payment Review', to: '/payment-review', icon: <ReceiptLongIcon /> },
+          { label: 'Withdrawal Approvals', to: '/withdrawal-approvals', icon: <ExitToAppIcon /> },
+          { label: 'Semester Amounts', to: '/semester-amounts', icon: <ReceiptLongIcon /> },
+        ],
+      },
+      {
+        type: 'group',
+        label: 'Reports & Export',
+        icon: <DescriptionIcon />,
+        id: 'reports_export',
+        items: [
+          { label: 'ERCA Export', to: '/erca-export', icon: <DescriptionIcon /> },
+          { label: 'Finance Reports', to: '/finance-reports', icon: <DescriptionIcon /> },
+        ],
+      },
+      { type: 'link', label: 'Edit Profile', to: '/profile', icon: <ManageAccountsIcon /> },
+      { type: 'link', label: 'Change Password', to: '/change-password', icon: <LockResetIcon /> },
     ]
   }
 
   return [
-    { label: 'Dashboard', to: '/', icon: <DashboardIcon /> },
-    // { label: 'Graduate Management', to: '/graduates', icon: <SchoolIcon /> },
-    { label: 'Student Management', to: '/manage-users', icon: <SchoolIcon /> },
-    { label: 'User Administration', to: '/admin-users', icon: <ManageAccountsIcon /> },
-    // { label: 'Delinquent Graduates', to: '/graduates/delinquent', icon: <WarningIcon /> },
-    // { label: 'Registrar Clearance', to: '/registrar', icon: <AccountBalanceIcon /> },
-    // { label: 'Department Dashboard', to: '/department', icon: <ApartmentIcon /> },
-    // { label: 'Cost Configuration', to: '/cost-config', icon: <ReceiptLongIcon /> },
-    // { label: 'Semester Amounts', to: '/semester-amounts', icon: <ReceiptLongIcon /> },
-    // { label: 'Payment Review', to: '/payment-review', icon: <ReceiptLongIcon /> },
-    // { label: 'ERCA Export', to: '/erca-export', icon: <DescriptionIcon /> },
-    { label: 'Fayda Integration', to: '/fayda', icon: <HubIcon /> },
-    { label: 'Database Health', to: '/database-health', icon: <MonitorHeartIcon /> },
-    { label: 'System Logs', to: '/system-logs', icon: <HistoryIcon /> },
-    { label: 'Change Password', to: '/change-password', icon: <LockResetIcon /> },
+    { type: 'link', label: 'Dashboard', to: '/', icon: <DashboardIcon /> },
+    {
+      type: 'group',
+      label: 'User Management',
+      icon: <ManageAccountsIcon />,
+      id: 'user_management',
+      items: [
+        { label: 'Student Management', to: '/manage-users', icon: <SchoolIcon /> },
+        { label: 'User Administration', to: '/admin-users', icon: <ManageAccountsIcon /> },
+      ],
+    },
+    {
+      type: 'group',
+      label: 'System Operations',
+      icon: <HubIcon />,
+      id: 'system_ops',
+      items: [
+        { label: 'Fayda Integration', to: '/fayda', icon: <HubIcon /> },
+        { label: 'Database Health', to: '/database-health', icon: <MonitorHeartIcon /> },
+        { label: 'System Logs', to: '/system-logs', icon: <HistoryIcon /> },
+      ],
+    },
+    { type: 'link', label: 'Edit Profile', to: '/profile', icon: <ManageAccountsIcon /> },
+    { type: 'link', label: 'Change Password', to: '/change-password', icon: <LockResetIcon /> },
   ]
 }
 
@@ -103,6 +160,32 @@ export default function AdminLayout({ children }: { children?: ReactNode }) {
   const displayName = user?.displayName || email.split('@')[0] || 'Admin'
   const navItems = buildNavItems(role)
   const roleLabel = getRoleLabel(role)
+  const location = useLocation()
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
+
+  const isGroupActive = (group: NavGroupItem) => {
+    return group.items.some((item) => {
+      if (item.to === '/') {
+        return location.pathname === '/' || location.pathname === '/reports'
+      }
+      return location.pathname.startsWith(item.to)
+    })
+  }
+
+  const handleGroupClick = (groupId: string) => {
+    setOpenGroups((prev) => {
+      const currentVal = prev[groupId]
+      const defaultVal = (() => {
+        const group = navItems.find((item) => item.type === 'group' && item.id === groupId) as NavGroupItem | undefined
+        return group ? isGroupActive(group) : false
+      })()
+      const isCurrentlyOpen = currentVal !== undefined ? currentVal : defaultVal
+      return {
+        ...prev,
+        [groupId]: !isCurrentlyOpen,
+      }
+    })
+  }
 
   const handleLogout = async () => {
     try {
@@ -161,37 +244,105 @@ export default function AdminLayout({ children }: { children?: ReactNode }) {
         </Typography>
 
         <List sx={{ mt: 1 }}>
-          {navItems.map((item) => (
-            <ListItemButton
-              key={item.to}
-              component={NavLink}
-              to={item.to}
-              end={item.to === '/'}
-              sx={{
-                mb: 1,
-                borderRadius: 3,
-                px: 1.5,
-                py: 1.25,
-                color: '#4d586b',
-                '&.active': {
-                  bgcolor: '#dce9ff',
-                  color: '#2f67dc',
-                  '& .MuiListItemIcon-root': { color: '#2f67dc' },
-                },
-              }}
-            >
-              <ListItemIcon sx={{ minWidth: 38, color: 'inherit' }}>{item.icon}</ListItemIcon>
-              <ListItemText
-                primary={item.label}
-                sx={{
-                  '& .MuiListItemText-primary': {
-                    fontWeight: 700,
-                    fontSize: 15,
-                  },
-                }}
-              />
-            </ListItemButton>
-          ))}
+          {navItems.map((item) => {
+            if (item.type === 'link') {
+              return (
+                <ListItemButton
+                  key={item.to}
+                  component={NavLink}
+                  to={item.to}
+                  end={item.to === '/'}
+                  sx={{
+                    mb: 1,
+                    borderRadius: 3,
+                    px: 1.5,
+                    py: 1.25,
+                    color: '#4d586b',
+                    '&.active': {
+                      bgcolor: '#dce9ff',
+                      color: '#2f67dc',
+                      '& .MuiListItemIcon-root': { color: '#2f67dc' },
+                    },
+                  }}
+                >
+                  <ListItemIcon sx={{ minWidth: 38, color: 'inherit' }}>{item.icon}</ListItemIcon>
+                  <ListItemText
+                    primary={item.label}
+                    sx={{
+                      '& .MuiListItemText-primary': {
+                        fontWeight: 700,
+                        fontSize: 15,
+                      },
+                    }}
+                  />
+                </ListItemButton>
+              )
+            } else {
+              const isOpen = openGroups[item.id] !== undefined ? openGroups[item.id] : isGroupActive(item)
+              return (
+                <Box key={item.id} sx={{ mb: 1 }}>
+                  <ListItemButton
+                    onClick={() => handleGroupClick(item.id)}
+                    sx={{
+                      borderRadius: 3,
+                      px: 1.5,
+                      py: 1.25,
+                      color: '#4d586b',
+                      bgcolor: isOpen ? 'rgba(0, 0, 0, 0.02)' : 'transparent',
+                    }}
+                  >
+                    <ListItemIcon sx={{ minWidth: 38, color: 'inherit' }}>{item.icon}</ListItemIcon>
+                    <ListItemText
+                      primary={item.label}
+                      sx={{
+                        '& .MuiListItemText-primary': {
+                          fontWeight: 700,
+                          fontSize: 15,
+                        },
+                      }}
+                    />
+                    {isOpen ? <ExpandLess /> : <ExpandMore />}
+                  </ListItemButton>
+                  <Collapse in={isOpen} timeout="auto" unmountOnExit sx={{ pl: 2.5 }}>
+                    <List component="div" disablePadding sx={{ mt: 0.5 }}>
+                      {item.items.map((subItem) => (
+                        <ListItemButton
+                          key={subItem.to}
+                          component={NavLink}
+                          to={subItem.to}
+                          sx={{
+                            mb: 0.5,
+                            borderRadius: 3,
+                            px: 1.5,
+                            py: 1,
+                            color: '#64748b',
+                            '&.active': {
+                              bgcolor: '#dce9ff',
+                              color: '#2f67dc',
+                              '& .MuiListItemIcon-root': { color: '#2f67dc' },
+                            },
+                          }}
+                        >
+                          <ListItemIcon sx={{ minWidth: 32, color: 'inherit', '& .MuiSvgIcon-root': { fontSize: 18 } }}>
+                            {subItem.icon}
+                          </ListItemIcon>
+                          <ListItemText
+                            primary={subItem.label}
+                            sx={{
+                              '& .MuiListItemText-primary': {
+                                fontWeight: 600,
+                                fontSize: 13.5,
+                              },
+                            }}
+                          />
+                        </ListItemButton>
+                      ))}
+                    </List>
+                  </Collapse>
+                </Box>
+              )
+            }
+          })}
         </List>
 
         <Divider sx={{ my: 2, borderColor: '#e7ebf2' }} />
@@ -238,42 +389,23 @@ export default function AdminLayout({ children }: { children?: ReactNode }) {
 
       <Box component="main" sx={{ flex: 1, px: 4, py: 2.5 }}>
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
-          <Paper
-            elevation={0}
+          <IconButton
+            color="inherit"
             sx={{
-              px: 2,
-              py: 1.25,
-              borderRadius: 3,
+              bgcolor: 'rgba(255, 255, 255, 0.95)',
               border: '1px solid #e7ebf2',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1.25,
-              bgcolor: 'rgba(255,255,255,0.95)',
+              borderRadius: 3,
+              p: 1.25,
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
+              '&:hover': {
+                bgcolor: 'rgba(0, 0, 0, 0.04)',
+              },
             }}
           >
-            <Badge color="error" badgeContent={4} overlap="circular">
-              <Avatar sx={{ bgcolor: '#f4f7ff', color: '#4a83f5', fontWeight: 800 }}>
-                {getInitials(displayName)}
-              </Avatar>
+            <Badge color="error" badgeContent={4}>
+              <NotificationsNoneIcon sx={{ color: '#f59e0b' }} />
             </Badge>
-            <Box>
-              <Typography variant="body2" sx={{ fontWeight: 800 }}>
-                {email}
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                {roleLabel}
-              </Typography>
-            </Box>
-            <NotificationsNoneIcon sx={{ color: '#f59e0b' }} />
-            <Button
-              size="small"
-              variant="text"
-              onClick={handleLogout}
-              sx={{ textTransform: 'none', fontWeight: 700 }}
-            >
-              Logout
-            </Button>
-          </Paper>
+          </IconButton>
         </Box>
 
         <Box

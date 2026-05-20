@@ -22,6 +22,7 @@ import AdminUserManagement from './components/AdminUserManagement'
 import WithdrawalApprovalDashboard from './components/WithdrawalApprovalDashboard'
 import FinanceReportsDashboard from './components/FinanceReportsDashboard'
 import ApiErrorToast from './components/ApiErrorToast'
+import Profile from './components/Profile'
 
 function AppRoutes() {
   const { loading, profileLoading, profileReady, user, role } = useAuth()
@@ -205,6 +206,14 @@ function AppRoutes() {
           element={
             <ProtectedRoute>
               <ChangePassword />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="profile"
+          element={
+            <ProtectedRoute>
+              <Profile />
             </ProtectedRoute>
           }
         />

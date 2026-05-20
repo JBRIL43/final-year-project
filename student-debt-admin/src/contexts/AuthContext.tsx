@@ -29,6 +29,7 @@ interface AuthContextType {
   department: string | null
   profile: UserProfile | null
   logout: () => Promise<void>
+  refreshProfile: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -42,6 +43,7 @@ const AuthContext = createContext<AuthContextType>({
   department: null,
   profile: null,
   logout: async () => {},
+  refreshProfile: async () => {},
 })
 
 export function useAuth() {
@@ -164,6 +166,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => unsubscribe()
   }, [])
 
+  const refreshProfile = async () => {
+    if (!user) return
+    setProfileLoading(true)
+    try {
+      const idToken = await user.getIdToken()
+      const currentProfile = await fetchUserProfile(idToken)
+      setProfile(currentProfile)
+      setRole(currentProfile?.role || 'student')
+      setDepartment(currentProfile?.department || null)
+      setIsAdmin((currentProfile?.role || 'student') !== 'student')
+    } catch (err) {
+      console.error('Failed to refresh profile:', err)
+    } finally {
+      setProfileLoading(false)
+    }
+  }
+
   return (
     <AuthContext.Provider
       value={{
@@ -177,6 +196,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         department,
         profile,
         logout,
+        refreshProfile,
       }}
     >
       {children}
