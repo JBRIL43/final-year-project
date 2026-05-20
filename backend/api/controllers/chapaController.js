@@ -5,6 +5,7 @@ const firebaseAdmin = require('../config/firebaseAdmin');
 const { sendPaymentNotification } = require('../utils/notifications');
 const { invalidatePaymentCaches } = require('../utils/cache');
 const { verifyBearerIdentity } = require('../utils/firebaseIdentity');
+const { hasColumn } = require('../utils/schemaCache');
 
 const CHAPA_BASE_URL = 'https://api.chapa.co/v1';
 
@@ -148,12 +149,7 @@ exports.initializePayment = async (req, res) => {
     await ensureTransactionRefUniqueIndex();
 
     // Check if payment_history has a student_id column
-    const colCheck = await pool.query(
-      `SELECT column_name FROM information_schema.columns
-       WHERE table_schema = 'public' AND table_name = 'payment_history'
-       AND column_name = 'student_id' LIMIT 1`
-    );
-    const hasStudentId = colCheck.rows.length > 0;
+    const hasStudentId = await hasColumn('payment_history', 'student_id');
 
     if (hasStudentId) {
       await pool.query(
@@ -232,12 +228,7 @@ function resolveReturnUrl(clientReturnUrl) {
 }
 
 async function paymentHistoryHasStudentId() {
-  const colCheck = await pool.query(
-    `SELECT column_name FROM information_schema.columns
-     WHERE table_schema = 'public' AND table_name = 'payment_history'
-       AND column_name = 'student_id' LIMIT 1`
-  );
-  return colCheck.rows.length > 0;
+  return hasColumn('payment_history', 'student_id');
 }
 
 function txRefBelongsToStudent(txRef, studentId) {

@@ -2,6 +2,7 @@ const pool = require('../config/db');
 const { invalidatePaymentCaches } = require('../utils/cache');
 const { auditLog } = require('../utils/auditLog');
 const { sendPaymentNotification } = require('../utils/notifications');
+const { getColumns } = require('../utils/schemaCache');
 
 function resolveStatusMode(sampleStatus) {
   const value = String(sampleStatus || '').trim();
@@ -88,15 +89,8 @@ exports.verifyPayment = async (req, res) => {
     client = await pool.connect();
     await client.query('BEGIN');
 
-    const paymentColumnsResult = await client.query(
-      `SELECT column_name
-       FROM information_schema.columns
-       WHERE table_schema = 'public'
-         AND table_name = 'payment_history'
-         AND column_name = ANY($1::text[])`,
-      [['status', 'verified_by', 'reviewed_at', 'notes']]
-    );
-    const paymentColumns = new Set(paymentColumnsResult.rows.map((row) => row.column_name));
+    // schemaCache: no DB round-trip after first call
+    const paymentColumns = await getColumns('payment_history', ['status', 'verified_by', 'reviewed_at', 'notes']);
 
     if (!paymentColumns.has('status')) {
       await client.query('ROLLBACK');
@@ -172,15 +166,8 @@ exports.verifyPayment = async (req, res) => {
 
     // Only update debt balance if approved
     if (action === 'APPROVE') {
-      const debtColumnsResult = await client.query(
-        `SELECT column_name
-         FROM information_schema.columns
-         WHERE table_schema = 'public'
-           AND table_name = 'debt_records'
-           AND column_name = ANY($1::text[])`,
-        [['current_balance', 'updated_at', 'last_updated']]
-      );
-      const debtColumns = new Set(debtColumnsResult.rows.map((row) => row.column_name));
+      // schemaCache: no DB round-trip after first call
+      const debtColumns = await getColumns('debt_records', ['current_balance', 'updated_at', 'last_updated']);
 
       if (!debtColumns.has('current_balance')) {
         await client.query('ROLLBACK');

@@ -2,6 +2,7 @@ const pool = require('../config/db');
 const { sendPaymentNotification } = require('../utils/notifications');
 const firebaseAdmin = require('../config/firebaseAdmin');
 const { verifyBearerIdentity } = require('../utils/firebaseIdentity');
+const { hasColumn, getColumns } = require('../utils/schemaCache');
 
 function resolveStatusMode(sampleStatus) {
   const value = String(sampleStatus || '').trim();
@@ -45,16 +46,9 @@ async function resolveStudentFromRequest(req) {
     };
   }
 
-  const studentEmailColumn = await pool.query(
-    `SELECT 1
-     FROM information_schema.columns
-     WHERE table_schema = 'public'
-       AND table_name = 'students'
-       AND column_name = 'email'
-     LIMIT 1`
-  );
+  const studentEmailColumn = await hasColumn('students', 'email');
 
-  if (email && studentEmailColumn.rows.length > 0) {
+  if (email && studentEmailColumn) {
     const fallbackStudent = await pool.query(
       `SELECT student_id, user_id
        FROM public.students
@@ -94,7 +88,7 @@ async function resolveStudentFromRequest(req) {
         };
       }
 
-      if (studentEmailColumn.rows.length > 0) {
+      if (studentEmailColumn) {
         const studentByEmail = await pool.query(
           `SELECT student_id, user_id
            FROM public.students
@@ -139,7 +133,7 @@ async function resolveStudentFromRequest(req) {
 
   // Last-resort self-healing: if the student row exists by email but the user link is stale or missing,
   // reconcile public.users and public.students so valid Firebase logins can submit payments.
-  if (email && studentEmailColumn.rows.length > 0) {
+  if (email && studentEmailColumn) {
     const candidateStudent = await pool.query(
       `SELECT student_id, user_id
        FROM public.students
@@ -192,18 +186,7 @@ async function resolveStudentFromRequest(req) {
   return null;
 }
 
-const paymentHistoryHasStudentId = async () => {
-  const result = await pool.query(
-    `SELECT 1
-     FROM information_schema.columns
-     WHERE table_schema = 'public'
-       AND table_name = 'payment_history'
-       AND column_name = 'student_id'
-     LIMIT 1`
-  );
-
-  return result.rows.length > 0;
-};
+const paymentHistoryHasStudentId = () => hasColumn('payment_history', 'student_id');
 
 // UC-03: Record new payment
 exports.recordPayment = async (req, res) => {
@@ -246,15 +229,8 @@ exports.recordPayment = async (req, res) => {
     client = await pool.connect();
     await client.query('BEGIN');
 
-    const debtColumnsResult = await client.query(
-      `SELECT column_name
-       FROM information_schema.columns
-       WHERE table_schema = 'public'
-         AND table_name = 'debt_records'
-         AND column_name = ANY($1::text[])`,
-      [['debt_id', 'student_id', 'academic_year']]
-    );
-    const debtColumns = new Set(debtColumnsResult.rows.map((row) => row.column_name));
+    // schemaCache: no DB round-trip after first call
+    const debtColumns = await getColumns('debt_records', ['debt_id', 'student_id', 'academic_year']);
 
     const hasAcademicYear = debtColumns.has('academic_year');
     const debtResult = await client.query(

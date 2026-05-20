@@ -124,7 +124,15 @@ Features were developed incrementally, starting with the minimum viable implemen
 
 **Schema-Safe Coding**
 
-A recurring pattern throughout the backend is checking for column existence before querying, using a shared `getAvailableColumns(tableName, columns)` helper. This allows the application to run correctly across different database schema versions without requiring all migrations to be applied simultaneously.
+A recurring pattern throughout the backend is checking for column existence before querying. This is now centralised in `backend/api/utils/schemaCache.js`, which exposes three functions:
+
+- `hasColumn(tableName, columnName)` — returns `true`/`false`
+- `getColumns(tableName, wantedColumns?)` — returns a `Set<string>` of present column names
+- `invalidateSchema(...tableNames)` — evicts one or more tables from the cache (call after running a migration)
+
+The cache stores a `Promise<Set<string>>` per table so that concurrent callers arriving before the first query resolves all await the same in-flight request rather than firing duplicate queries. On error the entry is evicted so the next call retries. Because the schema is stable at runtime (columns are only added via migrations, never during normal operation), each table is queried at most once per process lifetime.
+
+All route files that previously defined a local `getAvailableColumns` helper have been migrated to import `getColumns` from `schemaCache.js`. The local helper is aliased (`const getAvailableColumns = getColumns`) so existing call-sites remain unchanged while eliminating redundant `information_schema` round-trips.
 
 **Auto-Healing Patterns**
 
@@ -561,7 +569,7 @@ Existing features are modified by:
 All route handlers in `backend/api/routes/` follow these standards:
 - The `const router = express.Router()` initialization statement is placed at the top of the file, immediately after all imports, to prevent `ReferenceError: Cannot access 'router' before initialization` errors
 - All variable definitions are declared before use, preventing `undefined variable` errors in middleware chains
-- Database queries use defensive column-checking via `getAvailableColumns()` to handle schema variations across development, testing, and production environments
+- Database queries use defensive column-checking via `schemaCache.hasColumn()` / `schemaCache.getColumns()` (from `backend/api/utils/schemaCache.js`) to handle schema variations across development, testing, and production environments. The cache is process-level, so each table's column set is fetched from `information_schema` at most once per server lifetime.
 - All async operations are wrapped in `try/catch` blocks with appropriate error responses
 
 Recent fixes applied to ensure reliability:

@@ -2,6 +2,7 @@ const express = require('express');
 const pool = require('../config/db');
 const { authenticateRequest, requireRoles } = require('../middleware/auth');
 const { sendPaymentNotification } = require('../utils/notifications');
+const { getColumns } = require('../utils/schemaCache');
 
 const router = express.Router();
 
@@ -13,18 +14,8 @@ function normalizePaymentModel(value) {
   return 'post_graduation';
 }
 
-async function getAvailableColumns(tableName, columns) {
-  const result = await pool.query(
-    `SELECT column_name
-     FROM information_schema.columns
-     WHERE table_schema = 'public'
-       AND table_name = $1
-       AND column_name = ANY($2::text[])`,
-    [tableName, columns]
-  );
-
-  return new Set(result.rows.map((row) => row.column_name));
-}
+// Alias so all existing call-sites (getAvailableColumns) keep working unchanged.
+const getAvailableColumns = getColumns;
 
 async function ensureDebtFinalSettlementColumn() {
   const debtColumns = await getAvailableColumns('debt_records', ['is_final_settlement']);

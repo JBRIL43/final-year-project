@@ -2,23 +2,11 @@ const pool = require('../config/db');
 const firebaseAdmin = require('../config/firebaseAdmin');
 const { normalizeRole } = require('../utils/roles');
 const { rejectClientIdentityHeaders } = require('../utils/firebaseIdentity');
-
-async function getAvailableUserColumns() {
-  const result = await pool.query(
-    `SELECT column_name
-     FROM information_schema.columns
-     WHERE table_schema = 'public'
-       AND table_name = 'users'
-       AND column_name = ANY($1::text[])`,
-    [['user_id', 'firebase_uid', 'email', 'full_name', 'role', 'department']]
-  );
-
-  return new Set(result.rows.map((row) => row.column_name));
-}
+const { hasColumn } = require('../utils/schemaCache');
 
 async function resolveAppUserByIdentity(uid, email) {
-  const userColumns = await getAvailableUserColumns();
-  const hasDepartment = userColumns.has('department');
+  // schemaCache: zero DB round-trip after first request in this process
+  const hasDepartment = await hasColumn('users', 'department');
 
   const departmentExpr = hasDepartment ? 'department' : "NULL::text AS department";
 

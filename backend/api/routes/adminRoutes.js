@@ -202,16 +202,8 @@ async function createOrResolveFirebaseUid({ studentNumber, email, fullName }) {
 }
 
 async function getAvailableColumns(tableName, columns) {
-  const result = await pool.query(
-    `SELECT column_name
-     FROM information_schema.columns
-     WHERE table_schema = 'public'
-       AND table_name = $1
-       AND column_name = ANY($2::text[])`,
-    [tableName, columns]
-  );
-
-  return new Set(result.rows.map((row) => row.column_name));
+  const { getColumns } = require('../utils/schemaCache');
+  return getColumns(tableName, columns);
 }
 
 function resolveStatusMode(sampleStatus) {

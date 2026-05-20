@@ -36,21 +36,12 @@ const express = require('express');
 const pool = require('../config/db');
 const firebaseAdmin = require('../config/firebaseAdmin');
 const { verifyBearerIdentity } = require('../utils/firebaseIdentity');
+const { hasColumn, getColumns } = require('../utils/schemaCache');
 
 const router = express.Router();
 
-async function getAvailableColumns(tableName, columns) {
-  const result = await pool.query(
-    `SELECT column_name
-     FROM information_schema.columns
-     WHERE table_schema = 'public'
-       AND table_name = $1
-       AND column_name = ANY($2::text[])`,
-    [tableName, columns]
-  );
-
-  return new Set(result.rows.map((row) => row.column_name));
-}
+// Alias so all existing call-sites keep working unchanged.
+const getAvailableColumns = getColumns;
 
 async function authenticateToken(req, res, next) {
   try {
@@ -92,16 +83,9 @@ async function authenticateToken(req, res, next) {
 
     // Fallback for old rows where students.email exists but linkage is missing.
     if (!studentId && email) {
-      const hasStudentEmail = await pool.query(
-        `SELECT 1
-         FROM information_schema.columns
-         WHERE table_schema = 'public'
-           AND table_name = 'students'
-           AND column_name = 'email'
-         LIMIT 1`
-      );
+      const studentHasEmail = await hasColumn('students', 'email');
 
-      if (hasStudentEmail.rows.length > 0) {
+      if (studentHasEmail) {
         const byEmail = await pool.query(
           `SELECT student_id
            FROM public.students

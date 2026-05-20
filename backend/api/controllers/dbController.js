@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const { verifyBearerIdentity } = require('../utils/firebaseIdentity');
+const { hasColumn } = require('../utils/schemaCache');
 
 function normalizePaymentModel(value) {
   const normalized = String(value || '').trim().toLowerCase().replace(/[-\s]+/g, '_');
@@ -37,16 +38,10 @@ async function resolveStudentFromRequest(req) {
 
   // Backward-compatible fallback for records where students.email exists but user linkage is missing.
   if (email) {
-    const columnCheck = await pool.query(
-      `SELECT 1
-       FROM information_schema.columns
-       WHERE table_schema = 'public'
-         AND table_name = 'students'
-         AND column_name = 'email'
-       LIMIT 1`
-    );
+    // schemaCache: no DB round-trip after first call
+    const studentHasEmail = await hasColumn('students', 'email');
 
-    if (columnCheck.rows.length > 0) {
+    if (studentHasEmail) {
       const studentByEmail = await pool.query(
         `SELECT student_id
          FROM public.students

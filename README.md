@@ -74,6 +74,27 @@ Students can cancel their request only while it is in the `requested` (pending d
 | Push notifications | Firebase Cloud Messaging |
 | Payments | Chapa |
 
+## Backend Utilities
+
+### Schema Cache (`backend/api/utils/schemaCache.js`)
+
+A process-level cache for `information_schema.columns` lookups. Every authenticated request previously fired one or more column-existence queries (~5–15 ms each on Supabase/Render). `schemaCache` queries each table once per process lifetime and serves subsequent calls from an in-memory `Map`.
+
+```js
+const { hasColumn, getColumns, invalidateSchema } = require('../utils/schemaCache');
+
+// Check a single column — zero DB round-trips after first call per table
+const ok = await hasColumn('payment_history', 'student_id');
+
+// Get a filtered Set of present column names
+const cols = await getColumns('users', ['user_id', 'department', 'role']);
+
+// Invalidate after running a migration that adds columns
+invalidateSchema('students', 'debt_records');
+```
+
+Call `invalidateSchema()` (no arguments) to clear the entire cache, or pass specific table names to evict only those entries.
+
 ## Getting Started
 
 ### Backend

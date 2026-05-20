@@ -2,21 +2,12 @@ const express = require('express');
 const pool = require('../config/db');
 const { authenticateRequest, requireRoles } = require('../middleware/auth');
 const { auditLog } = require('../utils/auditLog');
+const { getColumns } = require('../utils/schemaCache');
 
 const router = express.Router();
 
-async function getAvailableColumns(tableName, columns) {
-  const result = await pool.query(
-    `SELECT column_name
-     FROM information_schema.columns
-     WHERE table_schema = 'public'
-       AND table_name = $1
-       AND column_name = ANY($2::text[])`,
-    [tableName, columns]
-  );
-
-  return new Set(result.rows.map((row) => row.column_name));
-}
+// Alias so all existing call-sites keep working unchanged.
+const getAvailableColumns = getColumns;
 
 async function ensureDepartmentClearanceColumn() {
   const studentColumns = await getAvailableColumns('students', ['department_clearance']);
