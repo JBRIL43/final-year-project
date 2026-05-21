@@ -42,32 +42,54 @@ const allowedOrigins = [
   process.env.CLIENT_URL,
   process.env.MOBILE_APP_URL,
   'https://student-debt-admin.onrender.com',
-  'http://localhost:3000',
-  'http://localhost:5173',
-  ...(process.env.ALLOWED_ORIGINS
-    ? process.env.ALLOWED_ORIGINS.split(',').map((value) => value.trim())
-    : []),
 ].filter(Boolean);
+
+// Add local origins ONLY in non-production
+if (process.env.NODE_ENV !== 'production') {
+  allowedOrigins.push('http://localhost:3000');
+  allowedOrigins.push('http://localhost:5173');
+}
+
+if (process.env.ALLOWED_ORIGINS) {
+  process.env.ALLOWED_ORIGINS.split(',').forEach(o => allowedOrigins.push(o.trim()));
+}
+
 const uniqueAllowedOrigins = [...new Set(allowedOrigins)];
 
 const corsOptions = {
   origin: (origin, callback) => {
-    // Native/mobile and curl often omit Origin; CORS applies to browsers only.
-    if (!origin) {
-      return callback(null, true);
-    }
+    // Native/mobile and curl often omit Origin; ALLOW if no origin (non-browser)
+    if (!origin) return callback(null, true);
+
     if (uniqueAllowedOrigins.includes(origin)) {
       return callback(null, true);
     }
+
+    console.warn(`[SECURITY] Blocked CORS request from: ${origin}`);
     return callback(new Error('Not allowed by CORS'), false);
   },
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Confirm-Action', 'X-Requested-With'],
 };
 
-// Security headers (HSTS, X-Content-Type-Options, etc.)
+// Security headers (HSTS, CSP, etc.)
 app.use(
   helmet({
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "https://firebasestorage.googleapis.com"],
+        connectSrc: ["'self'", "https://api.chapa.co", "https://identitytoolkit.googleapis.com"],
+      },
+    },
+    hsts: {
+      maxAge: 31536000,
+      includeSubDomains: true,
+      preload: true,
+    },
     crossOriginResourcePolicy: { policy: 'cross-origin' },
   })
 );

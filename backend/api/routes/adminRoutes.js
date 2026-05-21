@@ -72,23 +72,28 @@ router.put('/users/:id', authenticateRequest, requireRoles(['admin']), async (re
   }
 });
 
-// DELETE /api/admin/users/:id — delete admin user
+// DELETE /api/admin/users/:id — soft delete admin user
 router.delete('/users/:id', authenticateRequest, requireRoles(['admin']), async (req, res) => {
   try {
     const { id } = req.params;
-    // Get firebase_uid for cleanup
-    const userRes = await pool.query('SELECT firebase_uid FROM public.users WHERE user_id = $1', [id]);
+    // Get user details for auditing
+    const userRes = await pool.query('SELECT * FROM public.users WHERE user_id = $1', [id]);
     if (userRes.rows.length === 0) return res.status(404).json({ error: 'User not found' });
-    const firebaseUid = userRes.rows[0].firebase_uid;
-    await pool.query('DELETE FROM public.users WHERE user_id = $1', [id]);
-    if (firebaseUid && firebaseAdmin && firebaseAdmin.apps.length > 0) {
-      try {
-        await firebaseAdmin.auth().deleteUser(firebaseUid);
-      } catch (err) {
-        console.warn('Failed to delete Firebase user:', err.message);
-      }
-    }
-    res.json({ success: true, message: 'Admin user deleted' });
+
+    const user = userRes.rows[0];
+
+    // Soft delete by updating deleted_at
+    await pool.query('UPDATE public.users SET deleted_at = NOW() WHERE user_id = $1', [id]);
+
+    await auditLog(
+      req,
+      'admin.user.soft_delete',
+      { type: 'user', id },
+      user,
+      { ...user, deleted_at: new Date().toISOString() }
+    );
+
+    res.json({ success: true, message: 'Admin user soft-deleted' });
   } catch (error) {
     console.error('Failed to delete admin user:', error);
     res.status(500).json({ error: 'Failed to delete admin user' });
@@ -1903,22 +1908,31 @@ router.put('/cost-shares/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/admin/cost-shares/:id — delete a cost configuration
+// DELETE /api/admin/cost-shares/:id — soft delete a cost configuration
 router.delete('/cost-shares/:id', async (req, res) => {
   try {
     if (!requireAdminOnly(req, res)) return;
 
     const { id } = req.params;
-    const result = await pool.query(
-      'DELETE FROM public.cost_shares WHERE cost_share_id = $1 RETURNING cost_share_id',
+
+    // Get old value for audit
+    const oldRes = await pool.query('SELECT * FROM public.cost_shares WHERE cost_share_id = $1', [id]);
+    if (oldRes.rows.length === 0) return res.status(404).json({ error: 'Cost configuration not found' });
+
+    await pool.query(
+      'UPDATE public.cost_shares SET deleted_at = NOW() WHERE cost_share_id = $1',
       [id]
     );
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Cost configuration not found' });
-    }
+    await auditLog(
+      req,
+      'admin.cost_share.soft_delete',
+      { type: 'cost_share', id },
+      oldRes.rows[0],
+      { ...oldRes.rows[0], deleted_at: new Date().toISOString() }
+    );
 
-    res.json({ success: true, message: 'Cost configuration deleted' });
+    res.json({ success: true, message: 'Cost configuration soft-deleted' });
   } catch (error) {
     console.error('Delete cost share error:', error);
     res.status(500).json({ error: 'Failed to delete cost configuration' });
@@ -2636,7 +2650,7 @@ router.post('/payments/:id/reject', async (req, res) => {
   }
 });
 
-// DELETE /api/admin/students/:id — delete student and associated user
+// DELETE /api/admin/students/:id — soft delete student and associated user
 router.delete('/students/:id', async (req, res) => {
   let client;
   try {
@@ -2648,7 +2662,7 @@ router.delete('/students/:id', async (req, res) => {
     await client.query('BEGIN');
 
     const studentResult = await client.query(
-      'SELECT user_id FROM public.students WHERE student_id = $1',
+      'SELECT * FROM public.students WHERE student_id = $1',
       [id]
     );
 
@@ -2657,87 +2671,24 @@ router.delete('/students/:id', async (req, res) => {
       return res.status(404).json({ error: 'Student not found' });
     }
 
-    const userId = studentResult.rows[0].user_id;
+    const student = studentResult.rows[0];
+    const userId = student.user_id;
 
-    const paymentCols = await client.query(
-      `SELECT column_name
-       FROM information_schema.columns
-       WHERE table_schema = 'public'
-         AND table_name = 'payment_history'
-         AND column_name = ANY($1::text[])`,
-      [['student_id', 'debt_id']]
-    );
-    const debtCols = await client.query(
-      `SELECT column_name
-       FROM information_schema.columns
-       WHERE table_schema = 'public'
-         AND table_name = 'debt_records'
-         AND column_name = ANY($1::text[])`,
-      [['debt_id', 'student_id']]
-    );
-
-    const hasPhStudentId = paymentCols.rows.some((row) => row.column_name === 'student_id');
-    const hasPhDebtId = paymentCols.rows.some((row) => row.column_name === 'debt_id');
-    const hasDebtId = debtCols.rows.some((row) => row.column_name === 'debt_id');
-    const hasDebtStudentId = debtCols.rows.some((row) => row.column_name === 'student_id');
-
-    // Explicit cleanup for schema variants where FK cascades may be missing.
-    if (hasPhStudentId) {
-      await client.query('DELETE FROM public.payment_history WHERE student_id = $1', [id]);
-    }
-
-    if (hasPhDebtId && hasDebtId && hasDebtStudentId) {
-      await client.query(
-        `DELETE FROM public.payment_history
-         WHERE debt_id IN (
-           SELECT debt_id
-           FROM public.debt_records
-           WHERE student_id = $1
-         )`,
-        [id]
-      );
-    }
-
-    await client.query('DELETE FROM public.contracts WHERE student_id = $1', [id]);
-
-    if (hasDebtStudentId) {
-      await client.query('DELETE FROM public.debt_records WHERE student_id = $1', [id]);
-    }
-
-    await client.query('DELETE FROM public.students WHERE student_id = $1', [id]);
+    // Soft delete student
+    await client.query('UPDATE public.students SET deleted_at = NOW() WHERE student_id = $1', [id]);
 
     let userDeleted = false;
 
     if (userId) {
       const remainingStudents = await client.query(
-        'SELECT 1 FROM public.students WHERE user_id = $1 LIMIT 1',
+        'SELECT 1 FROM public.students WHERE user_id = $1 AND deleted_at IS NULL LIMIT 1',
         [userId]
       );
 
       if (remainingStudents.rows.length === 0) {
-        // User cleanup is best-effort. Keep student deletion successful even if other
-        // tables still reference the user (e.g. audit/verification foreign keys).
-        await client.query('SAVEPOINT sp_delete_user');
-        try {
-          const userDeleteResult = await client.query(
-            'DELETE FROM public.users WHERE user_id = $1',
-            [userId]
-          );
-          userDeleted = userDeleteResult.rowCount > 0;
-        } catch (userDeleteError) {
-          await client.query('ROLLBACK TO SAVEPOINT sp_delete_user');
-          console.warn('Student deleted but user cleanup skipped:', {
-            message: userDeleteError.message,
-            code: userDeleteError.code,
-            detail: userDeleteError.detail,
-            hint: userDeleteError.hint,
-            table: userDeleteError.table,
-            column: userDeleteError.column,
-            constraint: userDeleteError.constraint,
-          });
-        } finally {
-          await client.query('RELEASE SAVEPOINT sp_delete_user');
-        }
+        // Soft delete user if no other active students linked
+        await client.query('UPDATE public.users SET deleted_at = NOW() WHERE user_id = $1', [userId]);
+        userDeleted = true;
       }
     }
 
@@ -2745,10 +2696,10 @@ router.delete('/students/:id', async (req, res) => {
 
     await auditLog(
       req,
-      'student.delete',
+      'student.soft_delete',
       { type: 'student', id },
-      { student_id: Number(id), user_id: userId },
-      { userDeleted },
+      student,
+      { ...student, deleted_at: new Date().toISOString() },
       { userDeleted }
     );
 
@@ -2762,21 +2713,100 @@ router.delete('/students/:id', async (req, res) => {
     if (client) {
       await client.query('ROLLBACK');
     }
-    console.error('Delete student error:', {
-      message: error.message,
-      code: error.code,
-      detail: error.detail,
-      hint: error.hint,
-      table: error.table,
-      column: error.column,
-      constraint: error.constraint,
-      stack: error.stack,
-    });
+    console.error('Delete student error:', error);
     res.status(500).json({ error: 'Failed to delete student' });
   } finally {
     if (client) {
       client.release();
     }
+  }
+});
+
+const SOFT_DELETE_MAP = {
+  'users': { raw: '_users_data', pk: 'user_id' },
+  'students': { raw: '_students_data', pk: 'student_id' },
+  'debt-records': { raw: '_debt_records_data', pk: 'debt_id' },
+  'notifications': { raw: '_notifications_data', pk: 'notification_id' },
+  'semester-amounts': { raw: '_semester_amounts_data', pk: 'id' },
+  'fayda-config': { raw: '_fayda_config_data', pk: 'id' },
+  'cost-shares': { raw: '_cost_shares_data', pk: 'cost_share_id' }
+};
+
+// POST /api/admin/:entity/:id/restore — restore a soft-deleted record
+router.post('/:entity/:id/restore', authenticateRequest, requireRoles(['admin']), async (req, res) => {
+  try {
+    const { entity, id } = req.params;
+    const config = SOFT_DELETE_MAP[entity];
+
+    if (!config) return res.status(400).json({ error: 'Invalid entity type' });
+    if (req.headers['x-confirm-action'] !== 'true') {
+      return res.status(400).json({ error: 'Missing confirmation header' });
+    }
+
+    const query = `UPDATE public.${config.raw} SET deleted_at = NULL WHERE ${config.pk} = $1 RETURNING *`;
+    const result = await pool.query(query, [id]);
+
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Record not found' });
+
+    await auditLog(
+      req,
+      `admin.${entity.replace('-', '_')}.restore`,
+      { type: entity, id },
+      { deleted_at: 'NOT_NULL' },
+      result.rows[0]
+    );
+
+    res.json({ success: true, message: `${entity} restored successfully` });
+  } catch (error) {
+    console.error('Restore error:', error);
+    res.status(500).json({ error: 'Failed to restore record' });
+  }
+});
+
+// DELETE /api/admin/:entity/:id/permanent — hard delete a record
+router.delete('/:entity/:id/permanent', authenticateRequest, requireRoles(['admin']), async (req, res) => {
+  try {
+    const { entity, id } = req.params;
+    const config = SOFT_DELETE_MAP[entity];
+
+    if (!config) return res.status(400).json({ error: 'Invalid entity type' });
+    if (req.headers['x-confirm-action'] !== 'true') {
+      return res.status(400).json({ error: 'Missing confirmation header' });
+    }
+
+    // Safety check: students with active debt cannot be permanently deleted
+    if (entity === 'students') {
+      const debtCheck = await pool.query(
+        'SELECT 1 FROM public._debt_records_data WHERE student_id = $1 AND current_balance > 0 AND deleted_at IS NULL LIMIT 1',
+        [id]
+      );
+      if (debtCheck.rows.length > 0) {
+        return res.status(400).json({ error: 'Cannot permanently delete student with active outstanding debt' });
+      }
+    }
+
+    // Get old value for audit before hard delete
+    const oldRes = await pool.query(`SELECT * FROM public.${config.raw} WHERE ${config.pk} = $1`, [id]);
+    if (oldRes.rows.length === 0) return res.status(404).json({ error: 'Record not found' });
+
+    const query = `DELETE FROM public.${config.raw} WHERE ${config.pk} = $1`;
+    await pool.query(query, [id]);
+
+    await auditLog(
+      req,
+      `admin.${entity.replace('-', '_')}.permanent_delete`,
+      { type: entity, id },
+      oldRes.rows[0],
+      null
+    );
+
+    res.json({ success: true, message: `${entity} permanently deleted` });
+  } catch (error) {
+    console.error('Permanent delete error:', error);
+    if (error.code === '23503') {
+      return res.status(400).json({ error: 'Record is referenced by other data and cannot be permanently deleted' });
+    }
+    res.status(500).json({ error: 'Failed to permanently delete record' });
   }
 });
 

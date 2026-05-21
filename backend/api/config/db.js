@@ -91,11 +91,25 @@ let pool = new Pool({
 });
 
 // Delegating export for pool swapping
+// Note: Automatic soft-delete filtering is handled at the database level via updatable views.
+// Table names (e.g. 'users') now refer to views that filter 'deleted_at IS NULL'.
+// To access raw data including deleted records, use '_table_data' (e.g. '_users_data').
 const db = {
   query: (...args) => pool.query(...args),
   connect: (...args) => pool.connect(...args),
   end: (...args) => pool.end(...args),
   on: (evt, cb) => pool.on(evt, cb),
+
+  // Soft Delete Constants
+  RAW_TABLES: {
+    users: '_users_data',
+    students: '_students_data',
+    debt_records: '_debt_records_data',
+    notifications: '_notifications_data',
+    semester_amounts: '_semester_amounts_data',
+    fayda_config: '_fayda_config_data',
+    cost_shares: '_cost_shares_data'
+  }
 };
 
 // Test connection with IPv6 → IPv4 fallback

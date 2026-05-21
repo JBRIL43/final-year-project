@@ -153,7 +153,8 @@ router.delete('/:notificationId', async (req, res) => {
     await ensureNotificationsTable();
 
     const result = await pool.query(
-      `DELETE FROM public.notifications
+      `UPDATE public.notifications
+       SET deleted_at = NOW(), updated_at = NOW()
        WHERE notification_id = $1 AND firebase_uid = $2
        RETURNING notification_id`,
       [notificationId, firebaseUid]
@@ -163,7 +164,7 @@ router.delete('/:notificationId', async (req, res) => {
       return res.status(404).json({ error: 'Notification not found' });
     }
 
-    res.json({ success: true, message: 'Notification deleted' });
+    res.json({ success: true, message: 'Notification soft-deleted' });
   } catch (error) {
     console.error('Delete notification error:', error);
     res.status(500).json({ error: 'Failed to delete notification' });
@@ -180,11 +181,11 @@ router.delete('/', async (req, res) => {
     await ensureNotificationsTable();
 
     await pool.query(
-      'DELETE FROM public.notifications WHERE firebase_uid = $1',
+      'UPDATE public.notifications SET deleted_at = NOW(), updated_at = NOW() WHERE firebase_uid = $1 AND deleted_at IS NULL',
       [firebaseUid]
     );
 
-    res.json({ success: true, message: 'Notifications cleared' });
+    res.json({ success: true, message: 'Notifications cleared (soft-delete)' });
   } catch (error) {
     console.error('Clear notifications error:', error);
     res.status(500).json({ error: 'Failed to clear notifications' });

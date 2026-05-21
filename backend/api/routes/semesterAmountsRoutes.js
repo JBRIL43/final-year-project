@@ -212,7 +212,7 @@ router.put('/:id', requireRoles(['admin', 'finance']), async (req, res) => {
   }
 });
 
-// DELETE /api/admin/semester-amounts/:id — remove a semester amount configuration
+// DELETE /api/admin/semester-amounts/:id — soft remove a semester amount configuration
 router.delete('/:id', requireRoles(['admin', 'finance']), async (req, res) => {
   try {
     const id = Number(req.params.id);
@@ -222,7 +222,7 @@ router.delete('/:id', requireRoles(['admin', 'finance']), async (req, res) => {
     }
 
     const result = await pool.query(
-      'DELETE FROM public.semester_amounts WHERE id = $1 RETURNING id',
+      'UPDATE public.semester_amounts SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1 RETURNING id',
       [id]
     );
 
@@ -231,7 +231,7 @@ router.delete('/:id', requireRoles(['admin', 'finance']), async (req, res) => {
     }
 
     await cacheDel(CACHE_KEYS.semesterAmountsAll);
-    return res.json({ success: true, message: 'Semester amount deleted successfully' });
+    return res.json({ success: true, message: 'Semester amount soft-deleted successfully' });
   } catch (error) {
     console.error('Semester amount deletion error:', error);
     return res.status(500).json({ error: 'Failed to delete semester amount' });

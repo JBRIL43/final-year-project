@@ -1,15 +1,15 @@
 const express = require('express');
 const { recordPayment, getStudentPayments } = require('../controllers/paymentController');
 const chapaController = require('../controllers/chapaController');
-const { authenticateRequest, requireRoles } = require('../middleware/auth');
+const { authenticateRequest, requireRoles, validateOwnership } = require('../middleware/auth');
 
 const router = express.Router();
 
 // UC-03: Record new payment (manual)
-router.post('/record', authenticateRequest, recordPayment);
+router.post('/record', authenticateRequest, validateOwnership, recordPayment);
 
 // Student payment status/history
-router.get('/history', authenticateRequest, getStudentPayments);
+router.get('/history', authenticateRequest, validateOwnership, getStudentPayments);
 
 // Finance: submit/update proof URL for a manual payment
 router.patch(

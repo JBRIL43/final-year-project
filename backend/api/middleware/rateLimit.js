@@ -7,16 +7,16 @@ function rateLimitHandler(req, res) {
   });
 }
 
-// ~900 req/min — supports ~15 concurrent users at moderate API churn
+// ~900 req/min — supports 15 req/sec as per specification
 const globalLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 300,
+  max: 900,
   standardHeaders: true,
   legacyHeaders: false,
   handler: rateLimitHandler,
 });
 
-// Brute-force / sync abuse on auth endpoints
+// Brute-force / sync abuse on auth endpoints: 20 req / 15 min
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,

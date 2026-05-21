@@ -4,6 +4,8 @@ const { normalizeRole } = require('../utils/roles');
 const { rejectClientIdentityHeaders } = require('../utils/firebaseIdentity');
 const { hasColumn } = require('../utils/schemaCache');
 
+const { recordSystemLog } = require('../utils/systemLog');
+
 async function resolveAppUserByIdentity(uid, email) {
   // schemaCache: zero DB round-trip after first request in this process
   const hasDepartment = await hasColumn('users', 'department');
@@ -82,11 +84,66 @@ function requireRoles(allowedRoles) {
       return next();
     }
 
+    // Log RBAC failure
+    recordSystemLog({
+      req,
+      action: 'security.rbac_failure',
+      severity: 'warning',
+      success: false,
+      errorMessage: `Forbidden: role ${userRole} tried to access ${req.originalUrl}`,
+      metadata: { requiredRoles: allowedRoles, actualRole: userRole }
+    });
+
     return res.status(403).json({ error: 'Forbidden: insufficient role permissions' });
   };
+}
+
+/**
+ * Ensures that a student can only access their own data.
+ * Admin, Finance, and Registrar roles bypass this check.
+ */
+function validateOwnership(req, res, next) {
+  const { user } = req;
+  if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+  // Privilege roles bypass ownership checks
+  if (['admin', 'finance', 'registrar', 'department_head'].includes(user.role)) {
+    return next();
+  }
+
+  // Determine student_id from request (param or body)
+  const requestedStudentId = req.params.studentId || req.body.studentId;
+
+  if (!requestedStudentId) {
+    return next(); // Nothing to check ownership against
+  }
+
+  // Logic to resolve studentId from user context
+  // This usually requires a DB lookup or session data.
+  // For this project, we assume studentId is linked to user_id in students table.
+  pool.query('SELECT student_id FROM students WHERE user_id = $1 LIMIT 1', [user.user_id])
+    .then(result => {
+      const actualStudentId = result.rows[0]?.student_id;
+      if (String(actualStudentId) !== String(requestedStudentId)) {
+        recordSystemLog({
+          req,
+          action: 'security.ownership_failure',
+          severity: 'critical',
+          success: false,
+          errorMessage: `Student ${user.user_id} tried to access resource for student ${requestedStudentId}`
+        });
+        return res.status(403).json({ error: 'Forbidden: you do not own this resource' });
+      }
+      next();
+    })
+    .catch(err => {
+      console.error('Ownership validation error:', err);
+      res.status(500).json({ error: 'Internal server error during validation' });
+    });
 }
 
 module.exports = {
   authenticateRequest,
   requireRoles,
+  validateOwnership,
 };
