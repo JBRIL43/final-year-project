@@ -18,12 +18,31 @@ import {
 import {
   NotificationsNone as NotificationsIcon,
   Circle as CircleIcon,
-  DeleteOutline as DeleteIcon,
+  DeleteOutlined as DeleteIcon,
   DoneAll as DoneAllIcon,
   ClearAll as ClearAllIcon,
 } from '@mui/icons-material'
 import { useNotifications, Notification } from '../contexts/NotificationContext'
-import { formatDistanceToNow } from 'date-fns'
+
+/**
+ * Native "time ago" formatter using Intl.RelativeTimeFormat
+ */
+function formatTimeAgo(dateInput: string | Date): string {
+  const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput
+  const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000)
+
+  let interval = seconds / 31536000
+  if (interval > 1) return Math.floor(interval) + ' years ago'
+  interval = seconds / 2592000
+  if (interval > 1) return Math.floor(interval) + ' months ago'
+  interval = seconds / 86400
+  if (interval > 1) return Math.floor(interval) + ' days ago'
+  interval = seconds / 3600
+  if (interval > 1) return Math.floor(interval) + ' hours ago'
+  interval = seconds / 60
+  if (interval > 1) return Math.floor(interval) + ' minutes ago'
+  return 'just now'
+}
 
 export default function NotificationCenter() {
   const { notifications, unreadCount, markAsRead, markAllAsRead, deleteNotification, clearAll } = useNotifications()
@@ -149,7 +168,7 @@ export default function NotificationCenter() {
                           {notif.body}
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
-                          {formatDistanceToNow(new Date(notif.created_at), { addSuffix: true })}
+                          {formatTimeAgo(notif.created_at)}
                         </Typography>
                       </Box>
                     }

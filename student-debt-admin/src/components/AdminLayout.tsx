@@ -21,7 +21,6 @@ import {
   Dashboard as DashboardIcon,
   School as SchoolIcon,
   ReceiptLong as ReceiptLongIcon,
-  NotificationsNone as NotificationsNoneIcon,
   Warning as WarningIcon,
   Description as DescriptionIcon,
   AccountBalance as AccountBalanceIcon,
