@@ -37,6 +37,7 @@ import {
 } from '@mui/icons-material'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import NotificationCenter from './NotificationCenter'
 
 const drawerWidth = 270
 
@@ -441,23 +442,7 @@ export default function AdminLayout({ children }: { children?: ReactNode }) {
 
       <Box component="main" sx={{ flex: 1, px: 4, py: 2.5 }}>
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
-          <IconButton
-            color="inherit"
-            sx={{
-              bgcolor: 'rgba(255, 255, 255, 0.95)',
-              border: '1px solid #e7ebf2',
-              borderRadius: 3,
-              p: 1.25,
-              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
-              '&:hover': {
-                bgcolor: 'rgba(0, 0, 0, 0.04)',
-              },
-            }}
-          >
-            <Badge color="error" badgeContent={4}>
-              <NotificationsNoneIcon sx={{ color: '#f59e0b' }} />
-            </Badge>
-          </IconButton>
+          <NotificationCenter />
         </Box>
 
         <Box

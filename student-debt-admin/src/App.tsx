@@ -1,6 +1,7 @@
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { CircularProgress, Box } from '@mui/material'
 import { AuthProvider, useAuth, getRoleHome } from './contexts/AuthContext'
+import { NotificationProvider } from './contexts/NotificationContext'
 import ProtectedRoute from './components/ProtectedRoute'
 import AdminLayout from './components/AdminLayout'
 import Login from './pages/Login'
@@ -267,10 +268,12 @@ function AppRoutes() {
 function App() {
   return (
     <AuthProvider>
-      <HashRouter>
-        <AppRoutes />
-        <ApiErrorToast />
-      </HashRouter>
+      <NotificationProvider>
+        <HashRouter>
+          <AppRoutes />
+          <ApiErrorToast />
+        </HashRouter>
+      </NotificationProvider>
     </AuthProvider>
   )
 }

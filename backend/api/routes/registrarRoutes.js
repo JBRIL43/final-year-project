@@ -1,7 +1,7 @@
 const express = require('express');
 const pool = require('../config/db');
 const { authenticateRequest, requireRoles } = require('../middleware/auth');
-const { sendPaymentNotification } = require('../utils/notifications');
+const { sendPaymentNotification, sendRoleNotification } = require('../utils/notifications');
 const { getColumns } = require('../utils/schemaCache');
 
 const router = express.Router();
@@ -1715,19 +1715,14 @@ router.post('/students/:id/withdrawal/finance-approve', async (req, res) => {
       console.error('Notification failed:', notifErr);
     }
 
-    // Notify registrar(s)
+    // Notify registrar(s) and admin
     try {
-      const registrars = await pool.query(
-        `SELECT user_id FROM public.users WHERE UPPER(role) IN ('REGISTRAR', 'REGISTRY')`
+      await sendRoleNotification(
+        ['REGISTRAR', 'ADMIN'],
+        'Withdrawal Ready for Processing',
+        `Student ${student.full_name || ''} has been finance-approved for withdrawal. Please finalize.`,
+        { type: 'WITHDRAWAL_READY_FOR_REGISTRAR', studentId: String(studentId) }
       );
-      for (const reg of registrars.rows) {
-        await sendPaymentNotification(
-          reg.user_id,
-          'Withdrawal Ready for Processing',
-          `Student ${student.full_name || ''} has been finance-approved for withdrawal. Please finalize.`,
-          { type: 'WITHDRAWAL_READY_FOR_REGISTRAR', studentId: String(studentId) }
-        );
-      }
     } catch (notifErr) {
       console.error('Registrar notification failed:', notifErr);
     }

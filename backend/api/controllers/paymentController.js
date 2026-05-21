@@ -1,5 +1,5 @@
 const pool = require('../config/db');
-const { sendPaymentNotification } = require('../utils/notifications');
+const { sendPaymentNotification, sendRoleNotification } = require('../utils/notifications');
 const firebaseAdmin = require('../config/firebaseAdmin');
 const { verifyBearerIdentity } = require('../utils/firebaseIdentity');
 const { hasColumn, getColumns } = require('../utils/schemaCache');
@@ -362,19 +362,18 @@ exports.recordPayment = async (req, res) => {
       );
     }
 
-    for (const financeUser of financeUsersResult.rows) {
-      await sendPaymentNotification(
-        financeUser.user_id,
-        'New Payment Needs Review',
-        `A ${paymentMethod} payment of ETB ${normalizedAmount} was submitted and is pending verification.`,
-        {
-          type: 'PAYMENT_PENDING_VERIFICATION',
-          paymentId: String(createdPayment.payment_id),
-          debtId: String(debtId),
-          status: statusMode.pending,
-        }
-      );
-    }
+    // Notify Finance and Admin
+    await sendRoleNotification(
+      ['FINANCE_OFFICER', 'ADMIN'],
+      'New Payment Needs Review',
+      `A ${paymentMethod} payment of ETB ${normalizedAmount} was submitted and is pending verification.`,
+      {
+        type: 'PAYMENT_PENDING_VERIFICATION',
+        paymentId: String(createdPayment.payment_id),
+        debtId: String(debtId),
+        status: statusMode.pending,
+      }
+    );
 
     await auditLog(
       req,

@@ -71,6 +71,29 @@ async function sendPaymentNotification(userId, title, body, data = {}) {
   }
 }
 
+/**
+ * Sends a notification to all users with specific roles
+ * @param {string[]} roles - Array of roles (e.g. ['ADMIN', 'FINANCE_OFFICER'])
+ * @param {string} title
+ * @param {string} body
+ * @param {object} data
+ */
+async function sendRoleNotification(roles, title, body, data = {}) {
+  try {
+    const rolesUpper = roles.map(r => String(r).toUpperCase());
+    const result = await pool.query(
+      'SELECT user_id FROM public.users WHERE UPPER(role) = ANY($1)',
+      [rolesUpper]
+    );
+
+    for (const row of result.rows) {
+      await sendPaymentNotification(row.user_id, title, body, data);
+    }
+  } catch (error) {
+    console.error('Error sending role-based notification:', error);
+  }
+}
+
 async function storeNotification(firebaseUid, title, body, data = {}) {
   await pool.query(
     `INSERT INTO public.notifications (firebase_uid, title, body, data)
@@ -118,5 +141,6 @@ module.exports = {
   ensureUsersFcmTokenColumn,
   ensureNotificationsTable,
   sendPaymentNotification,
+  sendRoleNotification,
   storeNotification,
 };
